@@ -9,7 +9,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
 # 기본 화면
-st.title("💬 AI 상담 챗봇")
+st.title("❤️ AI 상담 챗봇")
 st.write("따뜻하고 다정한 심리 상담사처럼 답변해드려요 💕")
 
 # 대화 기록 저장
