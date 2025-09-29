@@ -41,15 +41,18 @@ def show_payment_screen():
     )
     st.markdown("---")
     st.markdown("### 🔗 결제 방법")
+
+    # ✅ 페이팔 결제 버튼
     st.markdown(
         "[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)",
         unsafe_allow_html=True
     )
-  # st.markdown(
-        #"[👉 카카오페이 결제하기](https://qr.kakaopay.com/yourlink)",
-        #unsafe_allow_html=True
-    #)
-    st.info("결제가 완료되면 이용 권한이 다시 열립니다!")
+
+    # ✅ 결제 후 안내문
+    st.info(
+        "💡 결제 후 카톡(ID: your_kakao_id) 또는 이메일(yourmail@example.com)로 "
+        "닉네임/결제 스크린샷을 보내주시면 바로 이용 권한을 열어드립니다."
+    )
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
@@ -78,11 +81,16 @@ if st.session_state.usage_count < 4:
 else:
     show_payment_screen()
 
-# --- 사이드바: 대화 기록 & 남은 횟수 ---
+# --- 사이드바: 대화 기록 & 관리자 메뉴 ---
+st.sidebar.header("📜 대화 기록")
 if st.session_state.chat_history:
-    st.sidebar.header("📜 대화 기록")
     st.sidebar.markdown(f"**현재 사용 횟수:** {st.session_state.usage_count}/4")
     for i, (q, a) in enumerate(st.session_state.chat_history):
         st.sidebar.markdown(f"**Q{i+1}:** {q[:20]}...")
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔧 관리자 메뉴")
+if st.sidebar.button("🔑 사용 횟수 리셋"):
+    st.session_state.usage_count = 0
+    st.sidebar.success("✅ 사용 횟수가 초기화되었습니다! (관리자 전용)")
 
