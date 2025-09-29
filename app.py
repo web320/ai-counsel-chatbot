@@ -45,10 +45,10 @@ def show_payment_screen():
         "[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)",
         unsafe_allow_html=True
     )
-    st.markdown(
-        "[👉 카카오페이 결제하기](https://qr.kakaopay.com/yourlink)",
-        unsafe_allow_html=True
-    )
+  # st.markdown(
+        #"[👉 카카오페이 결제하기](https://qr.kakaopay.com/yourlink)",
+        #unsafe_allow_html=True
+    #)
     st.info("결제가 완료되면 이용 권한이 다시 열립니다!")
 
 # --- Streamlit UI ---
