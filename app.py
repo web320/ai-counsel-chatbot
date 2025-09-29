@@ -2,7 +2,16 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-17093714714">
+</script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
 
+  gtag('config', 'AW-17093714714');
+</script>
 # 🔐 ENV
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
