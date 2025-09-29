@@ -19,7 +19,6 @@ STYLE_SYSTEM = (
     "5) 같은 질문이어도 새로운 인사이트를 추가해 반복 피하기."
 )
 
-# GPT 답변 함수
 def get_reply(user_input: str) -> str:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -33,38 +32,7 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- 사용 횟수 파일 관리 ---
-COUNT_FILE = "usage_count.txt"
-
-def load_count():
-    if os.path.exists(COUNT_FILE):
-        with open(COUNT_FILE, "r") as f:
-            return int(f.read())
-    return 0
-
-def save_count(count):
-    with open(COUNT_FILE, "w") as f:
-        f.write(str(count))
-
-# --- Streamlit UI ---
-st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
-st.title("💙 ai심리상담 챗봇")
-st.caption("마음편히 얘기해")
-
-# 관리자 모드 ON/OFF
-IS_ADMIN = True  # 너 테스트할 땐 True, 실제 서비스할 땐 False
-
-# 세션 상태
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "selected_index" not in st.session_state:
-    st.session_state.selected_index = None
-
-# 사용 횟수 파일 불러오기
-if "usage_count" not in st.session_state:
-    st.session_state.usage_count = load_count()
-
-# --- 체험 종료 화면 ---
+# --- 결제 화면 ---
 def show_payment_screen():
     st.subheader("🚫 무료 체험이 끝났습니다")
     st.markdown(
@@ -83,38 +51,38 @@ def show_payment_screen():
     )
     st.info("결제가 완료되면 이용 권한이 다시 열립니다!")
 
-# --- 메인 로직 ---
-if IS_ADMIN or st.session_state.usage_count < 4:  # 관리자면 무제한
-    user_input = st.chat_input("마음편히 얘기해봐")
+# --- Streamlit UI ---
+st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
+st.title("💙 ai심리상담 챗봇")
+st.caption("마음편히 얘기해")
 
+# 세션 상태
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "usage_count" not in st.session_state:
+    st.session_state.usage_count = 0
+
+# --- 메인 로직 ---
+if st.session_state.usage_count < 4:
+    user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
         answer = get_reply(user_input)
+
         with st.chat_message("user"):
             st.write(user_input)
         with st.chat_message("assistant"):
             st.markdown(f"<p style='font-size:18px;'>{answer}</p>", unsafe_allow_html=True)
-        st.session_state.chat_history.append((user_input, answer))
 
-        if not IS_ADMIN:  # 관리자는 횟수 카운트 X
-            st.session_state.usage_count += 1
-            save_count(st.session_state.usage_count)
+        st.session_state.chat_history.append((user_input, answer))
+        st.session_state.usage_count += 1
 else:
     show_payment_screen()
 
-# 선택한 대화 보여주기 (사이드바 기록)
+# --- 사이드바: 대화 기록 & 남은 횟수 ---
 if st.session_state.chat_history:
     st.sidebar.header("📜 대화 기록")
-    if not IS_ADMIN:
-        st.sidebar.markdown(f"**현재 사용 횟수:** {st.session_state.usage_count}/4")
-    else:
-        st.sidebar.markdown("**관리자 모드: 무제한 사용 가능**")
+    st.sidebar.markdown(f"**현재 사용 횟수:** {st.session_state.usage_count}/4")
     for i, (q, a) in enumerate(st.session_state.chat_history):
-        if st.sidebar.button(f"대화 {i+1}: {q[:12]}...", key=f"btn{i}"):
-            st.session_state.selected_index = i
+        st.sidebar.markdown(f"**Q{i+1}:** {q[:20]}...")
 
-if st.session_state.selected_index is not None:
-    q, a = st.session_state.chat_history[st.session_state.selected_index]
-    st.subheader("🔎 선택한 대화")
-    st.markdown(f"**🧍‍♀️ 너:** {q}")
-    st.markdown(f"<p style='font-size:18px;'>{a}</p>", unsafe_allow_html=True)
 
