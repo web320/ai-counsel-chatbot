@@ -50,8 +50,8 @@ def show_payment_screen():
 
     # ✅ 결제 후 안내문
     st.info(
-        "💡 결제 후 카톡(ID: your_kakao_id) 또는 이메일(yourmail@example.com)로 "
-        "닉네임/결제 스크린샷을 보내주시면 바로 이용 권한을 열어드립니다."
+        "💡 결제 후 카톡(ID: jeuspo) 또는 이메일(mwiby91@gmail.com)로 "
+        "닉네임/결제 스크린샷을 보내주시면 24시간내에 이용 권한을 열어드립니다."
     )
 
 # --- Streamlit UI ---
@@ -90,7 +90,14 @@ if st.session_state.chat_history:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔧 관리자 메뉴")
-if st.sidebar.button("🔑 사용 횟수 리셋"):
-    st.session_state.usage_count = 0
-    st.sidebar.success("✅ 사용 횟수가 초기화되었습니다! (관리자 전용)")
+
+# 🔐 관리자 비밀번호 입력 (여기서 비번을 바꿔 쓰면 돼)
+admin_pw = st.sidebar.text_input("관리자 비밀번호", type="password")
+
+if admin_pw == "4321":  # ✅ 원하는 관리자 비밀번호 설정
+    if st.sidebar.button("🔑 사용 횟수 리셋"):
+        st.session_state.usage_count = 0
+        st.sidebar.success("✅ 사용 횟수가 초기화되었습니다! (관리자 전용)")
+else:
+    st.sidebar.caption("관리자 전용 기능입니다.")
 
