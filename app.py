@@ -13,8 +13,8 @@ client = OpenAI(api_key=api_key)
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-if not firebase_admin._apps:  # 중복 초기화 방지
-    cred = credentials.Certificate(st.secrets["firebase"])
+if not firebase_admin._apps:  # Firebase 중복 초기화 방지
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
@@ -47,8 +47,7 @@ keyword_map = {
 def build_prompt(user_input, style_choice):
     style = style_options[style_choice]
     empathy_line = "네가 말한 걸 듣고 나니까, 네 마음이 많이 힘들었을 것 같아."
-    keyword_reply = next((reply for keyword, reply in keyword_map.items() if keyword in user_input),
-                         "네 말 속에 네 진심이 보여.")
+    keyword_reply = next((reply for keyword, reply in keyword_map.items() if keyword in user_input), "네 말 속에 네 진심이 보여.")
     hope_line = style["ending"]
 
     system_prompt = f"""
@@ -82,7 +81,7 @@ def stream_reply(user_input: str, style_choice: str):
     )
     return response
 
-# --- CSS ---
+# --- CSS (글씨 크게) ---
 st.markdown(
     """
     <style>
@@ -117,9 +116,9 @@ st.caption("마음편히 얘기해")
 # 상담 스타일 선택
 style_choice = st.sidebar.radio("오늘은 어떤 톤으로 위로받고 싶나요?", list(style_options.keys()))
 
-# --- 사용자 관리 ---
+# --- Firestore 사용자 관리 ---
 if "USER_ID" not in st.session_state:
-    st.session_state.USER_ID = str(uuid.uuid4())
+    st.session_state.USER_ID = str(uuid.uuid4())  # 고유 세션 ID
 USER_ID = st.session_state.USER_ID
 
 user_ref = db.collection("users").document(USER_ID)
@@ -175,9 +174,12 @@ admin_pw = st.sidebar.text_input("관리자 비밀번호", type="password")
 
 if admin_pw == "4321":
     if st.sidebar.button("🔑 관리자 모드 활성화 (60회 가능)"):
+
+        # 관리자 모드 → Firestore도 같이 업데이트
         st.session_state.usage_count = 0
         st.session_state.limit = 60
         user_ref.update({"usage_count": 0, "limit": 60, "is_paid": True})
+
         st.sidebar.success("✅ 관리자 모드 활성화! (60회 사용 가능)")
         st.rerun()
 else:
