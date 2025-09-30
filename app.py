@@ -36,13 +36,15 @@ st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
 st.title("💙 ai심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
-# URL 파라미터로 사용자 ID를 고정 보관(쿠키 대신 → 새로고침/재접속 유지)
-params = st.experimental_get_query_params()
-if "uid" in params and params["uid"]:
-    USER_ID = params["uid"][0]
+
+
+# ✅ 넣기
+uid = st.query_params.get("uid")
+if uid:
+    USER_ID = uid
 else:
     USER_ID = str(uuid.uuid4())
-    st.experimental_set_query_params(uid=USER_ID)
+    st.query_params["uid"] = USER_ID
 
 # ========= 상담 톤/프롬프트 =========
 style_options = {
