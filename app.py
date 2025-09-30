@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
 
-# 🔐 ENV (OpenAI)
+# --- ENV (OpenAI) ---
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
@@ -12,7 +12,7 @@ client = OpenAI(api_key=api_key)
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-if not firebase_admin._apps:
+if not firebase_admin._apps:  # 중복 방지
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     firebase_admin.initialize_app(cred)
 
@@ -47,15 +47,8 @@ def build_prompt(user_input, style_choice):
     style = style_options[style_choice]
     empathy_line = "네가 말한 걸 듣고 나니까, 네 마음이 많이 힘들었을 것 같아."
 
-    # 키워드 맞춤 답변 찾기
-    keyword_reply = ""
-    for keyword, reply in keyword_map.items():
-        if keyword in user_input:
-            keyword_reply = reply
-            break
-    if not keyword_reply:
-        keyword_reply = "네 말 속에 네 진심이 보여."
-
+    # 키워드 맞춤 답변
+    keyword_reply = next((reply for keyword, reply in keyword_map.items() if keyword in user_input), "네 말 속에 네 진심이 보여.")
     hope_line = style["ending"]
 
     system_prompt = f"""
@@ -121,12 +114,11 @@ st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
 st.title("💙 ai심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
-# 상담 스타일 선택 (사이드바)
+# 상담 스타일 선택
 style_choice = st.sidebar.radio("오늘은 어떤 톤으로 위로받고 싶나요?", list(style_options.keys()))
 
 # --- Firestore 사용자 관리 ---
-USER_ID = "test_user"  # 👉 나중엔 로그인하면 uid로 대체
-
+USER_ID = "test_user"  # 👉 나중엔 로그인 uid로 변경 가능
 user_ref = db.collection("users").document(USER_ID)
 doc = user_ref.get()
 
@@ -163,7 +155,7 @@ if st.session_state.usage_count < st.session_state.limit:
         st.session_state.chat_history.append((user_input, streamed_text))
         st.session_state.usage_count += 1
 
-        # Firestore에 업데이트
+        # Firestore 업데이트
         user_ref.update({"usage_count": st.session_state.usage_count})
 else:
     show_payment_screen()
@@ -189,4 +181,3 @@ if admin_pw == "4321":
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
-
