@@ -1,4 +1,5 @@
 import os
+import time
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
@@ -8,7 +9,7 @@ load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-# --- 시스템 프롬프트 (가독성 + 풍부한 답변 규칙) ---
+# --- 시스템 프롬프트 ---
 STYLE_SYSTEM = (
     "너는 따뜻한 심리상담사이자, 재테크/창업/수익화 전문가야.\n"
     "답변 규칙:\n"
@@ -18,7 +19,6 @@ STYLE_SYSTEM = (
     "4) 심리적 공감 → 원인 분석 → 구체적 실천 플랜 → 결론 순서로 작성.\n"
     "5) 중요한 키워드는 **굵게** 표시.\n"
     "6) 항상 사용자가 지금 당장 할 수 있는 행동 3가지를 명확히 제시.\n"
-    "7) 같은 질문이어도 새로운 인사이트를 추가해 반복 피하기."
 )
 
 def get_reply(user_input: str) -> str:
@@ -34,35 +34,17 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS (가독성 스타일) ---
-st.markdown(
-    """
-    <style>
-    .chat-message {
-        font-size: 20px;
-        line-height: 1.6;
-        max-width: 35ch;   /* 한 줄 35자 */
-        word-wrap: break-word;
-        white-space: pre-wrap;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # --- 결제 화면 ---
 def show_payment_screen():
     st.subheader("🚫 무료 체험이 끝났습니다")
     st.markdown(
-        "<p style='font-size:18px;'>월 <b>3,900원</b> 결제 후 계속 이용할 수 있습니다.</p>",
-        unsafe_allow_html=True
+        "월 **3,900원** 결제 후 계속 이용할 수 있습니다."
     )
     st.markdown("---")
     st.markdown("### 🔗 결제 방법")
 
     st.markdown(
-        "[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)",
-        unsafe_allow_html=True
+        "[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)"
     )
 
     st.info(
@@ -85,20 +67,23 @@ if "usage_count" not in st.session_state:
 if st.session_state.usage_count < 4:
     user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
-        # 사용자 메시지 출력
         with st.chat_message("user"):
-            st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
+            st.write(user_input)
 
-        # "생각중입니다..." 표시
         with st.chat_message("assistant"):
             thinking_box = st.empty()
-            thinking_box.markdown("생각중입니다...")
+            # "생각중입니다" 애니메이션
+            for i in range(6):
+                dots = "." * (i % 4)  # 0~3개의 점 반복
+                thinking_box.markdown(f"생각중입니다{dots}")
+                time.sleep(0.5)
 
-        # 답변 생성
+        # 실제 답변 생성
         answer = get_reply(user_input)
 
-        # 최종 답변 교체
-        thinking_box.markdown(f"<div class='chat-message'>{answer}</div>", unsafe_allow_html=True)
+        # 답변 출력
+        with st.chat_message("assistant"):
+            st.markdown(answer)
 
         # 기록 저장
         st.session_state.chat_history.append((user_input, answer))
@@ -125,4 +110,5 @@ if admin_pw == "4321":
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
+
 
