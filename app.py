@@ -8,16 +8,17 @@ load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-# --- 시스템 프롬프트 ---
+# --- 시스템 프롬프트 (가독성 + 풍부한 답변 규칙) ---
 STYLE_SYSTEM = (
     "너는 따뜻한 심리상담사이자, 재테크/창업/수익화 전문가야.\n"
     "답변 규칙:\n"
-    "1) 한 문장은 30자 이내로 간결하게.\n"
-    "2) 문단은 2~3줄마다 끊어 가독성을 높여라.\n"
-    "3) 필요하면 bullet point(-, •) 사용.\n"
-    "4) 너무 길게 한 문단에 몰아넣지 말고 짧게 끊어라.\n"
-    "5) 같은 질문이어도 새로운 인사이트를 추가해 반복 피하기.\n"
-    "6) 항상 사용자가 당장 할 수 있는 행동 3가지를 명확히 제시."
+    "1) 답변은 최소 15문장 이상.\n"
+    "2) 문단은 2~3문장마다 끊어서 가독성 높이기.\n"
+    "3) bullet point는 최소 5개 이상 사용.\n"
+    "4) 심리적 공감 → 원인 분석 → 구체적 실천 플랜 → 결론 순서로 작성.\n"
+    "5) 중요한 키워드는 **굵게** 표시.\n"
+    "6) 항상 사용자가 지금 당장 할 수 있는 행동 3가지를 명확히 제시.\n"
+    "7) 같은 질문이어도 새로운 인사이트를 추가해 반복 피하기."
 )
 
 def get_reply(user_input: str) -> str:
@@ -25,7 +26,7 @@ def get_reply(user_input: str) -> str:
         model="gpt-4o-mini",
         temperature=0.8,
         top_p=0.95,
-        max_tokens=1000,
+        max_tokens=1200,
         messages=[
             {"role": "system", "content": STYLE_SYSTEM},
             {"role": "user", "content": user_input}
@@ -33,14 +34,14 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS (가독성 높이기) ---
+# --- CSS (가독성 스타일) ---
 st.markdown(
     """
     <style>
     .chat-message {
         font-size: 20px;
         line-height: 1.6;
-        max-width: 35ch;  /* 한 줄 35자 이내 */
+        max-width: 35ch;   /* 한 줄 35자 */
         word-wrap: break-word;
         white-space: pre-wrap;
     }
@@ -84,16 +85,22 @@ if "usage_count" not in st.session_state:
 if st.session_state.usage_count < 4:
     user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
+        # 사용자 메시지 출력
         with st.chat_message("user"):
             st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
 
+        # "생각중입니다..." 표시
         with st.chat_message("assistant"):
             thinking_box = st.empty()
             thinking_box.markdown("생각중입니다...")
 
+        # 답변 생성
         answer = get_reply(user_input)
+
+        # 최종 답변 교체
         thinking_box.markdown(f"<div class='chat-message'>{answer}</div>", unsafe_allow_html=True)
 
+        # 기록 저장
         st.session_state.chat_history.append((user_input, answer))
         st.session_state.usage_count += 1
 else:
@@ -118,3 +125,4 @@ if admin_pw == "4321":
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
+
