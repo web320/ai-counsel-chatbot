@@ -1,4 +1,4 @@
-# app.py — 단일 페이지(메인=채팅만) + 사이드바 ‘대화기록’ 안에 결제창 통합
+# app.py — 사이드바 '대화 기록'에서 결제창 클릭 → 별도 화면(플랜·FAQ·문의)로 이동, 다시 채팅 복귀
 import os, uuid, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -34,17 +34,32 @@ html, body, [class*="css"] { font-size: 18px; }
 h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-size: 22px !important; }
 [data-testid="stSidebar"] * { font-size: 18px !important; }
 .chat-message { font-size: 22px; line-height: 1.7; white-space: pre-wrap; }
+.hero { padding:16px; border-radius:14px; background:rgba(80,120,255,0.08); margin-bottom:8px; }
 .badge { display:inline-block; padding:4px 8px; border-radius:8px; margin-right:6px; background:#1e293b; color:#fff; }
-.small { font-size: 14px; opacity: 0.9; }
-.plan-card { padding:12px; border:1px solid #334155; border-radius:12px; }
-.divider { height:1px; background:#334155; margin:8px 0; }
+.card  { padding:14px; border:1px solid #334155; border-radius:14px; }
+.small { font-size:14px; opacity:.85; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("💙 ai심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
-# ===== UID =====
+# ===== 라우팅 유틸 =====
+def nav_to(page: str):
+    uid = st.query_params.get("uid") or str(uuid.uuid4())
+    st.query_params.clear()
+    st.query_params["uid"] = uid
+    st.query_params["page"] = page
+    st.rerun()
+
+def get_payment_url(plan_key: str) -> str:
+    default_url = "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4"
+    pay = st.secrets.get("payments", {})
+    if isinstance(pay, dict):
+        return pay.get(f"{plan_key}_url", default_url)
+    return default_url
+
+# ===== UID & PAGE =====
 uid = st.query_params.get("uid")
 if uid:
     USER_ID = uid
@@ -52,18 +67,13 @@ else:
     USER_ID = str(uuid.uuid4())
     st.query_params["uid"] = USER_ID
 
+PAGE = st.query_params.get("page") or "chat"   # 기본은 채팅
+
 # ===== 세션 기본 =====
 defaults = {
-    "chat_history": [],
-    "is_paid": False,
-    "limit": 4,
-    "usage_count": 0,
-    "plan": None,
-    "purchase_ts": None,
-    "refund_until_ts": None,
-    "sessions_since_purchase": 0,
-    "refund_count": 0,
-    "refund_requested": False
+    "chat_history": [], "is_paid": False, "limit": 4, "usage_count": 0,
+    "plan": None, "purchase_ts": None, "refund_until_ts": None,
+    "sessions_since_purchase": 0, "refund_count": 0, "refund_requested": False
 }
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
@@ -80,9 +90,10 @@ else:
 
 # ===== 분류/프롬프트 =====
 DANGEROUS = ["자살","죽고","죽고싶","해치","폭력","때리","살해","범죄","불법","마약","음란","노골적"]
-COACH_KW = ["어떻게","방법","계획","추천","정리","수익","창업","투자","마케팅","습관","루틴","해결"]
-VENT_KW  = ["힘들","불안","우울","외롭","걱정","짜증","화나","무기력","멘탈","지쳤"]
-KEYWORD_HINTS = {"불안":"네가 불안하다고 말한 부분","외로움":"외로움이 마음을 꽉 채우는 느낌","돈":"돈에 대한 걱정","미래":"미래가 흐릿하게 느껴지는 점"}
+COACH_KW  = ["어떻게","방법","계획","추천","정리","수익","창업","투자","마케팅","습관","루틴","해결"]
+VENT_KW   = ["힘들","불안","우울","외롭","걱정","짜증","화나","무기력","멘탈","지쳤"]
+KEYWORD_HINTS = {"불안":"네가 불안하다고 말한 부분","외로움":"외로움이 마음을 꽉 채우는 느낌",
+                 "돈":"돈에 대한 걱정","미래":"미래가 흐릿하게 느껴지는 점"}
 
 def decide_mode(text: str) -> str:
     if any(k in text for k in DANGEROUS): return "safety"
@@ -130,14 +141,7 @@ def stream_reply(user_input: str):
         messages=[{"role":"system","content":sys},{"role":"user","content":usr}],
     )
 
-# ===== 결제/환불 유틸 =====
-def get_payment_url(plan_key: str) -> str:
-    default_url = "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4"
-    pay = st.secrets.get("payments", {})
-    if isinstance(pay, dict):
-        return pay.get(f"{plan_key}_url", default_url)
-    return default_url
-
+# ===== 환불 조건 =====
 def refund_eligible():
     if not st.session_state.is_paid or not st.session_state.purchase_ts:
         return False, "유료 결제 내역이 없습니다."
@@ -158,38 +162,136 @@ def refund_eligible():
         return False, "구매 후 20회 초과 사용 시 환불 제한."
     return True, "환불 가능"
 
-# ===== 메인(오직 채팅만) =====
-can_chat = st.session_state.is_paid or (st.session_state.usage_count < st.session_state.limit)
+# ===== 페이지 1: 채팅(오직 타이틀 + 채팅만) =====
+def render_chat_page():
+    can_chat = st.session_state.is_paid or (st.session_state.usage_count < st.session_state.limit)
 
-if can_chat:
-    user_input = st.chat_input("마음편히 얘기해봐")
-else:
-    st.info("🚫 무료 체험이 끝났습니다. 왼쪽 ‘💳 가격/결제’에서 플랜을 선택하면 바로 이어서 사용할 수 있어요.")
-    user_input = None
+    user_input = st.chat_input("마음편히 얘기해봐") if can_chat else None
+    if not can_chat:
+        st.info("🚫 무료 체험이 끝났습니다. 왼쪽 사이드바의 **💳 결제/FAQ 열기**를 눌러 플랜을 선택하세요.")
 
-if user_input:
-    st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
-    placeholder, streamed = st.empty(), ""
-    for chunk in stream_reply(user_input):
-        delta = chunk.choices[0].delta
-        if getattr(delta, "content", None):
-            streamed += delta.content
-            placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
+    if user_input:
+        st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
+        placeholder, streamed = st.empty(), ""
+        for chunk in stream_reply(user_input):
+            delta = chunk.choices[0].delta
+            if getattr(delta, "content", None):
+                streamed += delta.content
+                placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
 
-    st.session_state.chat_history.append((user_input, streamed))
-    if not st.session_state.is_paid:
-        st.session_state.usage_count += 1
-        user_ref.update({"usage_count": st.session_state.usage_count})
-    else:
-        st.session_state.sessions_since_purchase += 1
-        user_ref.update({"sessions_since_purchase": st.session_state.sessions_since_purchase})
+        st.session_state.chat_history.append((user_input, streamed))
+        if not st.session_state.is_paid:
+            st.session_state.usage_count += 1
+            user_ref.update({"usage_count": st.session_state.usage_count})
+        else:
+            st.session_state.sessions_since_purchase += 1
+            user_ref.update({"sessions_since_purchase": st.session_state.sessions_since_purchase})
 
-# ===== 사이드바: 대화 기록 + 결제창(여기에 통합) =====
+# ===== 페이지 2: 가격/FAQ/문의 =====
+def render_plans_page():
+    st.markdown("""
+<div class='hero'>
+  <h3>AI 고민상담, <b>3회 무료 체험</b> 이후 유료 플랜</h3>
+  <div class='small'>
+    <span class='badge'>60회 $3</span>
+    <span class='badge'>140회 $6</span>
+    <span class='badge'>7일 전액 환불</span>
+    <span class='badge'>언제든 해지</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### 💳 가격 / 결제")
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.markdown("**⭐ 베이직** — 60회 / **$3**\n\n7일 전액 환불 · 언제든 해지")
+            st.link_button("PayPal 결제 (60회)", get_payment_url("plan60"), use_container_width=True)
+            if st.button("✅ 임시 적용(테스트)", key="apply60"):
+                now = datetime.utcnow()
+                st.session_state.is_paid = True
+                st.session_state.limit = 60
+                st.session_state.usage_count = 0
+                st.session_state.plan = "p60"
+                st.session_state.purchase_ts = now
+                st.session_state.refund_until_ts = now + timedelta(days=7)
+                st.session_state.sessions_since_purchase = 0
+                user_ref.update({
+                    "is_paid": True, "limit": 60, "usage_count": 0,
+                    "plan": "p60",
+                    "purchase_ts": now, "refund_until_ts": now + timedelta(days=7),
+                    "sessions_since_purchase": 0
+                })
+                st.success("베이직 60회 적용!")
+        with col_r:
+            st.markdown("**💎 프로** — 140회 / **$6**\n\n7일 전액 환불 · 언제든 해지")
+            st.link_button("PayPal 결제 (140회)", get_payment_url("plan140"), use_container_width=True)
+            if st.button("✅ 임시 적용(테스트)", key="apply140"):
+                now = datetime.utcnow()
+                st.session_state.is_paid = True
+                st.session_state.limit = 140
+                st.session_state.usage_count = 0
+                st.session_state.plan = "p140"
+                st.session_state.purchase_ts = now
+                st.session_state.refund_until_ts = now + timedelta(days=7)
+                st.session_state.sessions_since_purchase = 0
+                user_ref.update({
+                    "is_paid": True, "limit": 140, "usage_count": 0,
+                    "plan": "p140",
+                    "purchase_ts": now, "refund_until_ts": now + timedelta(days=7),
+                    "sessions_since_purchase": 0
+                })
+                st.success("프로 140회 적용!")
+
+        st.markdown("---")
+        st.markdown("**↩️ 7일 환불 규정(악용 방지 포함)**")
+        st.markdown("- 첫 결제 후 **7일 이내 100% 환불**.\n- **구매 후 사용 20회 이하**일 때 가능.\n- **계정당 1회** 환불 제한.\n- 응급·의료상담 대체 불가. 개인정보는 암호화 저장, 마케팅 미사용.")
+        eligible, msg = refund_eligible()
+        rr1, rr2 = st.columns([1,2])
+        with rr1:
+            req = st.button("환불 요청", disabled=not eligible)
+        with rr2:
+            st.info(f"환불 상태: {msg}")
+        if req and eligible:
+            st.session_state.refund_requested = True
+            st.session_state.refund_count += 1
+            user_ref.update({
+                "refund_requested": True,
+                "refund_count": st.session_state.refund_count
+            })
+            st.success("환불 요청 접수 완료.")
+
+    with c2:
+        st.markdown("### ❓ FAQ")
+        with st.expander("사람 상담사가 보나요?"): st.write("아니요. AI가 답변하며, 내용은 외부에 공유되지 않습니다.")
+        with st.expander("무료 체험은 몇 회인가요?"): st.write("3회입니다. 결제 전 충분히 확인하세요.")
+        with st.expander("환불 규정은?"): st.write("첫 결제 후 7일 이내 100% 환불(구매 후 사용 20회 이하, 계정당 1회).")
+        with st.expander("언제든 해지되나요?"): st.write("마이페이지에서 1클릭 해지(관리자 승인 처리).")
+        with st.expander("개인정보는 안전한가요?"): st.write("전송·저장 시 암호화되며, 마케팅에 사용되지 않습니다.")
+        st.markdown("---")
+        st.markdown("### 📮 문의 남기기")
+        with st.form("qna_form", clear_on_submit=True):
+            q = st.text_area("무엇이 궁금하신가요? (운영자에게 전달됩니다)", key="qna_input", height=120)
+            submitted = st.form_submit_button("보내기")
+        if submitted:
+            if q and q.strip():
+                db.collection("qna").add({"user_id": USER_ID, "question": q.strip(), "ts": datetime.utcnow()})
+                st.success("문의가 저장되었습니다. 가능한 빨리 답변드릴게요.")
+                st.rerun()
+            else:
+                st.warning("질문을 입력해주세요.")
+
+    st.markdown("---")
+    if st.button("⬅ 채팅으로 돌아가기"):
+        nav_to("chat")
+
+# ===== 사이드바: 대화 기록 + '결제/FAQ' 이동 버튼 =====
 st.sidebar.header("📜 대화 기록")
 st.sidebar.caption("내 UID (URL에 저장됨)")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 
-# 남은 무료/유료 상태 표시
+# 남은 무료/유료 상태
 remaining = ("∞" if st.session_state.is_paid else max(st.session_state.limit - st.session_state.usage_count, 0))
 st.sidebar.markdown(f"**남은 무료:** {remaining}회 · **유료:** {'예' if st.session_state.is_paid else '아니오'}")
 
@@ -199,60 +301,10 @@ if st.session_state.chat_history:
         st.sidebar.markdown(f"**Q{len(st.session_state.chat_history)-i+1}:** {q[:20]}...")
 
 st.sidebar.markdown("---")
-with st.sidebar.expander("💳 가격 / 결제 (60회 $3 · 140회 $6)", expanded=not st.session_state.is_paid):
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("<div class='plan-card'><b>⭐ 베이직</b> — 60회 / <b>$3</b><div class='divider'></div>7일 전액 환불 · 언제든 해지</div>", unsafe_allow_html=True)
-        st.link_button("PayPal 결제 (60회)", get_payment_url("plan60"), use_container_width=True)
-    with c2:
-        st.markdown("<div class='plan-card'><b>💎 프로</b> — 140회 / <b>$6</b><div class='divider'></div>7일 전액 환불 · 언제든 해지</div>", unsafe_allow_html=True)
-        st.link_button("PayPal 결제 (140회)", get_payment_url("plan140"), use_container_width=True)
-
-    # 운영 편의: 관리자 인증 시 '임시 적용' 노출
-    admin_pw_for_inline = st.text_input("관리자 임시 적용 비밀번호(선택)", type="password", key="inline_admin_pw")
-    if admin_pw_for_inline == "4321":
-        col_a, col_b = st.columns(2)
-        if col_a.button("✅ 60회 임시 적용"):
-            now = datetime.utcnow()
-            st.session_state.update({
-                "is_paid": True, "limit": 60, "usage_count": 0, "plan": "p60",
-                "purchase_ts": now, "refund_until_ts": now + timedelta(days=7),
-                "sessions_since_purchase": 0
-            })
-            user_ref.update({
-                "is_paid": True, "limit": 60, "usage_count": 0, "plan": "p60",
-                "purchase_ts": now, "refund_until_ts": now + timedelta(days=7),
-                "sessions_since_purchase": 0
-            })
-            st.success("베이직 60회 적용 완료")
-        if col_b.button("✅ 140회 임시 적용"):
-            now = datetime.utcnow()
-            st.session_state.update({
-                "is_paid": True, "limit": 140, "usage_count": 0, "plan": "p140",
-                "purchase_ts": now, "refund_until_ts": now + timedelta(days=7),
-                "sessions_since_purchase": 0
-            })
-            user_ref.update({
-                "is_paid": True, "limit": 140, "usage_count": 0, "plan": "p140",
-                "purchase_ts": now, "refund_until_ts": now + timedelta(days=7),
-                "sessions_since_purchase": 0
-            })
-            st.success("프로 140회 적용 완료")
-
-    st.markdown("---")
-    st.markdown("**↩️ 7일 환불 규정(악용 방지 포함)**")
-    st.markdown("- 첫 결제 후 **7일 이내 100% 환불**\n- **구매 후 사용 20회 이하**일 때 가능\n- **계정당 1회** 환불 제한\n- 응급·의료상담 대체 불가. 개인정보는 암호화 저장·마케팅 미사용")
-    eligible, msg = refund_eligible()
-    colr1, colr2 = st.columns([1,2])
-    with colr1:
-        req = st.button("환불 요청", disabled=not eligible, key="refund_btn_sidebar", use_container_width=True)
-    with colr2:
-        st.info(f"환불 상태: {msg}")
-    if req and eligible:
-        st.session_state.refund_requested = True
-        st.session_state.refund_count += 1
-        user_ref.update({"refund_requested": True, "refund_count": st.session_state.refund_count})
-        st.success("환불 요청이 접수되었습니다. 영업일 기준 1~3일 내 처리됩니다.")
+if PAGE == "chat":
+    st.sidebar.button("💳 결제/FAQ 열기", use_container_width=True, on_click=lambda: nav_to("plans"))
+else:
+    st.sidebar.button("⬅ 채팅으로 돌아가기", use_container_width=True, on_click=lambda: nav_to("chat"))
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔧 관리자")
@@ -273,3 +325,10 @@ if admin_pw == "4321":
         st.sidebar.success("적용 완료")
 else:
     st.sidebar.caption("관리자 전용")
+
+# ===== 라우팅 실행 =====
+if PAGE == "plans":
+    render_plans_page()
+else:
+    render_chat_page()
+
