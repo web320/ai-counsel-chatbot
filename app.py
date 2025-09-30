@@ -9,12 +9,12 @@ load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-# --- 시스템 프롬프트 (GPT-5식 가독성 스타일 적용) ---
+# --- 시스템 프롬프트 (가독성 최적화) ---
 STYLE_SYSTEM = (
     "너는 따뜻한 심리상담사이자, 재테크/창업/수익화 전문가야.\n"
     "답변 규칙:\n"
-    "1) 한 문장은 20~25자 이내.\n"
-    "2) 문단은 2~3문장으로 짧게 끊기.\n"
+    "1) 한 문장은 40자 이내.\n"
+    "2) 문단은 2~3문장으로 끊어 가독성을 높여라.\n"
     "3) bullet point 적극 활용.\n"
     "4) 심리적 공감 → 원인 분석 → 실행 플랜 → 결론 순서.\n"
     "5) 중요한 키워드는 **굵게** 강조.\n"
@@ -24,9 +24,9 @@ STYLE_SYSTEM = (
 def get_reply(user_input: str) -> str:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        temperature=0.6,        # 조금 더 빠르고 일관되게
+        temperature=0.6,
         top_p=0.9,
-        max_tokens=600,         # 토큰 수 줄여서 속도 ↑
+        max_tokens=800,   # 답변 속도 최적화
         messages=[
             {"role": "system", "content": STYLE_SYSTEM},
             {"role": "user", "content": user_input}
@@ -34,14 +34,14 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS (GPT-5 가독성 스타일) ---
+# --- CSS (가독성 최적화) ---
 st.markdown(
     """
     <style>
     .chat-message {
         font-size: 22px;        /* 글자 크게 */
         line-height: 1.7;       /* 줄 간격 */
-        max-width: 25ch;        /* 한 줄 약 25자 */
+        max-width: 38ch;        /* 한 줄 약 38자 */
         word-wrap: break-word;
         white-space: pre-wrap;
     }
@@ -81,13 +81,19 @@ if st.session_state.usage_count < 4:
         with st.chat_message("user"):
             st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
 
-        # "생각중입니다..." 애니메이션 (계속 반복)
+        # "생각중입니다..." 반복 애니메이션
         with st.chat_message("assistant"):
             thinking_box = st.empty()
-            for i in range(12):   # 약 6초 동안 반복 (0.5초 * 12)
-                dots = "." * (i % 4)
-                thinking_box.markdown(f"<div class='chat-message'>생각중입니다{dots}</div>", unsafe_allow_html=True)
-                time.sleep(0.5)
+            running = True
+            for _ in range(8):  # 최대 4초 동안 애니메이션 (빠르게)
+                for dots in ["", ".", "..", "..."]:
+                    text = "생각중입니다" + dots
+                    display = ""
+                    for ch in text:
+                        display += ch
+                        thinking_box.markdown(f"<div class='chat-message'>{display}</div>", unsafe_allow_html=True)
+                        time.sleep(0.05)  # 글자 하나씩 출력 속도
+                    time.sleep(0.3)
 
         # 실제 답변 생성
         answer = get_reply(user_input)
