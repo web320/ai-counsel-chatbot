@@ -9,24 +9,24 @@ load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-# --- 시스템 프롬프트 ---
+# --- 시스템 프롬프트 (GPT-5식 가독성 스타일 적용) ---
 STYLE_SYSTEM = (
     "너는 따뜻한 심리상담사이자, 재테크/창업/수익화 전문가야.\n"
     "답변 규칙:\n"
-    "1) 답변은 최소 15문장 이상.\n"
-    "2) 문단은 2~3문장마다 끊어서 가독성 높이기.\n"
-    "3) bullet point는 최소 5개 이상 사용.\n"
-    "4) 심리적 공감 → 원인 분석 → 구체적 실천 플랜 → 결론 순서로 작성.\n"
-    "5) 중요한 키워드는 **굵게** 표시.\n"
-    "6) 항상 사용자가 지금 당장 할 수 있는 행동 3가지를 명확히 제시.\n"
+    "1) 한 문장은 20~25자 이내.\n"
+    "2) 문단은 2~3문장으로 짧게 끊기.\n"
+    "3) bullet point 적극 활용.\n"
+    "4) 심리적 공감 → 원인 분석 → 실행 플랜 → 결론 순서.\n"
+    "5) 중요한 키워드는 **굵게** 강조.\n"
+    "6) 항상 지금 당장 할 수 있는 행동 3가지 제시.\n"
 )
 
 def get_reply(user_input: str) -> str:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        temperature=0.8,
-        top_p=0.95,
-        max_tokens=1200,
+        temperature=0.6,        # 조금 더 빠르고 일관되게
+        top_p=0.9,
+        max_tokens=600,         # 토큰 수 줄여서 속도 ↑
         messages=[
             {"role": "system", "content": STYLE_SYSTEM},
             {"role": "user", "content": user_input}
@@ -34,14 +34,14 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS (큰 글씨 + 줄 제한) ---
+# --- CSS (GPT-5 가독성 스타일) ---
 st.markdown(
     """
     <style>
     .chat-message {
-        font-size: 24px;         /* 글자 크게 */
-        line-height: 1.8;        /* 줄 간격 넓게 */
-        max-width: 35ch;         /* 한 줄 약 35자 */
+        font-size: 22px;        /* 글자 크게 */
+        line-height: 1.7;       /* 줄 간격 */
+        max-width: 25ch;        /* 한 줄 약 25자 */
         word-wrap: break-word;
         white-space: pre-wrap;
     }
@@ -81,15 +81,13 @@ if st.session_state.usage_count < 4:
         with st.chat_message("user"):
             st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
 
-        # "생각중입니다..." 타자 치듯 표시
+        # "생각중입니다..." 애니메이션 (계속 반복)
         with st.chat_message("assistant"):
             thinking_box = st.empty()
-            text = "생각중입니다..."
-            display_text = ""
-            for ch in text:
-                display_text += ch
-                thinking_box.markdown(f"<div class='chat-message'>{display_text}</div>", unsafe_allow_html=True)
-                time.sleep(0.2)
+            for i in range(12):   # 약 6초 동안 반복 (0.5초 * 12)
+                dots = "." * (i % 4)
+                thinking_box.markdown(f"<div class='chat-message'>생각중입니다{dots}</div>", unsafe_allow_html=True)
+                time.sleep(0.5)
 
         # 실제 답변 생성
         answer = get_reply(user_input)
