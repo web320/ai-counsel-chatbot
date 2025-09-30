@@ -34,19 +34,37 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
+# --- CSS (무지개 애니메이션) ---
+st.markdown(
+    """
+    <style>
+    @keyframes rainbow {
+        0% {color: red;}
+        16% {color: orange;}
+        32% {color: yellow;}
+        48% {color: green;}
+        64% {color: blue;}
+        80% {color: indigo;}
+        100% {color: violet;}
+    }
+    .rainbow-text {
+        font-weight: bold;
+        font-size: 22px;
+        animation: rainbow 2s infinite;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- 결제 화면 ---
 def show_payment_screen():
     st.subheader("🚫 무료 체험이 끝났습니다")
-    st.markdown(
-        "월 **3,900원** 결제 후 계속 이용할 수 있습니다."
-    )
+    st.markdown("월 **3,900원** 결제 후 계속 이용할 수 있습니다.")
     st.markdown("---")
     st.markdown("### 🔗 결제 방법")
 
-    st.markdown(
-        "[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)"
-    )
-
+    st.markdown("[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)")
     st.info(
         "💡 결제 후 카톡(ID: jeuspo) 또는 이메일(mwiby91@gmail.com)로 "
         "닉네임/결제 스크린샷을 보내주시면 바로 이용 권한을 열어드립니다."
@@ -70,18 +88,16 @@ if st.session_state.usage_count < 4:
         with st.chat_message("user"):
             st.write(user_input)
 
+        # "생각중입니다..." 출력 (무지개 애니메이션)
         with st.chat_message("assistant"):
             thinking_box = st.empty()
-            # "생각중입니다" 애니메이션
-            for i in range(6):
-                dots = "." * (i % 4)  # 0~3개의 점 반복
-                thinking_box.markdown(f"생각중입니다{dots}")
-                time.sleep(0.5)
+            thinking_box.markdown("<div class='rainbow-text'>생각중입니다...</div>", unsafe_allow_html=True)
 
         # 실제 답변 생성
         answer = get_reply(user_input)
 
-        # 답변 출력
+        # "생각중입니다..." 제거 후 최종 답변 교체
+        thinking_box.empty()
         with st.chat_message("assistant"):
             st.markdown(answer)
 
