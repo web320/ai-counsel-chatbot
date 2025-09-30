@@ -32,6 +32,37 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
+# --- CSS 스타일 ---
+st.markdown(
+    """
+    <style>
+    .chat-bubble {
+        font-size: 20px;
+        line-height: 1.6;
+        max-width: 35ch;   /* 한 줄 35자 */
+        word-wrap: break-word;
+        white-space: pre-wrap;
+        margin: 8px 0;
+        padding: 10px 14px;
+        border-radius: 12px;
+    }
+    .user-bubble {
+        background-color: #E3F2FD;
+        color: #0D47A1;
+        text-align: right;
+        margin-left: auto;
+    }
+    .ai-bubble {
+        background-color: #E8F5E9;
+        color: #1B5E20;
+        text-align: left;
+        margin-right: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- 결제 화면 ---
 def show_payment_screen():
     st.subheader("🚫 무료 체험이 끝났습니다")
@@ -71,10 +102,16 @@ if st.session_state.usage_count < 4:
     if user_input:
         answer = get_reply(user_input)
 
-        with st.chat_message("user"):
-            st.write(user_input)
-        with st.chat_message("assistant"):
-            st.markdown(f"<p style='font-size:18px;'>{answer}</p>", unsafe_allow_html=True)
+        # 사용자 말풍선
+        st.markdown(
+            f"<div class='chat-bubble user-bubble'>🙋‍♂️ {user_input}</div>",
+            unsafe_allow_html=True
+        )
+        # AI 답변 말풍선
+        st.markdown(
+            f"<div class='chat-bubble ai-bubble'>🤖 {answer}</div>",
+            unsafe_allow_html=True
+        )
 
         st.session_state.chat_history.append((user_input, answer))
         st.session_state.usage_count += 1
@@ -98,6 +135,7 @@ if admin_pw == "4321":  # ✅ 원하는 관리자 비밀번호로 변경
     if st.sidebar.button("🔑 사용 횟수 리셋"):
         st.session_state.usage_count = 0
         st.sidebar.success("✅ 사용 횟수가 초기화되었습니다! (관리자 전용)")
-        st.rerun()  # 🔄 화면 새로고침 → 즉시 채팅창으로 복귀
+        st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
+
