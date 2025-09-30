@@ -32,37 +32,6 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS 스타일 ---
-st.markdown(
-    """
-    <style>
-    .chat-bubble {
-        font-size: 20px;
-        line-height: 1.6;
-        max-width: 35ch;   /* 한 줄 35자 */
-        word-wrap: break-word;
-        white-space: pre-wrap;
-        margin: 8px 0;
-        padding: 10px 14px;
-        border-radius: 12px;
-    }
-    .user-bubble {
-        background-color: #E3F2FD;
-        color: #0D47A1;
-        text-align: right;
-        margin-left: auto;
-    }
-    .ai-bubble {
-        background-color: #E8F5E9;
-        color: #1B5E20;
-        text-align: left;
-        margin-right: auto;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # --- 결제 화면 ---
 def show_payment_screen():
     st.subheader("🚫 무료 체험이 끝났습니다")
@@ -100,19 +69,22 @@ if "usage_count" not in st.session_state:
 if st.session_state.usage_count < 4:
     user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
+        # 사용자 메시지 출력
+        with st.chat_message("user"):
+            st.write(user_input)
+
+        # "생각중입니다..." 표시
+        with st.chat_message("assistant"):
+            thinking_box = st.empty()
+            thinking_box.markdown("생각중입니다...")
+
+        # 실제 답변 생성
         answer = get_reply(user_input)
 
-        # 사용자 말풍선
-        st.markdown(
-            f"<div class='chat-bubble user-bubble'>🙋‍♂️ {user_input}</div>",
-            unsafe_allow_html=True
-        )
-        # AI 답변 말풍선
-        st.markdown(
-            f"<div class='chat-bubble ai-bubble'>🤖 {answer}</div>",
-            unsafe_allow_html=True
-        )
+        # "생각중입니다..."를 실제 답변으로 교체
+        thinking_box.markdown(answer)
 
+        # 기록 저장
         st.session_state.chat_history.append((user_input, answer))
         st.session_state.usage_count += 1
 else:
@@ -138,4 +110,3 @@ if admin_pw == "4321":  # ✅ 원하는 관리자 비밀번호로 변경
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
-
