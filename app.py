@@ -7,38 +7,49 @@ import streamlit as st
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ========= Firebase (Secrets 어떤 형태든 안전 처리) =========
+# ========= Firebase (Secrets robust) =========
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-def _load_fb_cred_from_secrets():
-    """
-    st.secrets["firebase"] 가 dict이든, JSON 문자열이든 모두 지원.
-    """
+def _firebase_config():
     raw = st.secrets.get("firebase")
     if raw is None:
         raise RuntimeError("Secrets에 [firebase]가 없습니다.")
-    if isinstance(raw, str):
-        # 사용자가 JSON 문자열로 넣어둔 경우
+    if isinstance(raw, str):  # JSON 문자열로 넣었을 때
         return json.loads(raw)
-    # TOML의 [firebase] 블록(dict)인 경우
-    return dict(raw)
+    return dict(raw)          # TOML [firebase] 블록으로 넣었을 때
 
 if not firebase_admin._apps:
-    fb_conf = _load_fb_cred_from_secrets()
-    cred = credentials.Certificate(fb_conf)
+    cred = credentials.Certificate(_firebase_config())
     firebase_admin.initialize_app(cred)
-
 db = firestore.client()
 
-# ========= UI 공통 =========
+# ========= 전역 스타일 (폰트 크게/깨끗) =========
 st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
+
+st.markdown("""
+<style>
+/* 기본 폰트 크게 */
+html, body, [class*="css"] { font-size: 18px; }
+/* 헤드라인 */
+h1 { font-size: 40px !important; }
+h2 { font-size: 28px !important; }
+h3 { font-size: 22px !important; }
+/* 사이드바 전체 폰트 */
+[data-testid="stSidebar"] * { font-size: 18px !important; }
+/* 라디오 라벨 */
+div[role="radiogroup"] label { font-size: 18px !important; }
+/* 채팅 텍스트 */
+.chat-message { font-size: 22px; line-height: 1.7; white-space: pre-wrap; }
+/* UID 상자 조금 깔끔하게 */
+.uidbox input { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("💙 ai심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
-
-
-# ✅ 넣기
+# ========= URL에 UID 보관(새 API) =========
 uid = st.query_params.get("uid")
 if uid:
     USER_ID = uid
@@ -49,8 +60,8 @@ else:
 # ========= 상담 톤/프롬프트 =========
 style_options = {
     "따뜻한 상담사": {"tone":"따뜻하고 부드럽게, 이해와 공감 최우선", "ending":"넌 지금도 충분히 잘하고 있어 🌷"},
-    "친구처럼 솔직하게": {"tone":"친근하고 솔직하게, 옆자리 친구처럼", "ending":"네가 힘든 건 당연해. 그래도 난 네 편이야 🤝"},
-    "연예인처럼 다정하게": {"tone":"부드럽고 다정한 여성 연예인 말투", "ending":"오늘도 정말 멋지게 버텨줬어 ✨"},
+    "친구처럼 솔직하게": {"tone":"친근하고 솔직하게, 친구가 옆에서 말해주는 듯", "ending":"네가 힘든 건 너무 당연해. 그래도 난 네 편이야 🤝"},
+    "연예인처럼 다정하게": {"tone":"부드럽고 다정한 여성 연예인 말투", "ending":"오늘도 너 정말 멋지게 버텨줬어 ✨"},
 }
 keyword_map = {
     "불안":"네가 불안하다고 한 부분, 그게 무겁게 느껴질 수 있어.",
@@ -82,16 +93,11 @@ def stream_reply(user_input, style_choice):
         messages=[{"role":"system","content":sys},{"role":"user","content":usr}]
     )
 
-# ========= 결제 화면 =========
-def show_payment_screen():
-    st.subheader("🚫 무료 체험이 끝났습니다")
-    st.markdown("월 **3,900원** 결제 후 계속 이용할 수 있습니다.")
-    st.markdown("[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)")
-    st.info("결제 후 카톡(ID: jeuspo) 또는 이메일(mwiby91@gmail.com)로 스크린샷을 보내주세요. 바로 권한 열어드려요.")
-
-# ========= 사이드바(스타일/관리) =========
+# ========= 사이드바 =========
 style_choice = st.sidebar.radio("오늘 위로 톤", list(style_options.keys()))
-st.sidebar.caption(f"내 UID: `{USER_ID}` (URL로 저장됨)")
+st.sidebar.caption("내 UID (URL로 저장됨)")
+st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed", key="uidbox", help="이 주소를 북마크하면 기록/사용횟수 유지됩니다.", args=None)
+# 위 text_input 폰트는 CSS에서 .uidbox가 아니라 key가 적용이 안 되니, class 부여 대신 전체 폰트가 커져서 충분합니다.
 
 # ========= Firestore: 사용자 로딩/초기화 =========
 user_ref = db.collection("users").document(USER_ID)
@@ -108,10 +114,16 @@ st.session_state.setdefault("limit",       data.get("limit", 4))
 st.session_state.setdefault("is_paid",     data.get("is_paid", False))
 st.session_state.setdefault("chat_history", [])
 
-# 결제/무료 게이트
-can_chat = st.session_state.is_paid or (st.session_state.usage_count < st.session_state.limit)
+# ========= 결제 화면 =========
+def show_payment_screen():
+    st.subheader("🚫 무료 체험이 끝났습니다")
+    st.markdown("월 **3,900원** 결제 후 계속 이용할 수 있습니다.")
+    st.markdown("[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)")
+    st.info("결제 후 카톡(ID: jeuspo) 또는 이메일(mwiby91@gmail.com)로 스크린샷을 보내주시면 바로 권한 열어드려요.")
 
 # ========= 본문 =========
+can_chat = st.session_state.is_paid or (st.session_state.usage_count < st.session_state.limit)
+
 if can_chat:
     user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
@@ -124,7 +136,7 @@ if can_chat:
                 placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
 
         st.session_state.chat_history.append((user_input, streamed))
-        if not st.session_state.is_paid:
+        if not st.session_state.is_paid:  # 무료일 때만 카운트
             st.session_state.usage_count += 1
             user_ref.update({"usage_count": st.session_state.usage_count})
 else:
@@ -150,7 +162,7 @@ if admin_pw == "4321":
         st.sidebar.success("유료모드 적용!")
     if col2.button("🆕 새 UID(테스트)"):
         new_uid = str(uuid.uuid4())
-        st.experimental_set_query_params(uid=new_uid)
-        st.experimental_rerun()
+        st.query_params["uid"] = new_uid
+        st.rerun()
 else:
     st.sidebar.caption("관리자 전용")
