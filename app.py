@@ -34,23 +34,16 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS (무지개 애니메이션) ---
+# --- CSS (큰 글씨 + 줄 제한) ---
 st.markdown(
     """
     <style>
-    @keyframes rainbow {
-        0% {color: red;}
-        16% {color: orange;}
-        32% {color: yellow;}
-        48% {color: green;}
-        64% {color: blue;}
-        80% {color: indigo;}
-        100% {color: violet;}
-    }
-    .rainbow-text {
-        font-weight: bold;
-        font-size: 22px;
-        animation: rainbow 2s infinite;
+    .chat-message {
+        font-size: 24px;         /* 글자 크게 */
+        line-height: 1.8;        /* 줄 간격 넓게 */
+        max-width: 35ch;         /* 한 줄 약 35자 */
+        word-wrap: break-word;
+        white-space: pre-wrap;
     }
     </style>
     """,
@@ -86,12 +79,17 @@ if st.session_state.usage_count < 4:
     user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
         with st.chat_message("user"):
-            st.write(user_input)
+            st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
 
-        # "생각중입니다..." 출력 (무지개 애니메이션)
+        # "생각중입니다..." 타자 치듯 표시
         with st.chat_message("assistant"):
             thinking_box = st.empty()
-            thinking_box.markdown("<div class='rainbow-text'>생각중입니다...</div>", unsafe_allow_html=True)
+            text = "생각중입니다..."
+            display_text = ""
+            for ch in text:
+                display_text += ch
+                thinking_box.markdown(f"<div class='chat-message'>{display_text}</div>", unsafe_allow_html=True)
+                time.sleep(0.2)
 
         # 실제 답변 생성
         answer = get_reply(user_input)
@@ -99,7 +97,7 @@ if st.session_state.usage_count < 4:
         # "생각중입니다..." 제거 후 최종 답변 교체
         thinking_box.empty()
         with st.chat_message("assistant"):
-            st.markdown(answer)
+            st.markdown(f"<div class='chat-message'>{answer}</div>", unsafe_allow_html=True)
 
         # 기록 저장
         st.session_state.chat_history.append((user_input, answer))
@@ -126,5 +124,6 @@ if admin_pw == "4321":
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
+
 
 
