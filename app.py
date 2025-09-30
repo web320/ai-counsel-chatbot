@@ -9,24 +9,22 @@ load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-# --- 시스템 프롬프트 (가독성 최적화) ---
+# --- 시스템 프롬프트 ---
 STYLE_SYSTEM = (
     "너는 따뜻한 심리상담사이자, 재테크/창업/수익화 전문가야.\n"
     "답변 규칙:\n"
-    "1) 한 문장은 40자 이내.\n"
-    "2) 문단은 2~3문장으로 끊어 가독성을 높여라.\n"
-    "3) bullet point 적극 활용.\n"
-    "4) 심리적 공감 → 원인 분석 → 실행 플랜 → 결론 순서.\n"
-    "5) 중요한 키워드는 **굵게** 강조.\n"
-    "6) 항상 지금 당장 할 수 있는 행동 3가지 제시.\n"
+    "1) 핵심만 간단히, 너무 길게 하지 마라.\n"
+    "2) 문단은 짧게 2~3문장.\n"
+    "3) bullet point 활용 가능.\n"
+    "4) 항상 지금 당장 할 수 있는 행동 3가지 제시.\n"
 )
 
 def get_reply(user_input: str) -> str:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        temperature=0.6,
+        temperature=0.5,   # 빠르고 간결하게
         top_p=0.9,
-        max_tokens=800,   # 답변 속도 최적화
+        max_tokens=400,   # 토큰 줄여서 속도 ↑
         messages=[
             {"role": "system", "content": STYLE_SYSTEM},
             {"role": "user", "content": user_input}
@@ -34,14 +32,13 @@ def get_reply(user_input: str) -> str:
     )
     return resp.choices[0].message.content
 
-# --- CSS (가독성 최적화) ---
+# --- CSS (글씨 크게만) ---
 st.markdown(
     """
     <style>
     .chat-message {
-        font-size: 22px;        /* 글자 크게 */
-        line-height: 1.7;       /* 줄 간격 */
-        max-width: 38ch;        /* 한 줄 약 38자 */
+        font-size: 22px;   /* 글씨 크기 크게 */
+        line-height: 1.7;
         word-wrap: break-word;
         white-space: pre-wrap;
     }
@@ -81,19 +78,17 @@ if st.session_state.usage_count < 4:
         with st.chat_message("user"):
             st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
 
-        # "생각중입니다..." 반복 애니메이션
+        # "생각중입니다..." 애니메이션 (한 글자씩, 반복)
         with st.chat_message("assistant"):
             thinking_box = st.empty()
-            running = True
-            for _ in range(8):  # 최대 4초 동안 애니메이션 (빠르게)
-                for dots in ["", ".", "..", "..."]:
-                    text = "생각중입니다" + dots
-                    display = ""
-                    for ch in text:
-                        display += ch
-                        thinking_box.markdown(f"<div class='chat-message'>{display}</div>", unsafe_allow_html=True)
-                        time.sleep(0.05)  # 글자 하나씩 출력 속도
-                    time.sleep(0.3)
+            for i in range(6):  # 약 3초 반복
+                text = "생각중입니다..."
+                display = ""
+                for ch in text:
+                    display += ch
+                    thinking_box.markdown(f"<div class='chat-message'>{display}</div>", unsafe_allow_html=True)
+                    time.sleep(0.05)
+                time.sleep(0.3)
 
         # 실제 답변 생성
         answer = get_reply(user_input)
@@ -128,6 +123,4 @@ if admin_pw == "4321":
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
-
-
 
