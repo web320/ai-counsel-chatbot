@@ -3,10 +3,20 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
 
-# 🔐 ENV
+# 🔐 ENV (OpenAI)
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
+
+# --- Firebase 연동 ---
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 # --- 상담사 스타일 옵션 ---
 style_options = {
@@ -35,7 +45,6 @@ keyword_map = {
 # --- 프롬프트 생성 함수 ---
 def build_prompt(user_input, style_choice):
     style = style_options[style_choice]
-
     empathy_line = "네가 말한 걸 듣고 나니까, 네 마음이 많이 힘들었을 것 같아."
 
     # 키워드 맞춤 답변 찾기
@@ -63,13 +72,11 @@ def build_prompt(user_input, style_choice):
     2. 맞춤형 되돌려주기: {keyword_reply}
     3. 희망 멘트: {hope_line}
     """
-
     return system_prompt, user_prompt
 
 # --- 답변 스트리밍 함수 ---
 def stream_reply(user_input: str, style_choice: str):
     system_prompt, user_prompt = build_prompt(user_input, style_choice)
-
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.7,
@@ -117,13 +124,27 @@ st.caption("마음편히 얘기해")
 # 상담 스타일 선택 (사이드바)
 style_choice = st.sidebar.radio("오늘은 어떤 톤으로 위로받고 싶나요?", list(style_options.keys()))
 
-# 세션 상태 초기화
+# --- Firestore 사용자 관리 ---
+USER_ID = "test_user"  # 👉 나중엔 로그인하면 uid로 대체
+
+user_ref = db.collection("users").document(USER_ID)
+doc = user_ref.get()
+
+if doc.exists:
+    user_data = doc.to_dict()
+    if "usage_count" not in st.session_state:
+        st.session_state.usage_count = user_data.get("usage_count", 0)
+    if "limit" not in st.session_state:
+        st.session_state.limit = user_data.get("limit", 4)
+    is_paid = user_data.get("is_paid", False)
+else:
+    user_ref.set({"usage_count": 0, "limit": 4, "is_paid": False})
+    st.session_state.usage_count = 0
+    st.session_state.limit = 4
+    is_paid = False
+
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-if "usage_count" not in st.session_state:
-    st.session_state.usage_count = 0
-if "limit" not in st.session_state:
-    st.session_state.limit = 4
 
 # --- 메인 로직 ---
 if st.session_state.usage_count < st.session_state.limit:
@@ -141,6 +162,9 @@ if st.session_state.usage_count < st.session_state.limit:
 
         st.session_state.chat_history.append((user_input, streamed_text))
         st.session_state.usage_count += 1
+
+        # Firestore에 업데이트
+        user_ref.update({"usage_count": st.session_state.usage_count})
 else:
     show_payment_screen()
 
@@ -160,6 +184,7 @@ if admin_pw == "4321":
     if st.sidebar.button("🔑 관리자 모드 활성화 (60회 가능)"):
         st.session_state.usage_count = 0
         st.session_state.limit = 60
+        user_ref.update({"usage_count": 0, "limit": 60, "is_paid": True})
         st.sidebar.success("✅ 관리자 모드 활성화! (60회 사용 가능)")
         st.rerun()
 else:
