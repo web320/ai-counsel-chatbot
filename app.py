@@ -51,7 +51,6 @@ def show_payment_screen():
     st.markdown("월 **3,900원** 결제 후 계속 이용할 수 있습니다.")
     st.markdown("---")
     st.markdown("### 🔗 결제 방법")
-
     st.markdown("[👉 페이팔 결제하기](https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4)")
     st.info(
         "💡 결제 후 카톡(ID: jeuspo) 또는 이메일(mwiby91@gmail.com)로 "
@@ -63,14 +62,16 @@ st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
 st.title("💙 ai심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
-# 세션 상태
+# 세션 상태 초기화
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "usage_count" not in st.session_state:
     st.session_state.usage_count = 0
+if "limit" not in st.session_state:
+    st.session_state.limit = 4   # 기본 무료 4회
 
 # --- 메인 로직 ---
-if st.session_state.usage_count < 4:   # ✅ 4회까지 무료
+if st.session_state.usage_count < st.session_state.limit:
     user_input = st.chat_input("마음편히 얘기해봐")
     if user_input:
         # 사용자 입력 표시
@@ -94,7 +95,7 @@ else:
 # --- 사이드바 ---
 st.sidebar.header("📜 대화 기록")
 if st.session_state.chat_history:
-    st.sidebar.markdown(f"**현재 사용 횟수:** {st.session_state.usage_count}/4")
+    st.sidebar.markdown(f"**현재 사용 횟수:** {st.session_state.usage_count}/{st.session_state.limit}")
     for i, (q, a) in enumerate(st.session_state.chat_history):
         st.sidebar.markdown(f"**Q{i+1}:** {q[:20]}...")
 
@@ -104,10 +105,12 @@ st.sidebar.subheader("🔧 관리자 메뉴")
 admin_pw = st.sidebar.text_input("관리자 비밀번호", type="password")
 
 if admin_pw == "4321":  # ✅ 관리자 비밀번호
-    if st.sidebar.button("🔑 사용 횟수 리셋"):
+    if st.sidebar.button("🔑 관리자 모드 활성화 (60회 가능)"):
         st.session_state.usage_count = 0
-        st.sidebar.success("✅ 사용 횟수가 초기화되었습니다! (관리자 전용)")
+        st.session_state.limit = 60   # ✅ 관리자 모드에서는 60회 가능
+        st.sidebar.success("✅ 관리자 모드 활성화! (60회 사용 가능)")
         st.rerun()
 else:
     st.sidebar.caption("관리자 전용 기능입니다.")
+
 
