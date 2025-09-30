@@ -117,8 +117,14 @@ st.caption("마음편히 얘기해")
 # 상담 스타일 선택
 style_choice = st.sidebar.radio("오늘은 어떤 톤으로 위로받고 싶나요?", list(style_options.keys()))
 
+import uuid
+
 # --- Firestore 사용자 관리 ---
-USER_ID = "test_user"  # 👉 나중엔 로그인 uid로 변경 가능
+# 브라우저(세션)마다 랜덤 USER_ID 생성
+if "USER_ID" not in st.session_state:
+    st.session_state.USER_ID = str(uuid.uuid4())  # 고유 세션 ID
+USER_ID = st.session_state.USER_ID
+
 user_ref = db.collection("users").document(USER_ID)
 doc = user_ref.get()
 
@@ -137,6 +143,7 @@ else:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
 
 # --- 메인 로직 ---
 if st.session_state.usage_count < st.session_state.limit:
