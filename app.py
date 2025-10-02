@@ -283,17 +283,31 @@ def render_plans_page():
         with st.expander("언제든 해지되나요?"): st.write("마이페이지에서 1클릭 해지(관리자 승인 처리).")
         with st.expander("개인정보는 안전한가요?"): st.write("전송·저장 시 암호화되며, 마케팅에 사용되지 않습니다.")
 
-        st.markdown("---")
-        st.markdown("### 📮 문의 남기기")
-        with st.form("qna_form", clear_on_submit=True):
-            q = st.text_area("무엇이 궁금하신가요? (운영자에게 전달됩니다)", key="qna_input", height=120)
-            submitted = st.form_submit_button("보내기")
-        if submitted:
-            if q and q.strip():
-                db.collection("qna").add({"user_id": USER_ID, "question": q.strip(), "ts": datetime.utcnow()})
-                st.success("문의가 저장되었습니다. 가능한 빨리 답변드릴게요.")
-            else:
-                st.warning("질문을 입력해주세요.")
+           st.markdown("---")
+    st.markdown("### 💡 개선 의견 남기기")
+    st.caption("운영자만 확인할 수 있어요. 다른 사람에게 공개되지 않습니다.")
+
+    APP_VERSION = "v1.0.0"  # 앱 버전(필요할 때 업데이트)
+
+    with st.form("feedback_form", clear_on_submit=True):
+        fb = st.text_area(
+            "앱을 사용하면서 느낀 점이나 개선했으면 하는 부분을 자유롭게 적어주세요.",
+            key="feedback_input", height=120
+        )
+        submitted_fb = st.form_submit_button("보내기")
+
+    if submitted_fb:
+        if fb and fb.strip():
+            db.collection("feedback").add({
+                "user_id": USER_ID,
+                "feedback": fb.strip(),
+                "page": PAGE,                  # 현재 페이지 정보
+                "app_version": APP_VERSION,    # 앱 버전
+                "ts": datetime.utcnow()
+            })
+            st.success("💌 의견이 저장되었습니다. 소중한 피드백 감사드려요!")
+        else:
+            st.warning("내용을 입력해주세요.")
 
     st.markdown("---")
     st.link_button("⬅ 채팅으로 돌아가기", build_url("chat"), use_container_width=True)
