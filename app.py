@@ -30,6 +30,9 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# ===== 앱 메타 =====
+APP_VERSION = "v1.0.0"
+
 # ===== 스타일 =====
 st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
 st.markdown("""
@@ -277,40 +280,44 @@ def render_plans_page():
 
     with c2:
         st.markdown("### ❓ FAQ")
-        with st.expander("사람 상담사가 보나요?"): st.write("아니요. AI가 답변하며, 내용은 외부에 공유되지 않습니다.")
-        with st.expander("무료 체험은 몇 회인가요?"): st.write("**4회**입니다. 결제 전 충분히 확인하세요.")
-        with st.expander("환불 규정은?"): st.write("첫 결제 후 7일 이내 100% 환불(구매 후 사용 20회 이하, 계정당 1회).")
-        with st.expander("언제든 해지되나요?"): st.write("마이페이지에서 1클릭 해지(관리자 승인 처리).")
-        with st.expander("개인정보는 안전한가요?"): st.write("전송·저장 시 암호화되며, 마케팅에 사용되지 않습니다.")
+        with st.expander("사람 상담사가 보나요?"):
+            st.write("아니요. AI가 답변하며, 내용은 외부에 공유되지 않습니다.")
+        with st.expander("무료 체험은 몇 회인가요?"):
+            st.write("**4회**입니다. 결제 전 충분히 확인하세요.")
+        with st.expander("환불 규정은?"):
+            st.write("첫 결제 후 7일 이내 100% 환불(구매 후 사용 20회 이하, 계정당 1회).")
+        with st.expander("언제든 해지되나요?"):
+            st.write("마이페이지에서 1클릭 해지(관리자 승인 처리).")
+        with st.expander("개인정보는 안전한가요?"):
+            st.write("전송·저장 시 암호화되며, 마케팅에 사용되지 않습니다.")
 
-           st.markdown("---")
-    st.markdown("### 💡 개선 의견 남기기")
-    st.caption("운영자만 확인할 수 있어요. 다른 사람에게 공개되지 않습니다.")
+        st.markdown("---")
+        st.markdown("### 💡 개선 의견 남기기")
+        st.caption("운영자만 확인할 수 있어요. 다른 사람에게 공개되지 않습니다.")
 
-    APP_VERSION = "v1.0.0"  # 앱 버전(필요할 때 업데이트)
+        with st.form("feedback_form", clear_on_submit=True):
+            fb = st.text_area(
+                "앱을 사용하면서 느낀 점이나 개선했으면 하는 부분을 자유롭게 적어주세요 ✨",
+                key="feedback_input", height=120,
+                placeholder="예: 채팅 속도가 조금 더 빨랐으면 좋겠어요!"
+            )
+            submitted_fb = st.form_submit_button("📩 의견 보내기")
 
-    with st.form("feedback_form", clear_on_submit=True):
-        fb = st.text_area(
-            "앱을 사용하면서 느낀 점이나 개선했으면 하는 부분을 자유롭게 적어주세요 ✨",
-            key="feedback_input", height=120,
-            placeholder="예: 채팅 속도가 조금 더 빨랐으면 좋겠어요!"
-        )
-        submitted_fb = st.form_submit_button("📩 의견 보내기")
+        if submitted_fb:
+            if fb and fb.strip():
+                db.collection("feedback").add({
+                    "user_id": USER_ID,
+                    "feedback": fb.strip(),
+                    "page": PAGE,
+                    "app_version": APP_VERSION,
+                    "ts": datetime.utcnow()
+                })
+                st.success("💌 의견이 저장되었습니다. 소중한 피드백 감사드려요!")
+            else:
+                st.warning("내용을 입력해주세요.")
 
-    if submitted_fb:
-        if fb and fb.strip():
-            db.collection("feedback").add({
-                "user_id": USER_ID,
-                "feedback": fb.strip(),
-                "page": PAGE,                  # 현재 페이지 정보
-                "app_version": APP_VERSION,    # 앱 버전
-                "ts": datetime.utcnow()
-            })
-            st.success("💌 의견이 저장되었습니다. 소중한 피드백 감사드려요!")
-        else:
-            st.warning("내용을 입력해주세요.")
-
-    st.link_button("⬅ 채팅으로 돌아가기", build_url("chat"), use_container_width=True)
+        st.markdown("---")
+        st.link_button("⬅ 채팅으로 돌아가기", build_url("chat"), use_container_width=True)
 
 # ===== 사이드바: 대화 기록 + 이동 링크 =====
 st.sidebar.header("📜 대화 기록")
