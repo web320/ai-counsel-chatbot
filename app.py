@@ -291,10 +291,11 @@ def render_plans_page():
 
     with st.form("feedback_form", clear_on_submit=True):
         fb = st.text_area(
-            "앱을 사용하면서 느낀 점이나 개선했으면 하는 부분을 자유롭게 적어주세요.",
-            key="feedback_input", height=120
+            "앱을 사용하면서 느낀 점이나 개선했으면 하는 부분을 자유롭게 적어주세요 ✨",
+            key="feedback_input", height=120,
+            placeholder="예: 채팅 속도가 조금 더 빨랐으면 좋겠어요!"
         )
-        submitted_fb = st.form_submit_button("보내기")
+        submitted_fb = st.form_submit_button("📩 의견 보내기")
 
     if submitted_fb:
         if fb and fb.strip():
@@ -309,7 +310,6 @@ def render_plans_page():
         else:
             st.warning("내용을 입력해주세요.")
 
-    st.markdown("---")
     st.link_button("⬅ 채팅으로 돌아가기", build_url("chat"), use_container_width=True)
 
 # ===== 사이드바: 대화 기록 + 이동 링크 =====
