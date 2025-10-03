@@ -29,7 +29,6 @@ db = firestore.client()
 APP_VERSION = "v1.0.2"
 
 # ===== 스타일 =====
-st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
@@ -56,6 +55,7 @@ h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ===== UID & PAGE =====
 uid_list = st.query_params.get("uid")
