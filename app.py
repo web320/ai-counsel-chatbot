@@ -1,4 +1,4 @@
-# app.py — 안정화 버전
+# app.py — 안정화 전체 버전
 import os, uuid, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -26,7 +26,7 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ===== 앱 메타 =====
-APP_VERSION = "v1.0.1"
+APP_VERSION = "v1.0.2"
 
 # ===== 스타일 =====
 st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
@@ -58,10 +58,10 @@ h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-
 """, unsafe_allow_html=True)
 
 # ===== UID & PAGE =====
-uid_list = st.experimental_get_query_params().get("uid")
+uid_list = st.query_params.get("uid")
 USER_ID = uid_list[0] if uid_list else str(uuid.uuid4())
 
-page_list = st.experimental_get_query_params().get("page")
+page_list = st.query_params.get("page")
 PAGE = page_list[0] if page_list else "chat"
 
 # ===== 세션 기본 =====
@@ -129,14 +129,20 @@ def build_prompt(user_input: str):
 
 def stream_reply(user_input: str):
     sys, usr = build_prompt(user_input)
-    # 안정성 위해 스트리밍 제거 후 전체 반환
     resp = client.chat.completions.create(
-        model="gpt-4o-mini", temperature=0.35, top_p=0.9,
-        frequency_penalty=0.2, presence_penalty=0.0,
-        max_tokens=900,
+        model="gpt-4o-mini",
         messages=[{"role":"system","content":sys},{"role":"user","content":usr}],
+        temperature=0.35,
+        max_tokens=900
     )
-    return resp.choices[0].message['content']
+    # 안전하게 응답 가져오기
+    choice = resp.choices[0]
+    if hasattr(choice, "message") and choice.message is not None:
+        return choice.message.content
+    elif hasattr(choice, "text"):
+        return choice.text
+    else:
+        return "죄송해요, 답변을 가져오지 못했어요."
 
 # ===== 무료/환불 유틸 =====
 def remaining_free() -> int:
@@ -160,7 +166,8 @@ def render_chat_page():
     if not st.session_state.is_paid and remaining_free() == 0:
         st.info("🚫 무료 4회가 모두 사용되었습니다.")
         if st.button("💳 결제/FAQ 열기"):
-            st.experimental_set_query_params(page="plans", uid=USER_ID)
+            st.query_params["page"] = "plans"
+            st.query_params["uid"] = USER_ID
             st.experimental_rerun()
         return
 
@@ -178,7 +185,8 @@ def render_chat_page():
         user_ref.update({"usage_count": st.session_state.usage_count})
         if st.session_state.usage_count >= st.session_state.limit:
             st.success("무료 4회 체험 종료. 결제/FAQ로 이동합니다.")
-            st.experimental_set_query_params(page="plans", uid=USER_ID)
+            st.query_params["page"] = "plans"
+            st.query_params["uid"] = USER_ID
             st.experimental_rerun()
     else:
         st.session_state.sessions_since_purchase += 1
@@ -186,6 +194,6 @@ def render_chat_page():
 
 # ===== 라우팅 =====
 if PAGE == "plans":
-    st.write("⚡ 결제/FAQ 페이지 구현")  # 기존 render_plans_page 호출
+    st.write("⚡ 결제/FAQ 페이지 구현")
 else:
     render_chat_page()
