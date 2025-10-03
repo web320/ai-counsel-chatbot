@@ -1,8 +1,4 @@
-# app.py — 채팅(기본) ↔ 결제/FAQ 화면(사이드바에서 이동)
-# - 무료 4회 정확히 차감
-# - 4회 소진 즉시 결제/FAQ 화면으로 자동 이동
-# - 콜백 내부 rerun 없음(경고 제거)
-
+# app.py — 채팅 ↔ 결제/FAQ 화면
 import os, uuid, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -58,32 +54,17 @@ h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💙 ai심리상담 챗봇")
+st.title("💙 AI 심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
-# ===== 라우팅 유틸(링크 전용) =====
-def build_url(page: str) -> str:
-    uid = USER_ID
-    st.experimental_set_query_params(uid=uid, page=page)
-    return f"?uid={uid}&page={page}"
+# ===== UID & PAGE 관리 =====
+if "uid" not in st.session_state:
+    st.session_state["uid"] = st.query_params.get("uid", str(uuid.uuid4()))
+if "page" not in st.session_state:
+    st.session_state["page"] = st.query_params.get("page", "chat")
 
-def get_payment_url(plan_key: str) -> str:
-    default_url = "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4"
-    pay = st.secrets.get("payments", {})
-    if isinstance(pay, dict):
-        return pay.get(f"{plan_key}_url", default_url)
-    return default_url
-
-# ===== UID & PAGE =====
-uid_param = st.query_params.get("uid", [None])[0]
-if uid_param:
-    USER_ID = uid_param
-else:
-    USER_ID = str(uuid.uuid4())
-    st.experimental_set_query_params(uid=USER_ID)
-
-page_param = st.query_params.get("page", [None])[0]
-PAGE = page_param or "chat"
+USER_ID = st.session_state["uid"]
+PAGE = st.session_state["page"]
 
 # ===== 세션 기본 =====
 defaults = {
@@ -181,6 +162,45 @@ def refund_eligible():
         return False, "구매 후 20회 초과 사용 시 환불 제한."
     return True, "환불 가능"
 
-# ===== 페이지 렌더링 및 로직 =====
-# --- 생략: 이전 코드 그대로 사용, 단 st.query_params["..."]=... 부분 모두 st.experimental_set_query_params로 교체 ---
+# ===== 페이지 렌더 =====
+def navigate(page: str):
+    st.session_state["page"] = page
+    st.experimental_rerun()
+
+def render_chat_page():
+    if not st.session_state.is_paid and remaining_free() == 0:
+        st.info("🚫 무료 4회가 모두 사용되었습니다. 결제/FAQ로 이동해 주세요.")
+        if st.button("💳 결제/FAQ 열기"):
+            navigate("plans")
+        return
+
+    user_input = st.chat_input("마음편히 얘기해봐")
+    if not user_input: return
+
+    st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
+    placeholder, streamed = st.empty(), ""
+    for chunk in stream_reply(user_input):
+        delta = chunk.choices[0].delta
+        if getattr(delta, "content", None):
+            streamed += delta.content
+            placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
+
+    st.session_state.chat_history.append((user_input, streamed))
+
+    if not st.session_state.is_paid:
+        st.session_state.usage_count += 1
+        user_ref.update({"usage_count": st.session_state.usage_count})
+        if st.session_state.usage_count >= st.session_state.limit:
+            st.success("무료 4회 체험 종료, 결제/FAQ로 이동합니다.")
+            navigate("plans")
+    else:
+        st.session_state.sessions_since_purchase += 1
+        user_ref.update({"sessions_since_purchase": st.session_state.sessions_since_purchase})
+
+# ===== 페이지 선택 =====
+if PAGE == "chat":
+    render_chat_page()
+elif PAGE == "plans":
+    from pages.plans_page import render_plans_page
+    render_plans_page()
 
