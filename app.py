@@ -72,9 +72,6 @@ h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-
 </style>
 """, unsafe_allow_html=True)
 
-user_input = st.text_input("💬 대화를 입력하세요:")
-
-
 
 # ===== UID & PAGE =====
 uid = st.query_params.get("uid")
