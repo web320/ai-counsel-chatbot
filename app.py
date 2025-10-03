@@ -74,9 +74,7 @@ h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-
 
 user_input = st.text_input("💬 대화를 입력하세요:")
 
-# --- 예시 답변 출력 ---
-if user_input:
-    st.markdown(f"<div class='neon-response'>🤖 네온 AI: {user_input} 라고 말씀해주셨네요 💡</div>", unsafe_allow_html=True)
+
 
 # ===== UID & PAGE =====
 uid = st.query_params.get("uid")
