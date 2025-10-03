@@ -34,41 +34,44 @@ db = firestore.client()
 APP_VERSION = "v1.0.0"
 
 # ===== 스타일 =====
-import streamlit as st
-
-# --- 네온 효과 스타일 ---
+# ===== 스타일 =====
+st.set_page_config(page_title="ai심리상담 챗봇", layout="wide")
 st.markdown("""
-    <style>
-    /* 입력창(대화바) 네온 효과 */
-    .stTextInput > div > div > input {
-        border: 2px solid #00f5ff;
-        border-radius: 12px;
-        background-color: #0d0d0d;
-        color: #ffffff;
-        font-size: 16px;
-        box-shadow: 0 0 10px #00f5ff, 0 0 20px #00f5ff, 0 0 40px #00f5ff;
-    }
-    .stTextInput > div > div > input:focus {
-        border: 2px solid #ff00de;
-        box-shadow: 0 0 12px #ff00de, 0 0 25px #ff00de, 0 0 50px #ff00de;
-        outline: none;
-    }
+<style>
+html, body, [class*="css"] { font-size: 18px; }
+h1 { font-size: 40px !important; } h2 { font-size: 28px !important; } h3 { font-size: 22px !important; }
+[data-testid="stSidebar"] * { font-size: 18px !important; }
 
-    /* 답변 텍스트 가볍게 네온 */
-    .neon-response {
-        color: #ffffff;
-        font-size: 17px;
-        line-height: 1.6;
-        text-shadow: 0 0 5px #00f5ff, 0 0 10px #00f5ff;
-        padding: 12px;
-        border-radius: 8px;
-        background: rgba(255,255,255,0.05);
-    }
-    </style>
+.chat-message { 
+    font-size: 22px; 
+    line-height: 1.7; 
+    white-space: pre-wrap;
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin: 6px 0;
+    background: rgba(15,15,30,0.7);
+    color: #fff;
+    border: 2px solid transparent;
+    border-image: linear-gradient(90deg, #ff00ff, #00ffff, #ff00ff) 1;
+    animation: neon-glow 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes neon-glow {
+  from {
+    box-shadow: 0 0 5px #ff00ff, 0 0 10px #00ffff;
+  }
+  to {
+    box-shadow: 0 0 15px #ff00ff, 0 0 30px #00ffff, 0 0 45px #ff00ff;
+  }
+}
+
+.hero { padding:16px; border-radius:14px; background:rgba(80,120,255,0.08); margin-bottom:8px; }
+.badge { display:inline-block; padding:4px 8px; border-radius:8px; margin-right:6px; background:#1e293b; color:#fff; }
+.card  { padding:14px; border:1px solid #334155; border-radius:14px; }
+.small { font-size:14px; opacity:.85; }
+</style>
 """, unsafe_allow_html=True)
 
-
-# --- 입력창 ---
 user_input = st.text_input("💬 대화를 입력하세요:")
 
 # --- 예시 답변 출력 ---
