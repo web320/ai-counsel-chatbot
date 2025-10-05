@@ -49,8 +49,15 @@ st.title("💙 ai심리상담 챗봇")
 st.caption("마음편히 얘기해")
 
 # ===== 라우팅 유틸(링크 전용) =====
+def _qp_get(name: str, default: str | None = None):
+    """st.query_params가 str/리스트 어느 형태여도 안전하게 꺼내기"""
+    val = st.query_params.get(name)
+    if isinstance(val, list):
+        return val[0] if val else default
+    return val or default
+
 def build_url(page: str) -> str:
-    uid = st.query_params.get("uid") or str(uuid.uuid4())
+    uid = _qp_get("uid") or str(uuid.uuid4())
     return f"?uid={uid}&page={page}"
 
 def get_payment_url(plan_key: str) -> str:
@@ -60,14 +67,18 @@ def get_payment_url(plan_key: str) -> str:
         return pay.get(f"{plan_key}_url", default_url)
     return default_url
 
-# ===== UID & PAGE =====
-uid = st.query_params.get("uid")
-if uid:
-    USER_ID = uid
-else:
+# ===== UID & PAGE (쿼리파라미터 한 번에 세팅) =====
+_current_page = _qp_get("page", "chat")
+_current_uid  = _qp_get("uid")
+
+if not _current_uid:
     USER_ID = str(uuid.uuid4())
-    st.query_params["uid"] = USER_ID
-PAGE = st.query_params.get("page") or "chat"   # 기본=채팅
+    # 한 번에 설정하여 불필요한 다중 rerun 방지
+    st.query_params = {"uid": USER_ID, "page": _current_page}
+else:
+    USER_ID = _current_uid
+
+PAGE = _qp_get("page", "chat")
 
 # ===== 세션 기본 =====
 defaults = {
@@ -82,7 +93,7 @@ for k, v in defaults.items():
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
 if snap.exists:
-    data = snap.to_dict()
+    data = snap.to_dict() or {}
     for k, v in defaults.items():
         st.session_state[k] = data.get(k, v)
 else:
@@ -92,8 +103,12 @@ else:
 DANGEROUS = ["자살","죽고","죽고싶","해치","폭력","때리","살해","범죄","불법","마약","음란","노골적"]
 COACH_KW  = ["어떻게","방법","계획","추천","정리","수익","창업","투자","마케팅","습관","루틴","해결"]
 VENT_KW   = ["힘들","불안","우울","외롭","걱정","짜증","화나","무기력","멘탈","지쳤"]
-KEYWORD_HINTS = {"불안":"네가 불안하다고 말한 부분","외로움":"외로움이 마음을 꽉 채우는 느낌",
-                 "돈":"돈에 대한 걱정","미래":"미래가 흐릿하게 느껴지는 점"}
+KEYWORD_HINTS = {
+    "불안":"네가 불안하다고 말한 부분",
+    "외로움":"외로움이 마음을 꽉 채우는 느낌",
+    "돈":"돈에 대한 걱정",
+    "미래":"미래가 흐릿하게 느껴지는 점"
+}
 
 def decide_mode(text: str) -> str:
     if any(k in text for k in DANGEROUS): return "safety"
@@ -193,11 +208,10 @@ def render_chat_page():
     if not st.session_state.is_paid:
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
-        # 4회 도달 → 자동 이동
+        # 4회 도달 → 자동 이동 (파라미터를 한 번에 세팅 후 rerun)
         if st.session_state.usage_count >= st.session_state.limit:
             st.success("무료 4회 체험이 종료되었어요. 결제/FAQ로 이동합니다.")
-            st.query_params["uid"] = USER_ID
-            st.query_params["page"] = "plans"
+            st.query_params = {"uid": USER_ID, "page": "plans"}
             st.rerun()
     else:
         st.session_state.sessions_since_purchase += 1
@@ -277,13 +291,19 @@ def render_plans_page():
 
     with c2:
         st.markdown("### ❓ FAQ")
-        with st.expander("사람 상담사가 보나요?"): st.write("아니요. AI가 답변하며, 내용은 외부에 공유되지 않습니다.")
-        with st.expander("무료 체험은 몇 회인가요?"): st.write("**4회**입니다. 결제 전 충분히 확인하세요.")
-        with st.expander("환불 규정은?"): st.write("첫 결제 후 7일 이내 100% 환불(구매 후 사용 20회 이하, 계정당 1회).")
-        with st.expander("언제든 해지되나요?"): st.write("마이페이지에서 1클릭 해지(관리자 승인 처리).")
-        with st.expander("개인정보는 안전한가요?"): st.write("전송·저장 시 암호화되며, 마케팅에 사용되지 않습니다.")
+        with st.expander("사람 상담사가 보나요?"):
+            st.write("아니요. AI가 답변하며, 내용은 외부에 공유되지 않습니다.")
+        with st.expander("무료 체험은 몇 회인가요?"):
+            st.write("**4회**입니다. 결제 전 충분히 확인하세요.")
+        with st.expander("환불 규정은?"):
+            st.write("첫 결제 후 7일 이내 100% 환불(구매 후 사용 20회 이하, 계정당 1회).")
+        with st.expander("언제든 해지되나요?"):
+            st.write("마이페이지에서 1클릭 해지(관리자 승인 처리).")
+        with st.expander("개인정보는 안전한가요?"):
+            st.write("전송·저장 시 암호화되며, 마케팅에 사용되지 않습니다.")
+        st.markdown("---")
 
-           st.markdown("---")
+    # 의견 수집
     st.markdown("### 💡 개선 의견 남기기")
     st.caption("운영자만 확인할 수 있어요. 다른 사람에게 공개되지 않습니다.")
 
@@ -301,8 +321,8 @@ def render_plans_page():
             db.collection("feedback").add({
                 "user_id": USER_ID,
                 "feedback": fb.strip(),
-                "page": PAGE,                  # 현재 페이지 정보
-                "app_version": APP_VERSION,    # 앱 버전
+                "page": PAGE,
+                "app_version": APP_VERSION,
                 "ts": datetime.utcnow()
             })
             st.success("💌 의견이 저장되었습니다. 소중한 피드백 감사드려요!")
@@ -354,5 +374,13 @@ if admin_pw == "4321":
 else:
     st.sidebar.caption("관리자 전용")
 
-
+# ===== 메인 페이지 렌더 (누락되어 있던 부분 추가) =====
+if PAGE == "chat":
+    render_chat_page()
+elif PAGE == "plans":
+    render_plans_page()
+else:
+    # 알 수 없는 page 파라미터일 때 안전하게 채팅으로 이동
+    st.query_params = {"uid": USER_ID, "page": "chat"}
+    st.rerun()
 
