@@ -89,8 +89,8 @@ else:
 DANGEROUS = ["자살","죽고","죽고싶","해치","폭력","때리","살해","범죄","불법","마약","음란","노골적"]
 COACH_KW  = ["어떻게","방법","계획","추천","정리","수익","창업","투자","마케팅","습관","루틴","해결"]
 VENT_KW   = ["힘들","불안","우울","외롭","걱정","짜증","화나","무기력","멘탈","지쳤"]
-KEYWORD_HINTS = {"불안":"네가 불안하다고 말한 부분","외로움":"외로움이 마음을 꽉 채우는 느낌",
-                 "돈":"돈에 대한 걱정","미래":"미래가 흐릿하게 느껴지는 점"}
+KEYWORD_HINTS = {"불안":"불안을 느끼는 부분", "외로움":"외로움이 마음을 꽉 채우는 느낌",
+                 "돈":"돈에 대한 걱정", "미래":"미래가 흐릿하게 느껴지는 점"}
 
 def decide_mode(text: str) -> str:
     if any(k in text for k in DANGEROUS): return "safety"
@@ -100,31 +100,37 @@ def decide_mode(text: str) -> str:
 
 def build_prompt(user_input: str):
     mode = decide_mode(user_input)
-    hint = next((v for k, v in KEYWORD_HINTS.items() if k in user_input), "")
+    hint = ", ".join([v for k, v in KEYWORD_HINTS.items() if k in user_input])
+    
     base = """
 너는 따뜻하고 다정하지만 과장하지 않는 상담사이자, 현실적인 재테크/수익화 코치다.
 원칙:
-- 답변은 4~7문장 정도로 조금 길게.
-- 사용자가 방금 쓴 표현/키워드 1개 이상을 자연스럽게 포함.
-- 상투적 위로는 줄이고, 맥락 맞는 공감+제안.
-- 확인 질문은 최대 1개.
+- 답변은 4~7문장 정도로, 조금 길게 작성
+- 사용자가 입력한 키워드/표현 2~3개 이상 자연스럽게 포함
+- 상투적 위로는 줄이고, 맥락에 맞는 공감+행동 제안 제공
+- 마지막 문장에 확인 질문 1개 포함
 """
+    
     if mode == "safety":
         sys = base + """
 [안전 모드]
-- 자/타해·불법·폭력·노골적 성적 내용엔 '경계+안전안내' 우선.
-- 위기대응 불가 고지 + 즉시 도움 연결(1393/112, 응급실/보호자).
-- 미화 금지, 구체적 탈출 행동 제시.
+- 자/타해, 불법, 폭력, 노골적 성적 내용은 경계+안전 안내 우선
+- 위기 대응 불가 고지 + 즉시 도움 연결(1393/112, 응급실/보호자)
+- 미화 금지, 구체적 탈출 행동 제시 금지
 """
     elif mode == "support":
         sys = base + """
 [감정 지지 모드]
-- 짧은 공감으로 시작, 현실적 관점 전환과 작게 시도할 제안.
+- 짧은 공감으로 시작, 사용자가 느낀 감정을 구체적으로 언급
+- 현실적 관점 전환 + 작게 시도할 행동 2~3개 제안
+- 마지막에 선택할 수 있는 확인 질문 1개 포함
 """
     else:
         sys = base + """
 [코칭 모드]
-- 목표/옵션/우선순위를 분명히, 바로 적용 팁 중심.
+- 목표/옵션/우선순위 명확히, 바로 적용할 수 있는 팁 중심
+- 구체적 행동 2~3개 제안
+- 마지막에 확인 질문 1개 포함
 """
     usr = f"[사용자 입력]\n{user_input}\n\n[참고 힌트]\n{hint}\n\n위 지침에 맞춰 답해줘."
     return sys, usr
@@ -132,9 +138,9 @@ def build_prompt(user_input: str):
 def stream_reply(user_input: str):
     sys, usr = build_prompt(user_input)
     return client.chat.completions.create(
-        model="gpt-4o-mini", temperature=0.35, top_p=0.9,
-        frequency_penalty=0.2, presence_penalty=0.0,
-        max_tokens=900, stream=True,
+        model="gpt-4o-mini", temperature=0.55, top_p=0.95,
+        frequency_penalty=0.25, presence_penalty=0.25,
+        max_tokens=700, stream=True,
         messages=[{"role":"system","content":sys},{"role":"user","content":usr}],
     )
 
@@ -179,11 +185,17 @@ def render_chat_page():
 
     st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
+    buffer = ""
     for chunk in stream_reply(user_input):
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
-            streamed += delta.content
-            placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
+            buffer += delta.content
+            if len(buffer) > 50:  # 스트리밍 시 50토큰 단위로 업데이트
+                streamed += buffer
+                placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
+                buffer = ""
+    streamed += buffer
+    placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
 
     st.session_state.chat_history.append((user_input, streamed))
 
@@ -203,4 +215,3 @@ if PAGE == "chat":
 elif PAGE == "plans":
     from pages.plans_page import render_plans_page
     render_plans_page()
-
