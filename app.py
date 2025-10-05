@@ -1,4 +1,4 @@
-# app.py — 네온 효과는 채팅 화면에서만, 결제/FAQ는 단순 스타일
+# app.py — 채팅(네온) ↔ 결제/FAQ(심플)
 import os, uuid, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -25,7 +25,7 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ===== 페이지 정보 =====
+# ===== 페이지 설정 =====
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
     if isinstance(val, list): return val[0] if val else default
@@ -42,9 +42,9 @@ USER_ID = uid
 PAGE = page
 
 # ===== 스타일 =====
-def set_style(page: str):
-    """페이지별로 다른 스타일 적용"""
+def apply_style(page: str):
     if page == "chat":
+        # 네온 효과
         st.markdown("""
         <style>
         html, body, [class*="css"] { font-size: 18px; }
@@ -54,14 +54,9 @@ def set_style(page: str):
         [data-testid="stSidebar"] * { font-size: 18px !important; }
 
         .chat-message { 
-            font-size: 22px; 
-            line-height: 1.7; 
-            white-space: pre-wrap;
-            border-radius: 12px;
-            padding: 10px 16px;
-            margin: 6px 0;
-            background: rgba(15,15,30,0.7);
-            color: #fff;
+            font-size: 22px; line-height: 1.7; white-space: pre-wrap;
+            border-radius: 12px; padding: 10px 16px; margin: 6px 0;
+            background: rgba(15,15,30,0.7); color: #fff;
             border: 2px solid transparent;
             border-image: linear-gradient(90deg, #ff00ff, #00ffff, #ff00ff) 1;
             animation: neon-glow 1.8s ease-in-out infinite alternate;
@@ -73,6 +68,7 @@ def set_style(page: str):
         </style>
         """, unsafe_allow_html=True)
     else:
+        # 심플 스타일
         st.markdown("""
         <style>
         html, body, [class*="css"] { font-size: 18px; }
@@ -86,8 +82,9 @@ def set_style(page: str):
         </style>
         """, unsafe_allow_html=True)
 
-set_style(PAGE)
+apply_style(PAGE)
 st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
+
 st.title("💙 AI 심리상담 챗봇")
 
 # ===== 기본 세션 =====
@@ -113,27 +110,62 @@ else:
 def remaining_free():
     return max(st.session_state.limit - st.session_state.usage_count, 0)
 
-# ===== Chat =====
+# ===== GPT-4o 스트리밍 =====
+def stream_reply(user_input: str):
+    sys_prompt = """너는 다정하지만 현실적인 심리상담 코치야.
+    - 짧은 공감 + 실질적인 조언.
+    - 사용자가 쓴 표현을 자연스럽게 포함.
+    - 확인 질문은 1개 이하.
+    """
+    return client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.4,
+        max_tokens=800,
+        stream=True,
+        messages=[
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_input}
+        ]
+    )
+
+# ===== Chat 페이지 =====
 def render_chat_page():
-    st.caption("마음편히 얘기해봐")
-    user_input = st.chat_input("무슨 일이 있었어?")
+    st.caption("마음 편히 얘기해봐 💬")
+
+    if not st.session_state.is_paid and remaining_free() == 0:
+        st.warning("🚫 무료 4회가 모두 사용되었습니다.")
+        st.link_button("💳 결제/FAQ로 이동", f"?uid={USER_ID}&page=plans", use_container_width=True)
+        return
+
+    user_input = st.chat_input("무슨 고민이 있어?")
     if not user_input:
         return
 
+    # 사용자 메시지 표시
     st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
-    response = f"🤖 {user_input}... (예시 답변)"
-    st.markdown(f"<div class='chat-message'>{response}</div>", unsafe_allow_html=True)
 
-    st.session_state.chat_history.append((user_input, response))
+    # GPT 스트리밍 응답
+    placeholder, streamed = st.empty(), ""
+    for chunk in stream_reply(user_input):
+        delta = chunk.choices[0].delta
+        if getattr(delta, "content", None):
+            streamed += delta.content
+            placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
+
+    st.session_state.chat_history.append((user_input, streamed))
+
     if not st.session_state.is_paid:
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
         if st.session_state.usage_count >= st.session_state.limit:
-            st.info("무료 4회가 모두 사용되었습니다. 결제/FAQ로 이동합니다.")
+            st.info("무료 체험이 종료되어 결제 페이지로 이동합니다.")
             st.query_params = {"uid": USER_ID, "page": "plans"}
             st.rerun()
+    else:
+        st.session_state.sessions_since_purchase += 1
+        user_ref.update({"sessions_since_purchase": st.session_state.sessions_since_purchase})
 
-# ===== Plans =====
+# ===== Plans 페이지 =====
 def render_plans_page():
     st.markdown("""
     <div class='hero'>
@@ -145,22 +177,47 @@ def render_plans_page():
       </div>
     </div>
     """, unsafe_allow_html=True)
-    st.write("💳 **베이직** — 60회 / $3\n\n✅ 7일 전액 환불 · 언제든 해지")
-    if st.button("임시 적용(테스트)"):
-        now = datetime.utcnow()
-        st.session_state.update({
-            "is_paid": True, "limit": 60, "usage_count": 0,
-            "purchase_ts": now, "refund_until_ts": now + timedelta(days=7)
-        })
-        user_ref.update(st.session_state)
-        st.success("적용 완료!")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### 💳 가격 / 결제")
+        st.markdown("**⭐ 베이직 — 60회 / $3**\n\n7일 환불 · 언제든 해지")
+        st.link_button("PayPal 결제 (60회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
+        if st.button("✅ 임시 적용(테스트)", key="plan60"):
+            now = datetime.utcnow()
+            st.session_state.update({
+                "is_paid": True, "limit": 60, "usage_count": 0,
+                "purchase_ts": now, "refund_until_ts": now + timedelta(days=7)
+            })
+            user_ref.update(st.session_state)
+            st.success("베이직 60회 적용 완료!")
+
+        st.markdown("---")
+        st.markdown("**💎 프로 — 140회 / $6**\n\n7일 환불 · 언제든 해지")
+        st.link_button("PayPal 결제 (140회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
+        if st.button("✅ 임시 적용(테스트)", key="plan140"):
+            now = datetime.utcnow()
+            st.session_state.update({
+                "is_paid": True, "limit": 140, "usage_count": 0,
+                "purchase_ts": now, "refund_until_ts": now + timedelta(days=7)
+            })
+            user_ref.update(st.session_state)
+            st.success("프로 140회 적용 완료!")
+
+    with c2:
+        st.markdown("### ❓ FAQ")
+        with st.expander("사람 상담사가 보나요?"):
+            st.write("아니요, AI가 답변합니다.")
+        with st.expander("무료 체험은 몇 회인가요?"):
+            st.write("4회입니다.")
+        with st.expander("환불 규정은?"):
+            st.write("첫 결제 후 7일 이내 100% 환불 (20회 이하 사용 시).")
+
     st.markdown("---")
-    st.write("💡 **FAQ**\n- 무료 4회 제공\n- 7일 내 100% 환불 가능\n- 언제든 해지 가능")
     st.link_button("⬅ 채팅으로 돌아가기", f"?uid={USER_ID}&page=chat", use_container_width=True)
 
 # ===== 사이드바 =====
 st.sidebar.header("📜 대화 기록")
-st.sidebar.caption("내 UID")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 
 if PAGE == "chat":
@@ -168,7 +225,7 @@ if PAGE == "chat":
 else:
     st.sidebar.link_button("⬅ 채팅으로 돌아가기", f"?uid={USER_ID}&page=chat", use_container_width=True)
 
-# ===== 페이지 실행 =====
+# ===== 페이지 렌더 =====
 if PAGE == "chat":
     render_chat_page()
 elif PAGE == "plans":
@@ -176,3 +233,4 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
+
