@@ -1,4 +1,4 @@
-import os, uuid, json
+import os, uuid, json, random
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -40,45 +40,54 @@ USER_ID = uid
 PAGE = page
 
 # ===== STYLE =====
+st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
 def apply_style(page: str):
     if page == "chat":
         st.markdown("""
         <style>
         html, body, [class*="css"] { font-size: 18px; }
         [data-testid="stSidebar"] * { font-size: 18px !important; }
-
         .user-bubble {
-            background: #b91c1c;
-            color: white;
-            border-radius: 12px;
-            padding: 10px 16px;
-            margin: 8px 0;
-            display: inline-block;
+            background: #b91c1c; color: white;
+            border-radius: 12px; padding: 10px 16px;
+            margin: 8px 0; display: inline-block;
         }
         .bot-bubble {
-            font-size: 21px;
-            line-height: 1.8;
-            border-radius: 14px;
-            padding: 14px 18px;
-            margin: 10px 0;
-            background: rgba(15,15,30,0.85);
-            color: #fff;
-            border: 2px solid transparent;
+            font-size: 21px; line-height: 1.8;
+            border-radius: 14px; padding: 14px 18px;
+            margin: 10px 0; background: rgba(15,15,30,0.85);
+            color: #fff; border: 2px solid transparent;
             border-image: linear-gradient(90deg, #ff8800, #ffaa00, #ff8800) 1;
             animation: neon-glow 1.8s ease-in-out infinite alternate;
         }
         @keyframes neon-glow {
           from { box-shadow: 0 0 5px #ff8800, 0 0 10px #ffaa00; }
-          to { box-shadow: 0 0 20px #ff쓰 당신의 마음을 들어주는 AI 친구”")
+          to { box-shadow: 0 0 20px #ff8800, 0 0 40px #ffaa00, 0 0 60px #ff8800; }
+        }
+        </style>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <style>
+        html, body, [class*="css"] { font-size: 18px; }
+        .hero { padding:16px; border-radius:14px; background:rgba(80,120,255,0.08); margin-bottom:8px; }
+        .badge { display:inline-block; padding:4px 8px; border-radius:8px; margin-right:6px; background:#1e293b; color:#fff; }
+        .small { font-size:14px; opacity:.85; }
+        </style>
+        """, unsafe_allow_html=True)
+apply_style(PAGE)
+st.title("💙 AI 심리상담 챗봇")
 
 # ===== SESSION =====
 defaults = {
     "chat_history": [], "is_paid": False, "limit": 4, "usage_count": 0,
     "plan": None, "purchase_ts": None, "refund_until_ts": None,
-    "sessions_since_purchase": 0, "refund_count": 0, "refund_requested": False
+    "sessions_since_purchase": 0, "refund_count": 0, "refund_requested": False,
+    "mood_score": 0, "chat_days": set()
 }
 for k, v in defaults.items():
-    st.session_state.setdefault(k, v)
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
@@ -89,12 +98,42 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
+# ===== UTIL =====
+def analyze_mood(text: str) -> int:
+    """간단 감정분석: 긍정 단어 비율로 점수 계산"""
+    positive = ["좋다", "괜찮다", "행복", "감사", "기대", "사랑", "희망", "편안"]
+    negative = ["힘들", "슬프", "우울", "불안", "짜증", "화나", "지치", "외롭"]
+    pos_count = sum(w in text for w in positive)
+    neg_count = sum(w in text for w in negative)
+    score = 50 + (pos_count - neg_count) * 10
+    return max(0, min(100, score))
+
+def get_quote():
+    quotes = [
+        "🌿 마음이 무거울 땐, 잠시 멈춰 숨을 고르세요.",
+        "🌙 완벽하지 않아도 괜찮아요. 꾸준히 걷고 있으니까요.",
+        "☕ 작은 평온이 쌓이면 큰 행복이 됩니다.",
+        "💫 오늘의 당신은 어제보다 단단해졌어요.",
+        "🌸 마음이 힘들면, 그건 당신이 열심히 살아온 증거예요."
+    ]
+    return random.choice(quotes)
+
+def get_random_prompt():
+    prompts = [
+        "요즘 마음이 복잡한가요?",
+        "최근에 잠은 잘 자고 있어요?",
+        "오늘 하루는 어땠어요?",
+        "지금 당신의 기분을 표현한다면?",
+        "최근에 마음에 남은 일이 있나요?"
+    ]
+    return random.choice(prompts)
+
 # ===== GPT STREAM =====
 def stream_reply(user_input: str):
     sys_prompt = """너는 다정하고 현실적인 심리상담사야.
     - 감정 공감 → 원인 분석 → 구체 조언 → 실천 제안 순으로 4~7문단 구성.
     - 각 문단은 명확히 구분되며, 너무 짧지 않게 작성.
-    - 필요시 전문상담 안내도 덧붙여.
+    - 각 섹션 앞에 이모지를 붙여 구분할 것.
     """
     return client.chat.completions.create(
         model="gpt-4o-mini",
@@ -111,6 +150,7 @@ def stream_reply(user_input: str):
 def render_chat_page():
     st.caption("마음 편히 얘기해 💬")
 
+    # 무료 제한 확인
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         st.warning("🚫 무료 4회가 모두 사용되었습니다.")
         if st.button("💳 결제/FAQ로 이동"):
@@ -118,14 +158,8 @@ def render_chat_page():
             st.rerun()
         return
 
-    
-    
-    잡한가요?",
-    "최근에 잠은 잘 자고 있어요?",
-    "오늘 하루는 어땠어요?",
-    "지금 당신의 기분을 표현한다면?"
-]))
-
+    # 질문 입력
+    user_input = st.chat_input(get_random_prompt())
     if not user_input:
         return
 
@@ -139,18 +173,30 @@ def render_chat_page():
             safe_stream = streamed.replace("\n\n", "<br><br>")
             placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe_stream}</div>", unsafe_allow_html=True)
 
-    st.session_state.chat_history.append((user_input, streamed))
+    # === 감정 분석 & 통계 ===
+    mood_score = analyze_mood(user_input + streamed)
+    st.session_state.mood_score = (st.session_state.mood_score + mood_score) / 2
+    today = datetime.now().strftime("%Y-%m-%d")
+    st.session_state.chat_days.add(today)
+    user_ref.update({
+        "usage_count": st.session_state.usage_count + 1,
+        "mood_score": st.session_state.mood_score,
+        "chat_days": list(st.session_state.chat_days)
+    })
 
+    # === 통계 카드 ===
+    st.markdown("---")
+    st.markdown(f"🌤 **오늘까지 {len(st.session_state.chat_days)}일째 마음을 기록했어요.**")
+    st.markdown(f"💖 **당신의 평균 마음 안정도:** {int(st.session_state.mood_score)}점 / 100점")
+    st.markdown(f"🪞 오늘의 메시지: _{get_quote()}_")
+
+    # === 사용 제한 처리 ===
     if not st.session_state.is_paid:
         st.session_state.usage_count += 1
-        user_ref.update({"usage_count": st.session_state.usage_count})
         if st.session_state.usage_count >= st.session_state.limit:
             st.success("무료 체험이 끝났어요. 결제 페이지로 이동합니다.")
             st.query_params = {"uid": USER_ID, "page": "plans"}
             st.rerun()
-    else:
-        st.session_state.sessions_since_purchase += 1
-        user_ref.update({"sessions_since_purchase": st.session_state.sessions_since_purchase})
 
 # ===== PLANS PAGE =====
 def render_plans_page():
@@ -175,7 +221,6 @@ def render_plans_page():
         st.markdown("**💎 프로 — 140회 / $6**\n\n7일 환불 · 언제든 해지")
         st.button("💰 예시 결제 버튼 (동작 안 함)", key="fake140")
 
-        # 관리자 비밀번호 확인
         st.markdown("---")
         st.markdown("#### 🔐 관리자 전용 테스트 적용")
         admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_pw")
