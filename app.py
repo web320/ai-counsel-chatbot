@@ -40,7 +40,7 @@ USER_ID = uid
 PAGE = page
 
 # ===== STYLE =====
-st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
+st.set_page_config(page_title="당신을 위한 ai친구", layout="wide")
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
@@ -64,7 +64,7 @@ html, body, [class*="css"] { font-size: 18px; }
 }
 </style>
 """, unsafe_allow_html=True)
-st.title("💙 AI 심리상담 챗봇")
+st.title("💙 마음을 기댈 수 있는 ai친구구")
 
 # ===== SESSION =====
 defaults = {
