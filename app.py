@@ -69,23 +69,7 @@ def apply_style(page: str):
         }
         @keyframes neon-glow {
           from { box-shadow: 0 0 5px #ff8800, 0 0 10px #ffaa00; }
-          to { box-shadow: 0 0 20px #ff8800, 0 0 40px #ffaa00, 0 0 60px #ff8800; }
-        }
-        </style>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <style>
-        html, body, [class*="css"] { font-size: 18px; }
-        .hero { padding:16px; border-radius:14px; background:rgba(80,120,255,0.08); margin-bottom:8px; }
-        .badge { display:inline-block; padding:4px 8px; border-radius:8px; margin-right:6px; background:#1e293b; color:#fff; }
-        .small { font-size:14px; opacity:.85; }
-        </style>
-        """, unsafe_allow_html=True)
-
-apply_style(PAGE)
-st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
-st.title("💙🌸 당신의 마음을 들어주는 AI 친구”")
+          to { box-shadow: 0 0 20px #ff쓰 당신의 마음을 들어주는 AI 친구”")
 
 # ===== SESSION =====
 defaults = {
@@ -134,7 +118,14 @@ def render_chat_page():
             st.rerun()
         return
 
-    user_input = st.chat_input("지금 어떤 기분이야?")
+    
+    
+    잡한가요?",
+    "최근에 잠은 잘 자고 있어요?",
+    "오늘 하루는 어땠어요?",
+    "지금 당신의 기분을 표현한다면?"
+]))
+
     if not user_input:
         return
 
