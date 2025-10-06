@@ -58,7 +58,6 @@ def apply_style(page: str):
         .bot-bubble {
             font-size: 21px;
             line-height: 1.8;
-            white-space: pre-wrap;
             border-radius: 14px;
             padding: 14px 18px;
             margin: 10px 0;
@@ -110,8 +109,7 @@ else:
 def stream_reply(user_input: str):
     sys_prompt = """너는 다정하고 현실적인 심리상담사야.
     - 감정 공감 → 원인 분석 → 구체 조언 → 실천 제안 순으로 4~7문단 구성.
-    - 각 문단은 <p>로 구분.
-    - 너무 짧지 않게, 진심이 느껴지게 써.
+    - 각 문단은 명확히 구분되며, 너무 짧지 않게 작성.
     - 필요시 전문상담 안내도 덧붙여.
     """
     return client.chat.completions.create(
@@ -150,10 +148,6 @@ def render_chat_page():
             safe_stream = streamed.replace("\n\n", "<br><br>")
             placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe_stream}</div>", unsafe_allow_html=True)
 
-    # ✅ 최종 완성 후 단락으로 재렌더링
-    final_text = streamed.replace("\n\n", "</p><p>")
-    placeholder.markdown(f"<div class='bot-bubble'>🧡 <p>{final_text}</p></div>", unsafe_allow_html=True)
-
     st.session_state.chat_history.append((user_input, streamed))
 
     if not st.session_state.is_paid:
@@ -171,24 +165,24 @@ def render_chat_page():
 def render_plans_page():
     st.markdown("""
     <div class='hero'>
-      <h3>AI 고민상담, <b>4회 무료 체험</b> 이후 유료 플랜</h3>
+      <h3>AI 고민상담, <b>4회 무료 체험</b> 이후 유료 플랜 (예시)</h3>
       <div class='small'>
         <span class='badge'>60회 $3</span>
         <span class='badge'>140회 $6</span>
         <span class='badge'>7일 전액 환불</span>
       </div>
+      <p style='opacity:0.8;'>💡 현재는 테스트 예시 모드입니다. 결제 버튼을 눌러도 실제 결제로 연결되지 않습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("### 💳 가격 / 결제")
+        st.markdown("### 💳 가격 / 결제 (예시)")
         st.markdown("**⭐ 베이직 — 60회 / $3**\n\n7일 환불 · 언제든 해지")
-        st.link_button("PayPal 결제 (60회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
-
+        st.button("💰 예시 결제 버튼 (동작 안 함)", key="fake60")
         st.markdown("---")
         st.markdown("**💎 프로 — 140회 / $6**\n\n7일 환불 · 언제든 해지")
-        st.link_button("PayPal 결제 (140회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
+        st.button("💰 예시 결제 버튼 (동작 안 함)", key="fake140")
 
         # 관리자 비밀번호 확인
         st.markdown("---")
