@@ -83,7 +83,7 @@ defaults = {
     "chat_history": [], "is_paid": False, "limit": 4, "usage_count": 0,
     "plan": None, "purchase_ts": None, "refund_until_ts": None,
     "sessions_since_purchase": 0, "refund_count": 0, "refund_requested": False,
-    "mood_score": 0, "chat_days": set()
+    "mood_score": 0, "chat_days": []
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -100,8 +100,7 @@ else:
 
 # ===== UTIL =====
 def analyze_mood(text: str) -> int:
-    """간단 감정분석: 긍정 단어 비율로 점수 계산"""
-    positive = ["좋다", "괜찮다", "행복", "감사", "기대", "사랑", "희망", "편안"]
+    positive = ["좋다", "괜찮", "행복", "감사", "기대", "사랑", "희망", "편안"]
     negative = ["힘들", "슬프", "우울", "불안", "짜증", "화나", "지치", "외롭"]
     pos_count = sum(w in text for w in positive)
     neg_count = sum(w in text for w in negative)
@@ -177,7 +176,14 @@ def render_chat_page():
     mood_score = analyze_mood(user_input + streamed)
     st.session_state.mood_score = (st.session_state.mood_score + mood_score) / 2
     today = datetime.now().strftime("%Y-%m-%d")
-    st.session_state.chat_days.add(today)
+
+    # 🔧 리스트/셋 혼용 대응
+    if isinstance(st.session_state.chat_days, list):
+        if today not in st.session_state.chat_days:
+            st.session_state.chat_days.append(today)
+    else:
+        st.session_state.chat_days.add(today)
+
     user_ref.update({
         "usage_count": st.session_state.usage_count + 1,
         "mood_score": st.session_state.mood_score,
@@ -280,4 +286,3 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
-
