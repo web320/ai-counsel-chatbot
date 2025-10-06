@@ -1,4 +1,3 @@
-# app.py — 💙 AI 심리상담 챗봇 (관리자 모드 포함 완성판)
 import os, uuid, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -143,12 +142,17 @@ def render_chat_page():
 
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
+
     for chunk in stream_reply(user_input):
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
             streamed += delta.content
-            formatted = streamed.replace("\n\n", "</p><p>")
-            placeholder.markdown(f"<div class='bot-bubble'>🧡 <p>{formatted}</p></div>", unsafe_allow_html=True)
+            safe_stream = streamed.replace("\n\n", "<br><br>")
+            placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe_stream}</div>", unsafe_allow_html=True)
+
+    # ✅ 최종 완성 후 단락으로 재렌더링
+    final_text = streamed.replace("\n\n", "</p><p>")
+    placeholder.markdown(f"<div class='bot-bubble'>🧡 <p>{final_text}</p></div>", unsafe_allow_html=True)
 
     st.session_state.chat_history.append((user_input, streamed))
 
@@ -171,7 +175,7 @@ def render_plans_page():
       <div class='small'>
         <span class='badge'>60회 $3</span>
         <span class='badge'>140회 $6</span>
-        <span class='badge'>4일내 환불 10회이하 사용시 </span>
+        <span class='badge'>7일 전액 환불</span>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -179,11 +183,11 @@ def render_plans_page():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 💳 가격 / 결제")
-        st.markdown("**⭐ 베이직 — 60회 / $3**\n\n4일내 환불 10회이하 사용시 언제든 해지")
+        st.markdown("**⭐ 베이직 — 60회 / $3**\n\n7일 환불 · 언제든 해지")
         st.link_button("PayPal 결제 (60회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
 
         st.markdown("---")
-        st.markdown("**💎 프로 — 140회 / $6**\n\n4일내 환불 10회이하 사용시 언제든 해지")
+        st.markdown("**💎 프로 — 140회 / $6**\n\n7일 환불 · 언제든 해지")
         st.link_button("PayPal 결제 (140회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
 
         # 관리자 비밀번호 확인
