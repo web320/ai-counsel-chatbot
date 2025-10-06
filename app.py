@@ -85,7 +85,7 @@ def apply_style(page: str):
 
 apply_style(PAGE)
 st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
-st.title("💙 ai심리상담 챗봇")
+st.title("💙🌸 당신의 마음을 들어주는 AI 친구”")
 
 # ===== SESSION =====
 defaults = {
