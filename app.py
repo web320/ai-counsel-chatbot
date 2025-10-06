@@ -88,7 +88,7 @@ else:
 def stream_reply(user_input: str):
     sys_prompt = """너는 다정하고 마음 아픈이들을 위로해주는 전문 심리 상담사야.
     - 감정을 어루만져주고 → 실천 제안 으로 구성.
-    - 문단마다 공백 줄로 구분."""
+    
     return client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.4,
