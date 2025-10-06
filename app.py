@@ -1,4 +1,4 @@
-# app.py — 💙 AI 심리상담 챗봇 (채팅=네온 / 결제=심플)
+# app.py — 💙 AI 심리상담 챗봇 (대화창 네온 + 색 구분 + 정상 전환)
 import os, uuid, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -7,11 +7,11 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ===== OpenAI =====
+# ===== OPENAI =====
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ===== Firebase =====
+# ===== FIREBASE =====
 def _firebase_config():
     raw = st.secrets.get("firebase")
     if raw is None:
@@ -25,15 +25,15 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ===== Query Params =====
+# ===== QUERY PARAM =====
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
-    if isinstance(val, list): return val[0] if val else default
+    if isinstance(val, list):
+        return val[0] if val else default
     return val or default
 
 uid = _qp_get("uid")
 page = _qp_get("page", "chat")
-
 if not uid:
     uid = str(uuid.uuid4())
     st.query_params = {"uid": uid, "page": page}
@@ -41,41 +41,45 @@ if not uid:
 USER_ID = uid
 PAGE = page
 
-# ===== 스타일 =====
+# ===== STYLE =====
 def apply_style(page: str):
     if page == "chat":
-        # 네온 스타일 (채팅만)
         st.markdown("""
         <style>
         html, body, [class*="css"] { font-size: 18px; }
-        h1 { font-size: 40px !important; } 
-        h2 { font-size: 28px !important; } 
-        h3 { font-size: 22px !important; }
         [data-testid="stSidebar"] * { font-size: 18px !important; }
 
-        .chat-message { 
-            font-size: 22px; line-height: 1.7; white-space: pre-wrap;
-            border-radius: 12px; padding: 10px 16px; margin: 6px 0;
-            background: rgba(15,15,30,0.7); color: #fff;
+        .user-bubble {
+            background: #b91c1c;
+            color: white;
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin: 8px 0;
+            display: inline-block;
+        }
+        .bot-bubble {
+            font-size: 22px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin: 8px 0;
+            background: rgba(15,15,30,0.8);
+            color: #fff;
             border: 2px solid transparent;
-            border-image: linear-gradient(90deg, #ff00ff, #00ffff, #ff00ff) 1;
+            border-image: linear-gradient(90deg, #ff8800, #ffaa00, #ff8800) 1;
             animation: neon-glow 1.8s ease-in-out infinite alternate;
         }
         @keyframes neon-glow {
-          from { box-shadow: 0 0 5px #ff00ff, 0 0 10px #00ffff; }
-          to { box-shadow: 0 0 15px #ff00ff, 0 0 30px #00ffff, 0 0 45px #ff00ff; }
+          from { box-shadow: 0 0 5px #ff8800, 0 0 10px #ffaa00; }
+          to { box-shadow: 0 0 15px #ff8800, 0 0 30px #ffaa00, 0 0 45px #ff8800; }
         }
         </style>
         """, unsafe_allow_html=True)
     else:
-        # 결제 페이지는 심플
         st.markdown("""
         <style>
         html, body, [class*="css"] { font-size: 18px; }
-        h1 { font-size: 40px !important; } 
-        h2 { font-size: 28px !important; } 
-        h3 { font-size: 22px !important; }
-        [data-testid="stSidebar"] * { font-size: 18px !important; }
         .hero { padding:16px; border-radius:14px; background:rgba(80,120,255,0.08); margin-bottom:8px; }
         .badge { display:inline-block; padding:4px 8px; border-radius:8px; margin-right:6px; background:#1e293b; color:#fff; }
         .small { font-size:14px; opacity:.85; }
@@ -84,9 +88,9 @@ def apply_style(page: str):
 
 apply_style(PAGE)
 st.set_page_config(page_title="AI 심리상담 챗봇", layout="wide")
-st.title("💙 AI 심리상담 챗봇")
+st.title("💙 ai심리상담 챗봇")
 
-# ===== 기본 세션 =====
+# ===== SESSION =====
 defaults = {
     "chat_history": [], "is_paid": False, "limit": 4, "usage_count": 0,
     "plan": None, "purchase_ts": None, "refund_until_ts": None,
@@ -95,7 +99,6 @@ defaults = {
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
 
-# ===== Firestore 로드 =====
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
 if snap.exists:
@@ -105,14 +108,12 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
-# ===== GPT 응답 =====
+# ===== GPT =====
 def stream_reply(user_input: str):
-    sys_prompt = """너는 다정하지만 현실적인 심리상담 코치이자 인생 조언자야.
-    규칙:
-    - 사용자의 표현을 인용하거나 공감으로 시작해.
-    - 감정공감 + 원인 분석 + 현실적 제안 + 작게 실천 가능한 행동 제안까지.
-    - 답변은 4~7문장 정도로 길게.
-    - 상투적인 위로 대신 구체적 조언.
+    sys_prompt = """너는 다정하지만 현실적인 심리상담사야.
+    - 사용자의 감정을 공감하고, 원인을 짚으며, 구체적인 조언을 4~7문장으로 제시해.
+    - 실천 가능한 제안(운동, 대화, 습관, 마음 다스리기)을 포함해.
+    - 감정이 심하면 전문 상담 권유도 덧붙여.
     """
     return client.chat.completions.create(
         model="gpt-4o-mini",
@@ -127,24 +128,27 @@ def stream_reply(user_input: str):
 
 # ===== CHAT PAGE =====
 def render_chat_page():
-    st.caption("마음 편히 얘기해봐 💬")
+    st.caption("마음편히 얘기해 💬")
 
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         st.warning("🚫 무료 4회가 모두 사용되었습니다.")
-        st.link_button("💳 결제/FAQ로 이동", f"?uid={USER_ID}&page=plans", use_container_width=True)
+        if st.button("💳 결제/FAQ로 이동"):
+            st.session_state["current_page"] = "plans"
+            st.query_params = {"uid": USER_ID, "page": "plans"}
+            st.rerun()
         return
 
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input:
         return
 
-    st.markdown(f"<div class='chat-message'>{user_input}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
     for chunk in stream_reply(user_input):
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
             streamed += delta.content
-            placeholder.markdown(f"<div class='chat-message'>{streamed}</div>", unsafe_allow_html=True)
+            placeholder.markdown(f"<div class='bot-bubble'>🧡 {streamed}</div>", unsafe_allow_html=True)
 
     st.session_state.chat_history.append((user_input, streamed))
 
@@ -153,6 +157,7 @@ def render_chat_page():
         user_ref.update({"usage_count": st.session_state.usage_count})
         if st.session_state.usage_count >= st.session_state.limit:
             st.success("무료 체험이 끝났어요. 결제 페이지로 이동합니다.")
+            st.session_state["current_page"] = "plans"
             st.query_params = {"uid": USER_ID, "page": "plans"}
             st.rerun()
     else:
@@ -172,8 +177,8 @@ def render_plans_page():
     </div>
     """, unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
+    col1, col2 = st.columns(2)
+    with col1:
         st.markdown("### 💳 가격 / 결제")
         st.markdown("**⭐ 베이직 — 60회 / $3**\n\n7일 환불 · 언제든 해지")
         st.link_button("PayPal 결제 (60회)", "https://www.paypal.com/ncp/payment/SPHCMW6E9S9C4", use_container_width=True)
@@ -198,7 +203,7 @@ def render_plans_page():
             user_ref.update(st.session_state)
             st.success("프로 140회 적용 완료!")
 
-    with c2:
+    with col2:
         st.markdown("### ❓ FAQ")
         with st.expander("사람 상담사가 보나요?"):
             st.write("아니요. 오직 AI만 응답하며, 데이터는 외부에 공유되지 않습니다.")
@@ -208,17 +213,27 @@ def render_plans_page():
             st.write("첫 결제 후 7일 이내 100% 환불 가능합니다. (20회 이하 사용 시)")
 
     st.markdown("---")
-    st.link_button("⬅ 채팅으로 돌아가기", f"?uid={USER_ID}&page=chat", use_container_width=True)
+    if st.button("⬅ 채팅으로 돌아가기"):
+        st.session_state["current_page"] = "chat"
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
 
 # ===== SIDEBAR =====
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
-if PAGE == "chat":
-    st.sidebar.link_button("💳 결제/FAQ 열기", f"?uid={USER_ID}&page=plans", use_container_width=True)
-else:
-    st.sidebar.link_button("⬅ 채팅으로 돌아가기", f"?uid={USER_ID}&page=chat", use_container_width=True)
 
-# ===== MAIN RENDER =====
+if PAGE == "chat":
+    if st.sidebar.button("💳 결제/FAQ 열기"):
+        st.session_state["current_page"] = "plans"
+        st.query_params = {"uid": USER_ID, "page": "plans"}
+        st.rerun()
+else:
+    if st.sidebar.button("⬅ 채팅으로 돌아가기"):
+        st.session_state["current_page"] = "chat"
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
+
+# ===== MAIN =====
 if PAGE == "chat":
     render_chat_page()
 elif PAGE == "plans":
@@ -226,4 +241,3 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
-
