@@ -64,7 +64,7 @@ html, body, [class*="css"] { font-size: 18px; }
 }
 </style>
 """, unsafe_allow_html=True)
-st.title("💙 마음을 기댈 수 있는 ai친구구")
+st.title("💙 마음을 기댈 수 있는 ai친구")
 
 # ===== SESSION =====
 defaults = {
