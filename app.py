@@ -40,31 +40,42 @@ USER_ID = uid
 PAGE = page
 
 # ===== STYLE =====
-st.set_page_config(page_title="당신을 위한 ai친구", layout="wide")
+st.set_page_config(page_title="당신을 위한 AI 친구", layout="wide")
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
 [data-testid="stSidebar"] * { font-size: 18px !important; }
+
 .user-bubble {
-    background: #b91c1c; color: white;
-    border-radius: 12px; padding: 10px 16px;
-    margin: 8px 0; display: inline-block;
+    background: #b91c1c;
+    color: white;
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin: 8px 0;
+    display: inline-block;
 }
+
 .bot-bubble {
-    font-size: 21px; line-height: 1.8;
-    border-radius: 14px; padding: 14px 18px;
-    margin: 10px 0; background: rgba(15,15,30,0.85);
-    color: #fff; border: 2px solid transparent;
+    font-size: 21px;
+    line-height: 1.8;
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin: 10px 0;
+    background: rgba(15,15,30,0.85);
+    color: #fff;
+    border: 2px solid transparent;
     border-image: linear-gradient(90deg, #ff8800, #ffaa00, #ff8800) 1;
     animation: neon-glow 1.8s ease-in-out infinite alternate;
 }
+
 @keyframes neon-glow {
   from { box-shadow: 0 0 5px #ff8800, 0 0 10px #ffaa00; }
   to { box-shadow: 0 0 20px #ff8800, 0 0 40px #ffaa00, 0 0 60px #ff8800; }
 }
 </style>
 """, unsafe_allow_html=True)
-st.title("💙 마음을 기댈 수 있는 ai친구")
+
+st.title("💙 마음을 기댈 수 있는 AI 친구")
 
 # ===== SESSION =====
 defaults = {
@@ -86,13 +97,15 @@ else:
 
 # ===== GPT STREAM =====
 def stream_reply(user_input: str):
-    sys_prompt = """너는 다정하고 마음 아픈이들을 위로해주는 전문 심리 상담사야.
-    - 감정을 어루만져주고 → 실천 제안 으로 구성.
-    
+    sys_prompt = """너는 다정하고 현실적인 심리상담사야.
+    - 감정을 공감하고 → 구체적인 조언 → 실천 제안 순으로 3문단 이내로 답해.
+    - 문체는 따뜻하고 현실적으로, 문장은 짧고 쉽게 써줘.
+    - 너무 장황하거나 이론적으로 설명하지 마.
+    """
     return client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.4,
-        max_tokens=900,
+        max_tokens=700,
         stream=True,
         messages=[
             {"role": "system", "content": sys_prompt},
@@ -142,8 +155,8 @@ def render_chat_page():
 def render_plans_page():
     st.markdown("""
     ### 💳 결제 안내 (예시)
-    **⭐ 베이직 60회 — $3**
-    **💎 프로 140회 — $6**
+    **:star: 베이직 60회 — $3**  
+    **💎 프로 140회 — $6**  
     <p style='opacity:0.7;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
     """, unsafe_allow_html=True)
 
