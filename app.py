@@ -131,7 +131,7 @@ def show_paypal_button(message):
             💳 PayPal로 결제하기 ($3)
             </button>
         </a>
-        <p style='opacity:0.7;'>결제 후 관리자 확인을 통해 30회 이용권이 활성화됩니다.</p>
+        <p style='opacity:0.7;'>카톡아이디 :jeuspo, 혹은 구글 이메일 mwiby91@gmail.com에 결제 스크린 샷을 남기시면 비번을 알려드립니다</p>
     </div>
     """, unsafe_allow_html=True)
 
