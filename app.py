@@ -6,13 +6,18 @@ import streamlit as st
 import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google.cloud import firestore as gcf  # SERVER_TIMESTAMP & project 확인
+from google.cloud import firestore as gcf  # SERVER_TIMESTAMP
+
+APP_VERSION = "v1.1.0"
+PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+FEEDBACK_COLLECTION = "feedback"   # 🔥 콘솔과 맞춤(단수)
+FREE_LIMIT = 4                     # 무료 체험 횟수
+PAID_LIMIT = 30                    # 결제 플랜 기본 횟수
+DEFAULT_TONE = "따뜻하게"           # 톤 고정
 
 # ===== OPENAI =====
 load_dotenv()
-def _get_openai_key():
-    return os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
-OPENAI_API_KEY = _get_openai_key()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ===== FIREBASE =====
@@ -36,14 +41,14 @@ def _qp_get(name: str, default=None):
         return val[0] if val else default
     return val or default
 
-uid = _qp_get("uid")
+uid  = _qp_get("uid")
 page = _qp_get("page", "chat")
 if not uid:
     uid = str(uuid.uuid4())
     st.query_params = {"uid": uid, "page": page}
 
 USER_ID = uid
-PAGE = page
+PAGE     = page
 
 # ===== STYLE =====
 st.set_page_config(page_title="당신을 기댈 수 있는 AI 친구", layout="wide")
@@ -64,10 +69,8 @@ html, body, [class*="css"] { font-size: 18px; }
     border-image: linear-gradient(90deg, #ff8800, #ffaa00, #ff8800) 1;
     animation: neon-glow 1.8s ease-in-out infinite alternate;
 }
-@keyframes neon-glow {
-  from { box-shadow: 0 0 5px #ff8800, 0 0 10px #ffaa00; }
-  to   { box-shadow: 0 0 20px #ff8800, 0 0 40px #ffaa00, 0 0 60px #ff8800; }
-}
+@keyframes neon-glow { from{box-shadow:0 0 5px #ff8800,0 0 10px #ffaa00;}
+to{box-shadow:0 0 20px #ff8800,0 0 40px #ffaa00,0 0 60px #ff8800;} }
 </style>
 """, unsafe_allow_html=True)
 
@@ -77,11 +80,10 @@ st.title("💙 마음을 기댈 수 있는 AI 친구")
 defaults = {
     "chat_history": [],
     "is_paid": False,
-    "limit": 4,         # 무료 4회
+    "limit": FREE_LIMIT,        # 무료 4회
     "usage_count": 0,
     "plan": None,
     "remaining_paid_uses": 0,
-    "tone": "따뜻하게"
 }
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
@@ -95,14 +97,15 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
-# ===== GPT STREAM (안정화) =====
-def stream_reply(user_input: str, tone: str):
+# ===== OPENAI STREAM =====
+def stream_reply(user_input: str):
     if client is None:
-        raise RuntimeError("OPENAI_API_KEY가 설정되어 있지 않습니다. Streamlit Secrets 또는 환경변수로 넣어주세요.")
+        st.error("OPENAI_API_KEY가 설정되어 있지 않습니다.")
+        return
     sys_prompt = f"""
-    너는 {tone} 말투의 심리상담사야.
+    너는 {DEFAULT_TONE} 말투의 심리상담사야.
     - 감정을 공감하고 → 구체적인 조언 → 실천 제안 순으로 3문단 이내로 답해.
-    - 따뜻하고 현실적으로, 문장은 짧게 써줘.
+    - 현실적으로, 문장은 짧게.
     """
     try:
         stream = client.chat.completions.create(
@@ -113,73 +116,56 @@ def stream_reply(user_input: str, tone: str):
             messages=[
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_input}
-            ],
-            timeout=60  # 초
+            ]
         )
         for chunk in stream:
             delta = getattr(chunk.choices[0], "delta", None)
             if delta and getattr(delta, "content", None):
                 yield delta.content
     except Exception as e:
-        # 스트림 호출 예외를 화면에 표시
-        st.error("OpenAI 응답 중 오류가 발생했어요.")
+        st.error("OpenAI 응답 오류")
         st.code(str(e))
-        return
 
-# ===== PAYPAL CTA =====
+# ===== CTA =====
 def show_paypal_button(message):
     st.warning(message)
     st.markdown(f"""
     <hr>
     <div style='text-align:center;'>
         <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
-        <a href='https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG' target='_blank'>
+        <a href='{PAYPAL_URL}' target='_blank'>
             <button style='background:#0070ba;color:white;padding:12px 20px;
             border:none;border-radius:10px;font-size:18px;cursor:pointer;'>
             💳 PayPal로 결제하기 ($3)
             </button>
         </a>
-        <p style='opacity:.75;margin-top:8px;'>결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요. 관리자 비밀번호를 알려드립니다.</p>
+        <p style='opacity:.75;margin-top:8px;'>
+          결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요. <br>
+          관리자 비밀번호를 알려드려요.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-# ===== FEEDBACK SAVE (안정화) =====
-def save_feedback(uid: str, text: str):
+# ===== FEEDBACK SAVE =====
+def save_feedback(uid: str, text: str, page_name: str):
     try:
-        if not text or not text.strip():
-            st.warning("내용을 입력해주세요 😊")
-            return False
         doc = {
-            "uid": uid,
+            "user_id": uid,
             "feedback": text.strip(),
-            "timestamp": gcf.SERVER_TIMESTAMP,
-            "page": st.session_state.get("page", "chat")
+            "app_version": APP_VERSION,
+            "page": page_name,
+            "ts": gcf.SERVER_TIMESTAMP,  # 서버 시간
         }
-        db.collection("feedbacks").add(doc)
+        db.collection(FEEDBACK_COLLECTION).add(doc)
         st.toast("피드백이 저장되었어요 💙", icon="✅")
         return True
     except Exception as e:
-        st.error("피드백 저장에 실패했어요 🥲")
+        st.error("피드백 저장 실패")
         st.code(str(e))
         return False
 
 # ===== CHAT PAGE =====
 def render_chat_page():
-    # 키/프로젝트 간단 상태 표시(디버깅 도움)
-    with st.expander("🔎 연결 상태 보기", expanded=False):
-        st.write("OpenAI Key 설정됨:", bool(OPENAI_API_KEY))
-        st.write("Firebase Project:", db.project)
-
-    st.caption("마음 편히 얘기해 💬")
-    tone = st.radio(
-        "🎭 상담 톤을 선택해주세요:",
-        ["따뜻하게", "직설적으로", "철학적으로"],
-        horizontal=True,
-        index=["따뜻하게", "직설적으로", "철학적으로"].index(st.session_state.tone)
-    )
-    st.session_state.tone = tone
-    user_ref.update({"tone": tone})
-
     # 이용 제한
     if st.session_state.is_paid:
         remaining = st.session_state.remaining_paid_uses
@@ -193,33 +179,29 @@ def render_chat_page():
             return
         st.caption(f"🌱 무료 체험 남은 횟수: {st.session_state.limit - st.session_state.usage_count}회")
 
+    # 입력
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input:
         return
 
-    # 가벼운 감정 피드백
-    mood_hint = ""
+    # 라이트 감정 힌트
+    hint = ""
     if any(k in user_input for k in ["힘들", "피곤", "짜증", "불안", "우울"]):
-        mood_hint = "💭 지금 마음이 많이 지쳐 있네요... 그래도 괜찮아요."
+        hint = "💭 지금 마음이 많이 지쳐 있네요... 그래도 괜찮아요."
     elif any(k in user_input for k in ["행복", "좋아", "괜찮", "고마워"]):
-        mood_hint = "🌤️ 그 기분, 참 소중하네요."
-    if mood_hint:
-        st.markdown(f"<div class='bot-bubble'>{mood_hint}</div>", unsafe_allow_html=True)
+        hint = "🌤️ 그 기분, 참 소중하네요."
+    if hint:
+        st.markdown(f"<div class='bot-bubble'>{hint}</div>", unsafe_allow_html=True)
 
     # 대화
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
-    try:
-        for token in stream_reply(user_input, tone):
-            streamed += token
-            placeholder.markdown(
-                f"<div class='bot-bubble'>🧡 {streamed.replace('\n\n','<br><br>')}</div>",
-                unsafe_allow_html=True
-            )
-    except Exception as e:
-        st.error("응답 생성 중 문제가 생겼어요.")
-        st.code(str(e))
-        return
+    for token in stream_reply(user_input):
+        streamed += token
+        placeholder.markdown(
+            f"<div class='bot-bubble'>🧡 {streamed.replace('\\n\\n','<br><br>')}</div>",
+            unsafe_allow_html=True
+        )
 
     # 기록/차감
     st.session_state.chat_history.append((user_input, streamed))
@@ -230,66 +212,45 @@ def render_chat_page():
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
 
-    # 체험 끝 → CTA
+    # 체험 종료 시 CTA
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         show_paypal_button("무료 체험이 끝났어요. 다음 대화부터는 유료 이용권이 필요해요 💳")
 
     # 피드백
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("📝 대화에 대한 피드백을 남겨주세요")
-    fb = st.text_area(
-        "어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
-        placeholder="예: 대답이 따뜻했어요 / 답변이 조금 짧아요 / 디자인이 좋아요",
-        key="fb_text"
-    )
-    if st.button("📩 피드백 제출", key="fb_submit"):
-        last = st.session_state.get("last_fb")
+    fb = st.text_area("좋았던 점/아쉬운 점을 자유롭게 적어주세요",
+                      placeholder="예: 위로가 많이 됐어요 / 답변이 조금 짧았어요 / 결제 안내가 헷갈려요")
+    if st.button("📩 피드백 제출"):
         if fb and fb.strip():
-            if last != fb.strip():
-                if save_feedback(USER_ID, fb):
-                    st.session_state["last_fb"] = fb.strip()
-                    st.session_state["fb_text"] = ""
-            else:
-                st.info("같은 내용이 이미 접수되었어요 🙂")
+            save_feedback(USER_ID, fb, "chat")
         else:
             st.warning("내용을 입력해주세요 😊")
 
-# ===== PLANS PAGE (components.html로 안정 렌더링) =====
+# ===== PLANS PAGE =====
 def render_plans_page():
     header_html = """
     <div style='text-align:center; padding-top:8px;'>
       <h2 style="margin:0 0 6px 0;">💙 마음을 기댈 수 있는 AI 친구</h2>
       <h3 style="margin:0;">💳 결제 안내</h3>
-      <p style='opacity:.7;margin:6px 0 14px 0;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
     </div>
     """
-    cards_html = """
+    cards_html = f"""
     <style>
-      .pricing-wrap{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;}
-      .card{
-        width:280px; border-radius:16px; padding:18px; color:#fff;
-        background: rgba(255,255,255,0.05);
-        box-shadow: 0 6px 22px rgba(0,0,0,.25);
-      }
-      .card.basic{border:2px solid #ffaa00;}
-      .card.pro{border:2px solid #00d4ff;}
-      .card h3{margin:0; font-weight:700;}
-      .price{font-size:34px; margin:8px 0 2px 0;}
-      .desc{opacity:.85;margin:0 0 6px 0;}
-      .btn{
-        margin-top:10px; padding:10px 18px; font-size:17px; border:none; border-radius:10px;
-        cursor:pointer;
-      }
-      .btn.basic{background:#ffaa00; color:#000;}
-      .btn.pro{background:#555; color:#ccc;}
-      .howto{
-        margin-top:24px; text-align:center; color:#ddd;
-      }
-      .idbox{display:inline-flex; gap:8px; align-items:center; margin-top:6px;}
-      .copy{
-        padding:4px 10px; border:1px solid rgba(255,255,255,.25); border-radius:8px;
-        background:transparent; color:#ddd; cursor:pointer; font-size:14px;
-      }
+      .pricing-wrap{{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;}}
+      .card{{width:280px;border-radius:16px;padding:18px;color:#fff;
+             background:rgba(255,255,255,0.05);box-shadow:0 6px 22px rgba(0,0,0,.25);}}
+      .card.basic{{border:2px solid #ffaa00;}}
+      .card.pro{{border:2px solid #00d4ff;}}
+      .card h3{{margin:0;font-weight:700;}}
+      .price{{font-size:34px;margin:8px 0 2px 0;}}
+      .desc{{opacity:.85;margin:0 0 6px 0;}}
+      .btn{{margin-top:10px;padding:10px 18px;font-size:17px;border:none;border-radius:10px;cursor:pointer;}}
+      .btn.basic{{background:#ffaa00;color:#000;}}
+      .btn.pro{{background:#555;color:#ccc;}}
+      .howto{{margin-top:24px;text-align:center;color:#ddd;}}
+      .idbox{{display:inline-flex;gap:8px;align-items:center;margin-top:6px;}}
+      .copy{{padding:4px 10px;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:transparent;color:#ddd;cursor:pointer;font-size:14px;}}
     </style>
 
     <div class="pricing-wrap">
@@ -297,8 +258,8 @@ def render_plans_page():
         <h3 style="color:#ffaa00;">⭐ 베이직 플랜</h3>
         <div class="price">$3</div>
         <p class="desc">30회 상담 이용권</p>
-        <p class="desc">따뜻한 위로가 필요할 때마다</p>
-        <a href="https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG" target="_blank">
+        <p class="desc">필요할 때마다 손쉽게</p>
+        <a href="{PAYPAL_URL}" target="_blank">
           <button class="btn basic">💳 결제하기</button>
         </a>
       </div>
@@ -313,7 +274,7 @@ def render_plans_page():
     </div>
 
     <div class="howto">
-      <p style="margin:0;">💬 결제 후 아래로 인증해주세요:</p>
+      <p style="margin:0;">💬 결제 후 인증:</p>
       <div class="idbox">
         <span>카톡: <b>jeuspo</b></span>
         <button class="copy" onclick="navigator.clipboard.writeText('jeuspo')">복사</button>
@@ -322,27 +283,27 @@ def render_plans_page():
         <span>이메일: <b>mwiby91@gmail.com</b></span>
         <button class="copy" onclick="navigator.clipboard.writeText('mwiby91@gmail.com')">복사</button>
       </div>
-      <p style="opacity:.8;margin-top:8px;">결제 스크린샷을 보내주시면 <b>관리자 비밀번호</b>를 알려드립니다.</p>
+      <p style="opacity:.8;margin-top:8px;">스크린샷을 보내주시면 <b>관리자 비밀번호</b>를 알려드립니다.</p>
     </div>
     """
     components.html(header_html + cards_html, height=620, scrolling=False)
 
-    # ---- 관리자 영역 (Streamlit 위젯) ----
+    # 관리자 영역
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🔐 관리자 모드")
     admin_pw = st.text_input("관리자 비밀번호", type="password")
     if admin_pw == "4321":
         st.success("관리자 인증 완료 ✅")
-        col1, col2 = st.columns(2)
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             if st.button("✅ 베이직 30회 적용 ($3)"):
                 st.session_state.update({
-                    "is_paid": True, "limit": 30, "usage_count": 0,
-                    "remaining_paid_uses": 30, "plan": "basic"
+                    "is_paid": True, "limit": PAID_LIMIT, "usage_count": 0,
+                    "remaining_paid_uses": PAID_LIMIT, "plan": "basic"
                 })
                 user_ref.update(st.session_state)
                 st.success("🎉 베이직 30회 이용권이 적용되었어요!")
-        with col2:
+        with c2:
             if st.button("✅ 프로 100회 적용 ($6)"):
                 st.session_state.update({
                     "is_paid": True, "limit": 100, "usage_count": 0,
@@ -350,20 +311,6 @@ def render_plans_page():
                 })
                 user_ref.update(st.session_state)
                 st.success("💎 프로 100회 이용권이 적용되었어요!")
-
-        # 연결 정보/진단
-        st.caption(f"🔌 Firebase Project: {db.project}")
-        if st.button("⚙️ 연결 테스트(진단 문서 생성)"):
-            try:
-                db.collection("diagnostics").add({
-                    "uid": USER_ID,
-                    "ts": gcf.SERVER_TIMESTAMP,
-                    "note": "ping from plans page"
-                })
-                st.success("Firestore 쓰기 성공! 콘솔의 diagnostics 컬렉션을 확인하세요.")
-            except Exception as e:
-                st.error("Firestore 쓰기 실패")
-                st.code(str(e))
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
@@ -390,4 +337,3 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
-
