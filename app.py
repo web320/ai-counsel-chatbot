@@ -3,13 +3,15 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
-import streamlit.components.v1 as components   # ✅ 추가
+import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.cloud import firestore as gcf  # SERVER_TIMESTAMP & project 확인
 
 # ===== OPENAI =====
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ===== FIREBASE =====
 def _firebase_config():
@@ -93,6 +95,9 @@ else:
 
 # ===== GPT HELPER =====
 def stream_reply(user_input: str, tone: str):
+    if client is None:
+        yield type("x", (), {"choices":[type("y",(),{"delta":type("z",(),{"content":"⚠️ OPENAI_API_KEY가 설정되어 있지 않습니다."})()})()]})()
+        return
     sys_prompt = f"""
     너는 {tone} 말투의 심리상담사야.
     - 감정을 공감하고 → 구체적인 조언 → 실천 제안 순으로 3문단 이내로 답해.
@@ -122,9 +127,29 @@ def show_paypal_button(message):
             💳 PayPal로 결제하기 ($3)
             </button>
         </a>
-        <p style='opacity:0.75;margin-top:8px;'>결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요. 관리자 비밀번호를 알려드립니다.</p>
+        <p style='opacity:.75;margin-top:8px;'>결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요. 관리자 비밀번호를 알려드립니다.</p>
     </div>
     """, unsafe_allow_html=True)
+
+# ===== FEEDBACK SAVE =====
+def save_feedback(uid: str, text: str):
+    try:
+        if not text or not text.strip():
+            st.warning("내용을 입력해주세요 😊")
+            return False
+        doc = {
+            "uid": uid,
+            "feedback": text.strip(),
+            "timestamp": gcf.SERVER_TIMESTAMP,
+            "page": st.session_state.get("page", "chat")
+        }
+        db.collection("feedbacks").add(doc)
+        st.toast("피드백이 저장되었어요 💙", icon="✅")
+        return True
+    except Exception as e:
+        st.error("피드백 저장에 실패했어요 🥲")
+        st.code(str(e))
+        return False
 
 # ===== CHAT PAGE =====
 def render_chat_page():
@@ -168,7 +193,8 @@ def render_chat_page():
     # 대화
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
-    for chunk in stream_reply(user_input, tone):
+    stream = stream_reply(user_input, tone)
+    for chunk in stream:
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
             streamed += delta.content
@@ -193,16 +219,20 @@ def render_chat_page():
     # 피드백
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("📝 대화에 대한 피드백을 남겨주세요")
-    fb = st.text_area("어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
-                      placeholder="예: 대답이 따뜻했어요 / 답변이 조금 짧아요 / 디자인이 좋아요")
-    if st.button("📩 피드백 제출"):
-        if fb.strip():
-            db.collection("feedbacks").add({
-                "uid": USER_ID,
-                "feedback": fb,
-                "timestamp": datetime.now().isoformat()
-            })
-            st.success("감사합니다 💙 피드백이 소중히 전달되었어요!")
+    fb = st.text_area(
+        "어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
+        placeholder="예: 대답이 따뜻했어요 / 답변이 조금 짧아요 / 디자인이 좋아요",
+        key="fb_text"
+    )
+    if st.button("📩 피드백 제출", key="fb_submit"):
+        last = st.session_state.get("last_fb")
+        if fb and fb.strip():
+            if last != fb.strip():
+                if save_feedback(USER_ID, fb):
+                    st.session_state["last_fb"] = fb.strip()
+                    st.session_state["fb_text"] = ""
+            else:
+                st.info("같은 내용이 이미 접수되었어요 🙂")
         else:
             st.warning("내용을 입력해주세요 😊")
 
@@ -277,7 +307,6 @@ def render_plans_page():
       <p style="opacity:.8;margin-top:8px;">결제 스크린샷을 보내주시면 <b>관리자 비밀번호</b>를 알려드립니다.</p>
     </div>
     """
-    # ✅ components.html은 HTML을 100% 그대로 렌더링해줘서 "텍스트로 보이는" 문제가 사라짐
     components.html(header_html + cards_html, height=620, scrolling=False)
 
     # ---- 관리자 영역 (Streamlit 위젯) ----
@@ -303,6 +332,20 @@ def render_plans_page():
                 })
                 user_ref.update(st.session_state)
                 st.success("💎 프로 100회 이용권이 적용되었어요!")
+
+        # 연결 정보/진단
+        st.caption(f"🔌 Firebase Project: {db.project}")
+        if st.button("⚙️ 연결 테스트(진단 문서 생성)"):
+            try:
+                db.collection("diagnostics").add({
+                    "uid": USER_ID,
+                    "ts": gcf.SERVER_TIMESTAMP,
+                    "note": "ping from plans page"
+                })
+                st.success("Firestore 쓰기 성공! 콘솔의 diagnostics 컬렉션을 확인하세요.")
+            except Exception as e:
+                st.error("Firestore 쓰기 실패")
+                st.code(str(e))
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
