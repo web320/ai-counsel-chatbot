@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.4
-# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고)
+# 💙 AI 심리상담 앱 v1.8.5
+# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고 + 안정화)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, timezone
@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.4"
+APP_VERSION = "v1.8.5"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
@@ -154,7 +154,7 @@ def stream_reply(user_input):
         stream = client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.85,
-            max_tokens=300,
+            max_output_tokens=400,
             stream=True,
             messages=[
                 {"role": "system", "content": sys},
@@ -169,16 +169,94 @@ def stream_reply(user_input):
                 safe = msg.replace("\n\n", "<br><br>")
                 placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe}</div>", unsafe_allow_html=True)
 
-        # ✅ 광고 ①: 답변 후 자연 삽입
+        # ✅ 광고 ①: 답변 후 삽입
         components.html("""
         <div style='text-align:center;margin:20px 0;'>
-            <iframe src="https://youradserver.com/banner.html" 
-                    width="320" height="100" style="border:none;"></iframe>
+            <iframe src="https://youradserver.com/banner.html"
+                    width="320" height="100" style="border:none;overflow:hidden;"></iframe>
         </div>
         """, height=120)
         return msg
     except Exception as e:
         st.error(f"OpenAI 오류: {e}")
+
+# ================= 결제 페이지 =================
+def render_plans_page():
+    status_chip()
+    st.markdown("""
+    <div style='text-align:center;'>
+      <h2>💳 결제 안내</h2>
+      <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    components.html(f"""
+    <div style="text-align:center">
+      <a href="{PAYPAL_URL}" target="_blank">
+        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
+          💳 PayPal로 결제하기 ($3)
+        </button>
+      </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b><br>
+        또는 <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b><br>
+        로 결제 <b>스크린샷을 보내주시면</b> 이용 비밀번호를 알려드립니다.<br><br>
+        🔒 비밀번호 입력 후 바로 30회 상담 이용이 가능합니다.
+      </p>
+    </div>
+    """, height=300)
+
+    # 광고 배너
+    components.html("""
+    <div style='text-align:center;margin:20px 0;'>
+        <iframe src="https://youradserver.com/banner.html"
+                width="320" height="100" style="border:none;overflow:hidden;"></iframe>
+    </div>
+    """, height=120)
+
+    # 관리자 비밀번호 입력
+    st.markdown("---")
+    st.subheader("🔐 관리자 인증 (자동 적용)")
+    pw = st.text_input("관리자 비밀번호", type="password")
+    if pw:
+        if check_admin(pw):
+            st.success("✅ 관리자 인증 완료! 베이직 30회 이용권을 적용합니다...")
+            fields = {
+                "is_paid": True, "plan": "basic",
+                "limit": BASIC_LIMIT, "usage_count": 0,
+                "remaining_paid_uses": BASIC_LIMIT
+            }
+            if persist_user(fields):
+                st.success("🎉 이용권이 적용되었습니다! 채팅으로 이동 중...")
+                time.sleep(1)
+                st.session_state.clear()
+                st.query_params = {"uid": USER_ID, "page": "chat"}
+                st.rerun()
+        else:
+            st.error("비밀번호가 올바르지 않습니다.")
+
+    # 피드백
+    st.markdown("---")
+    st.subheader("💌 서비스 피드백")
+    feedback = st.text_area("무엇이든 자유롭게 남겨주세요 💬", placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
+
+    if st.button("📩 피드백 보내기"):
+        if feedback.strip():
+            try:
+                db.collection("feedback").add({
+                    "uid": USER_ID,
+                    "feedback": feedback.strip(),
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+                st.success("💖 피드백이 소중히 전달되었습니다. 감사합니다!")
+            except Exception as e:
+                st.error(f"Firestore 오류: {e}")
+        else:
+            st.warning("내용을 입력해주세요 💬")
+
+    if st.button("⬅ 채팅으로 돌아가기"):
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
 
 # ================= 상태칩 =================
 def status_chip():
@@ -202,7 +280,7 @@ def render_chat_page():
         if st.button("🎬 광고 보기로 3회 추가하기"):
             components.html("""
             <div style='text-align:center;margin:10px 0;'>
-                <iframe src="https://youradserver.com/ad.html" 
+                <iframe src="https://youradserver.com/ad.html"
                         width="320" height="100" style="border:none;"></iframe>
             </div>
             """, height=120)
@@ -252,4 +330,3 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
-
