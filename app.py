@@ -35,13 +35,11 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ========= Admin Key =========
-ADMIN_KEY = (st.secrets.get("ADMIN_KEY") or os.getenv("ADMIN_KEY") or DEFAULT_ADMIN_KEY)
+# ===== ADMIN KEY =====
+ADMIN_KEY = st.secrets.get("ADMIN_KEY") or os.getenv("ADMIN_KEY") or "4321"
 def check_admin(pw: str) -> bool:
-    try:
-        return hmac.compare_digest(str(pw or ""), str(ADMIN_KEY))
-    except Exception:
-        return False
+    import hmac
+    return hmac.compare_digest(str(pw or ""), str(ADMIN_KEY))
 
 # ========= URL 파라미터 =========
 def _qp_get(name: str, default=None):
