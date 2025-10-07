@@ -27,7 +27,8 @@ db = firestore.client()
 # ===== QUERY PARAM =====
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
-    if isinstance(val, list): return val[0] if val else default
+    if isinstance(val, list): 
+        return val[0] if val else default
     return val or default
 
 uid = _qp_get("uid")
@@ -117,16 +118,22 @@ def stream_reply(user_input: str, tone: str):
         ]
     )
 
-def make_summary(text: str):
-    """마음 한 줄 요약 생성"""
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "사용자의 대화 내용을 요약해서 오늘의 마음 한 줄 명언처럼 만들어줘."},
-            {"role": "user", "content": text}
-        ]
-    )
-    return res.choices[0].message.content.strip()
+# ===== PAYPAL BUTTON =====
+def show_paypal_button(message):
+    st.warning(message)
+    st.markdown("""
+    <hr>
+    <div style='text-align:center;'>
+        <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
+        <a href='https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG' target='_blank'>
+            <button style='background:#0070ba;color:white;padding:12px 20px;
+            border:none;border-radius:10px;font-size:18px;cursor:pointer;'>
+            💳 PayPal로 결제하기 ($3)
+            </button>
+        </a>
+        <p style='opacity:0.7;'>결제 후 관리자 확인을 통해 30회 이용권이 활성화됩니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ===== CHAT PAGE =====
 def render_chat_page():
@@ -147,27 +154,22 @@ def render_chat_page():
         remaining = st.session_state.remaining_paid_uses
         st.caption(f"💎 남은 상담 횟수: {remaining}회 / 30회")
         if remaining <= 0:
-            st.warning("💳 30회 이용권이 모두 소진되었습니다. 새로 결제 후 이용해주세요.")
-            if st.button("결제 페이지로 이동"):
-                st.query_params = {"uid": USER_ID, "page": "plans"}
-                st.rerun()
+            show_paypal_button("💳 30회 이용권이 모두 소진되었습니다. 새로 결제 후 이용해주세요.")
             return
     else:
         if st.session_state.usage_count >= st.session_state.limit:
-            st.warning("🚫 무료 4회 체험이 모두 사용되었습니다.")
-            if st.button("💳 결제/FAQ로 이동"):
-                st.query_params = {"uid": USER_ID, "page": "plans"}
-                st.rerun()
+            show_paypal_button("무료 체험이 모두 끝났어요 💙")
             return
         else:
             left = st.session_state.limit - st.session_state.usage_count
             st.caption(f"🌱 무료 체험 남은 횟수: {left}회")
 
+    # 입력
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input:
         return
 
-    # 간단한 감정 반응 (피드백)
+    # 감정 반응
     mood_hint = ""
     if any(k in user_input for k in ["힘들", "피곤", "짜증", "불안", "우울"]):
         mood_hint = "💭 지금 마음이 많이 지쳐 있네요... 그래도 괜찮아요."
@@ -176,11 +178,10 @@ def render_chat_page():
     if mood_hint:
         st.markdown(f"<div class='bot-bubble'>{mood_hint}</div>", unsafe_allow_html=True)
 
-    # 사용자 입력 표시
+    # 대화 표시
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
 
-    # GPT 답변 스트리밍
     for chunk in stream_reply(user_input, tone):
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
@@ -188,18 +189,18 @@ def render_chat_page():
             safe_stream = streamed.replace("\n\n", "<br><br>")
             placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe_stream}</div>", unsafe_allow_html=True)
 
-    # 한 줄 요약
-    summary = make_summary(user_input)
-    st.markdown(f"<div class='bot-bubble'>💡 오늘의 마음 노트: <b>{summary}</b></div>", unsafe_allow_html=True)
-
-    # 기록 및 횟수 차감
-    st.session_state.chat_history.append((user_input, streamed, summary))
+    # 상담 기록 및 횟수 차감
+    st.session_state.chat_history.append((user_input, streamed))
     if st.session_state.is_paid:
         st.session_state.remaining_paid_uses -= 1
         user_ref.update({"remaining_paid_uses": st.session_state.remaining_paid_uses})
     else:
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
+
+    # 상담 후 결제 버튼 자동 표시
+    if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
+        show_paypal_button("무료 체험이 끝났어요. 다음 대화부터는 유료 이용권이 필요해요 💳")
 
 # ===== PLANS PAGE =====
 def render_plans_page():
@@ -223,16 +224,6 @@ def render_plans_page():
             })
             user_ref.update(st.session_state)
             st.success("🎉 베이직 30회 이용권이 적용되었어요!")
-        if st.button("✅ 프로 100회 적용 ($6)"):
-            st.session_state.update({
-                "is_paid": True,
-                "limit": 100,
-                "usage_count": 0,
-                "remaining_paid_uses": 100,
-                "plan": "pro"
-            })
-            user_ref.update(st.session_state)
-            st.success("💎 프로 100회 이용권이 적용되었어요!")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
