@@ -1,3 +1,6 @@
+# ==========================================
+# 💙 AI 심리상담 앱 v1.7.0 (감정인식 통합)
+# ==========================================
 import os, uuid, json, time, hmac
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -8,7 +11,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.6.0"
+APP_VERSION = "v1.7.0"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
@@ -96,14 +99,33 @@ def persist_user(fields: dict):
         st.error(f"Firestore 저장 실패: {e}")
         return False
 
+# ================= 감정 인식 로직 =================
+def get_emotion_prompt(user_message: str) -> str:
+    text = user_message.lower()
+    if any(word in text for word in ["불안", "초조", "걱정", "긴장"]):
+        return "사용자가 불안을 표현했습니다. 원인을 묻지 말고 지금 그 감정을 그대로 인정해주는 따뜻한 말로 답해주세요."
+    elif any(word in text for word in ["외로워", "혼자", "쓸쓸", "고독"]):
+        return "사용자가 외로움을 표현했습니다. 누군가 곁에 있는 듯한 문장을 만들어주세요."
+    elif any(word in text for word in ["나 싫어", "못해", "쓸모없어", "가치없어"]):
+        return "사용자가 자기혐오를 표현했습니다. 공감적으로 이해하고, 자존감을 회복시키는 문장을 포함해주세요."
+    elif any(word in text for word in ["하기 싫", "지쳤", "힘들어", "귀찮"]):
+        return "사용자가 무기력을 표현했습니다. 행동을 강요하지 않고, 존재 자체가 괜찮다는 위로를 전달해주세요."
+    else:
+        return "사용자가 일상 대화를 하고 있습니다. 부드럽고 따뜻하게 이어가세요."
+
 # ================= OpenAI 답변 =================
 def stream_reply(text):
     if not client: return
-    sys = f"너는 {DEFAULT_TONE} 말투의 심리상담사야. 공감→조언→실천 제안, 3문단 이내로 현실적이고 짧게."
+    emotion_prompt = get_emotion_prompt(text)
+    sys = f"""
+당신은 {DEFAULT_TONE} 말투의 심리상담사이자 친구입니다.
+답변은 3문단 이내로 짧고 따뜻하게.
+감정별 가이드: {emotion_prompt}
+"""
     try:
         stream = client.chat.completions.create(
             model="gpt-4o-mini",
-            temperature=0.5,
+            temperature=0.7,
             stream=True,
             messages=[{"role": "system", "content": sys}, {"role": "user", "content": text}]
         )
@@ -132,7 +154,6 @@ def status_chip():
 # ================= 결제 페이지 =================
 def render_plans_page():
     status_chip()
-
     st.markdown("""
     <div style='text-align:center;'>
       <h2>💳 결제 안내</h2>
