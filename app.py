@@ -1,8 +1,8 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.1
-# (감정인식 + 결제 안내 + 피드백 + 자동 색상반전)
+# 💙 AI 심리상담 앱 v1.8.2
+# (감정인식 + 결제 안내 + 피드백 + 자동 색상반전 + 랜덤 인사)
 # ==========================================
-import os, uuid, json, time, hmac
+import os, uuid, json, time, hmac, random
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.1"
+APP_VERSION = "v1.8.2"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
@@ -83,7 +83,7 @@ html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
 
 st.title("💙 마음을 기댈 수 있는 AI 친구")
 
-# === 전역: 배경 밝기 감지 → 자동 색상 반전(JS는 components.html로 주입) ===
+# === 전역: 자동 색상 반전 ===
 def inject_auto_contrast():
     components.html("""
     <script>
@@ -270,6 +270,21 @@ def render_plans_page():
 # ================= 채팅 페이지 =================
 def render_chat_page():
     status_chip()
+
+    # 💬 인사 메시지 (앱 처음 실행 시 1회)
+    if "greeted" not in st.session_state:
+        greetings = [
+            "안녕 💙 오늘 하루 어땠어?",
+            "마음이 조금 무거운 날이지? 내가 들어줄게 ☁️",
+            "요즘 많이 지쳤다 그치... 잠깐 쉬어가도 돼 🌙",
+            "오늘은 그냥 나랑 얘기만 해보자 🌷",
+            "괜찮아, 잘하고 있어. 난 네 얘기 듣고 싶어 🕊️"
+        ]
+        greet = random.choice(greetings)
+        st.markdown(f"<div class='bot-bubble'>🧡 {greet}</div>", unsafe_allow_html=True)
+        st.session_state["greeted"] = True
+
+    # 제한 확인
     if st.session_state.get("is_paid"):
         if st.session_state["remaining_paid_uses"] <= 0:
             st.warning("💳 이용권이 소진되었습니다. 결제 후 이용해주세요.")
@@ -277,20 +292,6 @@ def render_chat_page():
     elif st.session_state["usage_count"] >= FREE_LIMIT:
         st.warning("🌱 무료 체험이 끝났어요. 유료 이용권을 구매해주세요.")
         return
-# ================= 인사 메시지 (앱 시작 시 한 번만 표시) =================
-import random
-
-if "greeted" not in st.session_state:
-    greetings = [
-        "안녕 💙 오늘 하루 어땠어?",
-        "마음이 조금 무거운 날이지? 내가 들어줄게 ☁️",
-        "요즘 많이 지쳤다 그치... 잠깐 쉬어가도 돼 🌙",
-        "오늘은 그냥 나랑 얘기만 해보자 🌷",
-        "괜찮아, 잘하고 있어. 난 네 얘기 듣고 싶어 🕊️"
-    ]
-    greet = random.choice(greetings)
-    st.markdown(f"<div class='bot-bubble'>🧡 {greet}</div>", unsafe_allow_html=True)
-    st.session_state["greeted"] = True
 
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input: return
@@ -324,3 +325,4 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
+
