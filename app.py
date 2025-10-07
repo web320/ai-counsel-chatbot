@@ -131,7 +131,7 @@ def show_paypal_button(message):
             💳 PayPal로 결제하기 ($3)
             </button>
         </a>
-        <p style='opacity:0.7;'>카톡아이디 :jeuspo, 혹은 구글 이메일 mwiby91@gmail.com에 결제 스크린 샷을 남기시면 비번을 알려드립니다</p>
+        <p style='opacity:0.7;'>결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요.<br>관리자 비밀번호를 알려드립니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -202,15 +202,65 @@ def render_chat_page():
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         show_paypal_button("무료 체험이 끝났어요. 다음 대화부터는 유료 이용권이 필요해요 💳")
 
+    # ===== 피드백 입력창 =====
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("📝 대화에 대한 피드백을 남겨주세요")
+    feedback_text = st.text_area("어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
+                                 placeholder="예: 대답이 따뜻했어요 / 답변이 너무 짧아요 / 디자인이 좋아요")
+    if st.button("📩 피드백 제출"):
+        if feedback_text.strip():
+            db.collection("feedbacks").add({
+                "uid": USER_ID,
+                "feedback": feedback_text,
+                "timestamp": datetime.now().isoformat()
+            })
+            st.success("감사합니다 💙 피드백이 소중히 전달되었어요!")
+        else:
+            st.warning("내용을 입력해주세요 😊")
+
 # ===== PLANS PAGE =====
 def render_plans_page():
     st.markdown("""
-    ### 💳 결제 안내 (예시)
-    **:star: 베이직 30회 — $3**  
-    **💎 프로 100회 — $6**  
-    <p style='opacity:0.7;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
+    <div style='text-align:center; padding-top:10px;'>
+        <h2>💙 마음을 기댈 수 있는 AI 친구</h2>
+        <h3>💳 결제 안내</h3>
+        <p style='opacity:0.7;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
+        <hr style='margin:15px 0;'>
+    </div>
+
+    <div style='display:flex; justify-content:center; gap:40px;'>
+        <div style='background:rgba(255,255,255,0.05); border:2px solid #ffaa00; border-radius:16px; padding:20px; width:260px;'>
+            <h3 style='color:#ffaa00;'>⭐ 베이직 플랜</h3>
+            <h1 style='margin:10px 0; color:#fff;'>$3</h1>
+            <p style='font-size:18px;'>30회 상담 이용권</p>
+            <p style='opacity:0.8;'>따뜻한 위로가 필요할 때마다</p>
+            <a href='https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG' target='_blank'>
+                <button style='margin-top:10px; background:#ffaa00; color:#000; padding:10px 20px;
+                border:none; border-radius:10px; font-size:18px; cursor:pointer;'>💳 결제하기</button>
+            </a>
+        </div>
+
+        <div style='background:rgba(255,255,255,0.05); border:2px solid #00d4ff; border-radius:16px; padding:20px; width:260px;'>
+            <h3 style='color:#00d4ff;'>💎 프로 플랜</h3>
+            <h1 style='margin:10px 0; color:#fff;'>$6</h1>
+            <p style='font-size:18px;'>100회 상담 이용권</p>
+            <p style='opacity:0.8;'>오랫동안 함께하는 마음 친구</p>
+            <button disabled style='margin-top:10px; background:#555; color:#ccc; padding:10px 20px;
+            border:none; border-radius:10px; font-size:18px;'>준비 중</button>
+        </div>
+    </div>
+
+    <div style='margin-top:40px; text-align:center;'>
+        <p style='color:#aaa;'>💬 결제 후 아래로 인증해주세요:</p>
+        <p style='color:#fff;'>카카오톡 아이디: <b>jeuspo</b><br>
+        이메일: <b>mwiby91@gmail.com</b><br>
+        결제 스크린샷을 보내주시면 <b>관리자 비밀번호</b>를 알려드립니다.</p>
+    </div>
     """, unsafe_allow_html=True)
 
+    # 관리자 영역
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("🔐 관리자 모드")
     admin_pw = st.text_input("관리자 비밀번호", type="password")
     if admin_pw == "4321":
         st.success("관리자 인증 완료 ✅")
@@ -224,6 +274,16 @@ def render_plans_page():
             })
             user_ref.update(st.session_state)
             st.success("🎉 베이직 30회 이용권이 적용되었어요!")
+        if st.button("✅ 프로 100회 적용 ($6)"):
+            st.session_state.update({
+                "is_paid": True,
+                "limit": 100,
+                "usage_count": 0,
+                "remaining_paid_uses": 100,
+                "plan": "pro"
+            })
+            user_ref.update(st.session_state)
+            st.success("💎 프로 100회 이용권이 적용되었어요!")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
