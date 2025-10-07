@@ -154,7 +154,7 @@ def stream_reply(user_input):
         stream = client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.85,
-            max_output_tokens=400,
+            max_tokens=400,
             stream=True,
             messages=[
                 {"role": "system", "content": sys},
