@@ -3,6 +3,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
+import streamlit.components.v1 as components   # ✅ 추가
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -27,7 +28,7 @@ db = firestore.client()
 # ===== QUERY PARAM =====
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
-    if isinstance(val, list): 
+    if isinstance(val, list):
         return val[0] if val else default
     return val or default
 
@@ -41,37 +42,27 @@ USER_ID = uid
 PAGE = page
 
 # ===== STYLE =====
-st.set_page_config(page_title="당신을 위한 AI 친구", layout="wide")
+st.set_page_config(page_title="당신을 기댈 수 있는 AI 친구", layout="wide")
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
 [data-testid="stSidebar"] * { font-size: 18px !important; }
 
 .user-bubble {
-    background: #b91c1c;
-    color: white;
-    border-radius: 12px;
-    padding: 10px 16px;
-    margin: 8px 0;
-    display: inline-block;
+    background: #b91c1c; color: white; border-radius: 12px;
+    padding: 10px 16px; margin: 8px 0; display: inline-block;
 }
-
 .bot-bubble {
-    font-size: 21px;
-    line-height: 1.8;
-    border-radius: 14px;
-    padding: 14px 18px;
-    margin: 10px 0;
-    background: rgba(15,15,30,0.85);
-    color: #fff;
+    font-size: 21px; line-height: 1.8; border-radius: 14px;
+    padding: 14px 18px; margin: 10px 0;
+    background: rgba(15,15,30,0.85); color: #fff;
     border: 2px solid transparent;
     border-image: linear-gradient(90deg, #ff8800, #ffaa00, #ff8800) 1;
     animation: neon-glow 1.8s ease-in-out infinite alternate;
 }
-
 @keyframes neon-glow {
   from { box-shadow: 0 0 5px #ff8800, 0 0 10px #ffaa00; }
-  to { box-shadow: 0 0 20px #ff8800, 0 0 40px #ffaa00, 0 0 60px #ff8800; }
+  to   { box-shadow: 0 0 20px #ff8800, 0 0 40px #ffaa00, 0 0 60px #ff8800; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -82,7 +73,7 @@ st.title("💙 마음을 기댈 수 있는 AI 친구")
 defaults = {
     "chat_history": [],
     "is_paid": False,
-    "limit": 4,  # 무료 체험 4회
+    "limit": 4,         # 무료 4회
     "usage_count": 0,
     "plan": None,
     "remaining_paid_uses": 0,
@@ -118,10 +109,10 @@ def stream_reply(user_input: str, tone: str):
         ]
     )
 
-# ===== PAYPAL BUTTON =====
+# ===== PAYPAL CTA =====
 def show_paypal_button(message):
     st.warning(message)
-    st.markdown("""
+    st.markdown(f"""
     <hr>
     <div style='text-align:center;'>
         <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
@@ -131,7 +122,7 @@ def show_paypal_button(message):
             💳 PayPal로 결제하기 ($3)
             </button>
         </a>
-        <p style='opacity:0.7;'>결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요.<br>관리자 비밀번호를 알려드립니다.</p>
+        <p style='opacity:0.75;margin-top:8px;'>결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요. 관리자 비밀번호를 알려드립니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -139,7 +130,6 @@ def show_paypal_button(message):
 def render_chat_page():
     st.caption("마음 편히 얘기해 💬")
 
-    # 상담 톤 선택
     tone = st.radio(
         "🎭 상담 톤을 선택해주세요:",
         ["따뜻하게", "직설적으로", "철학적으로"],
@@ -149,7 +139,7 @@ def render_chat_page():
     st.session_state.tone = tone
     user_ref.update({"tone": tone})
 
-    # 이용 제한 체크
+    # 이용 제한
     if st.session_state.is_paid:
         remaining = st.session_state.remaining_paid_uses
         st.caption(f"💎 남은 상담 횟수: {remaining}회 / {st.session_state.limit}회")
@@ -160,16 +150,13 @@ def render_chat_page():
         if st.session_state.usage_count >= st.session_state.limit:
             show_paypal_button("무료 체험이 모두 끝났어요 💙")
             return
-        else:
-            left = st.session_state.limit - st.session_state.usage_count
-            st.caption(f"🌱 무료 체험 남은 횟수: {left}회")
+        st.caption(f"🌱 무료 체험 남은 횟수: {st.session_state.limit - st.session_state.usage_count}회")
 
-    # 입력
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input:
         return
 
-    # 감정 반응
+    # 가벼운 감정 피드백
     mood_hint = ""
     if any(k in user_input for k in ["힘들", "피곤", "짜증", "불안", "우울"]):
         mood_hint = "💭 지금 마음이 많이 지쳐 있네요... 그래도 괜찮아요."
@@ -178,18 +165,19 @@ def render_chat_page():
     if mood_hint:
         st.markdown(f"<div class='bot-bubble'>{mood_hint}</div>", unsafe_allow_html=True)
 
-    # 대화 표시
+    # 대화
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
-
     for chunk in stream_reply(user_input, tone):
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
             streamed += delta.content
-            safe_stream = streamed.replace("\n\n", "<br><br>")
-            placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe_stream}</div>", unsafe_allow_html=True)
+            placeholder.markdown(
+                f"<div class='bot-bubble'>🧡 {streamed.replace('\n\n','<br><br>')}</div>",
+                unsafe_allow_html=True
+            )
 
-    # 상담 기록 및 횟수 차감
+    # 기록/차감
     st.session_state.chat_history.append((user_input, streamed))
     if st.session_state.is_paid:
         st.session_state.remaining_paid_uses -= 1
@@ -198,92 +186,123 @@ def render_chat_page():
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
 
-    # 상담 후 결제 버튼 자동 표시
+    # 체험 끝 → CTA
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         show_paypal_button("무료 체험이 끝났어요. 다음 대화부터는 유료 이용권이 필요해요 💳")
 
-    # ===== 피드백 입력창 =====
+    # 피드백
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("📝 대화에 대한 피드백을 남겨주세요")
-    feedback_text = st.text_area("어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
-                                 placeholder="예: 대답이 따뜻했어요 / 답변이 조금 짧아요 / 디자인이 좋아요")
+    fb = st.text_area("어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
+                      placeholder="예: 대답이 따뜻했어요 / 답변이 조금 짧아요 / 디자인이 좋아요")
     if st.button("📩 피드백 제출"):
-        if feedback_text.strip():
+        if fb.strip():
             db.collection("feedbacks").add({
                 "uid": USER_ID,
-                "feedback": feedback_text,
+                "feedback": fb,
                 "timestamp": datetime.now().isoformat()
             })
             st.success("감사합니다 💙 피드백이 소중히 전달되었어요!")
         else:
             st.warning("내용을 입력해주세요 😊")
 
-# ===== PLANS PAGE =====
+# ===== PLANS PAGE (components.html로 안정 렌더링) =====
 def render_plans_page():
-    st.markdown("""
-    <div style='text-align:center; padding-top:10px;'>
-        <h2>💙 마음을 기댈 수 있는 AI 친구</h2>
-        <h3>💳 결제 안내</h3>
-        <p style='opacity:0.7;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
-        <hr style='margin:15px 0;'>
+    header_html = """
+    <div style='text-align:center; padding-top:8px;'>
+      <h2 style="margin:0 0 6px 0;">💙 마음을 기댈 수 있는 AI 친구</h2>
+      <h3 style="margin:0;">💳 결제 안내</h3>
+      <p style='opacity:.7;margin:6px 0 14px 0;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
+    </div>
+    """
+    cards_html = """
+    <style>
+      .pricing-wrap{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;}
+      .card{
+        width:280px; border-radius:16px; padding:18px; color:#fff;
+        background: rgba(255,255,255,0.05);
+        box-shadow: 0 6px 22px rgba(0,0,0,.25);
+      }
+      .card.basic{border:2px solid #ffaa00;}
+      .card.pro{border:2px solid #00d4ff;}
+      .card h3{margin:0; font-weight:700;}
+      .price{font-size:34px; margin:8px 0 2px 0;}
+      .desc{opacity:.85;margin:0 0 6px 0;}
+      .btn{
+        margin-top:10px; padding:10px 18px; font-size:17px; border:none; border-radius:10px;
+        cursor:pointer;
+      }
+      .btn.basic{background:#ffaa00; color:#000;}
+      .btn.pro{background:#555; color:#ccc;}
+      .howto{
+        margin-top:24px; text-align:center; color:#ddd;
+      }
+      .idbox{display:inline-flex; gap:8px; align-items:center; margin-top:6px;}
+      .copy{
+        padding:4px 10px; border:1px solid rgba(255,255,255,.25); border-radius:8px;
+        background:transparent; color:#ddd; cursor:pointer; font-size:14px;
+      }
+    </style>
+
+    <div class="pricing-wrap">
+      <div class="card basic">
+        <h3 style="color:#ffaa00;">⭐ 베이직 플랜</h3>
+        <div class="price">$3</div>
+        <p class="desc">30회 상담 이용권</p>
+        <p class="desc">따뜻한 위로가 필요할 때마다</p>
+        <a href="https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG" target="_blank">
+          <button class="btn basic">💳 결제하기</button>
+        </a>
+      </div>
+
+      <div class="card pro">
+        <h3 style="color:#00d4ff;">💎 프로 플랜</h3>
+        <div class="price">$6</div>
+        <p class="desc">100회 상담 이용권</p>
+        <p class="desc">오랫동안 함께하는 마음 친구</p>
+        <button class="btn pro" disabled>준비 중</button>
+      </div>
     </div>
 
-    <div style='display:flex; justify-content:center; gap:40px;'>
-        <div style='background:rgba(255,255,255,0.05); border:2px solid #ffaa00; border-radius:16px; padding:20px; width:260px;'>
-            <h3 style='color:#ffaa00;'>⭐ 베이직 플랜</h3>
-            <h1 style='margin:10px 0; color:#fff;'>$3</h1>
-            <p style='font-size:18px;'>30회 상담 이용권</p>
-            <p style='opacity:0.8;'>따뜻한 위로가 필요할 때마다</p>
-            <a href='https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG' target='_blank'>
-                <button style='margin-top:10px; background:#ffaa00; color:#000; padding:10px 20px;
-                border:none; border-radius:10px; font-size:18px; cursor:pointer;'>💳 결제하기</button>
-            </a>
-        </div>
-
-        <div style='background:rgba(255,255,255,0.05); border:2px solid #00d4ff; border-radius:16px; padding:20px; width:260px;'>
-            <h3 style='color:#00d4ff;'>💎 프로 플랜</h3>
-            <h1 style='margin:10px 0; color:#fff;'>$6</h1>
-            <p style='font-size:18px;'>100회 상담 이용권</p>
-            <p style='opacity:0.8;'>오랫동안 함께하는 마음 친구</p>
-            <button disabled style='margin-top:10px; background:#555; color:#ccc; padding:10px 20px;
-            border:none; border-radius:10px; font-size:18px;'>준비 중</button>
-        </div>
+    <div class="howto">
+      <p style="margin:0;">💬 결제 후 아래로 인증해주세요:</p>
+      <div class="idbox">
+        <span>카톡: <b>jeuspo</b></span>
+        <button class="copy" onclick="navigator.clipboard.writeText('jeuspo')">복사</button>
+      </div>
+      <div class="idbox">
+        <span>이메일: <b>mwiby91@gmail.com</b></span>
+        <button class="copy" onclick="navigator.clipboard.writeText('mwiby91@gmail.com')">복사</button>
+      </div>
+      <p style="opacity:.8;margin-top:8px;">결제 스크린샷을 보내주시면 <b>관리자 비밀번호</b>를 알려드립니다.</p>
     </div>
+    """
+    # ✅ components.html은 HTML을 100% 그대로 렌더링해줘서 "텍스트로 보이는" 문제가 사라짐
+    components.html(header_html + cards_html, height=620, scrolling=False)
 
-    <div style='margin-top:40px; text-align:center;'>
-        <p style='color:#aaa;'>💬 결제 후 아래로 인증해주세요:</p>
-        <p style='color:#fff;'>카카오톡 아이디: <b>jeuspo</b><br>
-        이메일: <b>mwiby91@gmail.com</b><br>
-        결제 스크린샷을 보내주시면 <b>관리자 비밀번호</b>를 알려드립니다.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 관리자 영역
+    # ---- 관리자 영역 (Streamlit 위젯) ----
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🔐 관리자 모드")
     admin_pw = st.text_input("관리자 비밀번호", type="password")
     if admin_pw == "4321":
         st.success("관리자 인증 완료 ✅")
-        if st.button("✅ 베이직 30회 적용 ($3)"):
-            st.session_state.update({
-                "is_paid": True,
-                "limit": 30,
-                "usage_count": 0,
-                "remaining_paid_uses": 30,
-                "plan": "basic"
-            })
-            user_ref.update(st.session_state)
-            st.success("🎉 베이직 30회 이용권이 적용되었어요!")
-        if st.button("✅ 프로 100회 적용 ($6)"):
-            st.session_state.update({
-                "is_paid": True,
-                "limit": 100,
-                "usage_count": 0,
-                "remaining_paid_uses": 100,
-                "plan": "pro"
-            })
-            user_ref.update(st.session_state)
-            st.success("💎 프로 100회 이용권이 적용되었어요!")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✅ 베이직 30회 적용 ($3)"):
+                st.session_state.update({
+                    "is_paid": True, "limit": 30, "usage_count": 0,
+                    "remaining_paid_uses": 30, "plan": "basic"
+                })
+                user_ref.update(st.session_state)
+                st.success("🎉 베이직 30회 이용권이 적용되었어요!")
+        with col2:
+            if st.button("✅ 프로 100회 적용 ($6)"):
+                st.session_state.update({
+                    "is_paid": True, "limit": 100, "usage_count": 0,
+                    "remaining_paid_uses": 100, "plan": "pro"
+                })
+                user_ref.update(st.session_state)
+                st.success("💎 프로 100회 이용권이 적용되었어요!")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
@@ -310,3 +329,4 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
+
