@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.2
-# (감정인식 + 결제 안내 + 피드백 + 자동 색상반전 + 랜덤 인사)
+# 💙 AI 심리상담 앱 v1.8.3
+# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + rerun fix)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, timezone
@@ -12,11 +12,10 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.2"
+APP_VERSION = "v1.8.3"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
-PRO_LIMIT   = 100
 DEFAULT_TONE = "따뜻하게"
 
 # ================= OpenAI =================
@@ -39,10 +38,7 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Admin Keys =================
-ADMIN_KEYS = []
-for k in [st.secrets.get("ADMIN_KEY"), os.getenv("ADMIN_KEY"), "6U4urDCJLr7D0EWa4nST", "4321"]:
-    if k and str(k) not in ADMIN_KEYS:
-        ADMIN_KEYS.append(str(k))
+ADMIN_KEYS = [str(k) for k in [st.secrets.get("ADMIN_KEY"), os.getenv("ADMIN_KEY"), "6U4urDCJLr7D0EWa4nST", "4321"] if k]
 
 def check_admin(pw: str) -> bool:
     return any(hmac.compare_digest(pw.strip(), key) for key in ADMIN_KEYS)
@@ -50,15 +46,11 @@ def check_admin(pw: str) -> bool:
 # ================= Query Params =================
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
-    if isinstance(val, list):
-        return val[0] if val else default
-    return val or default
+    return (val[0] if isinstance(val, list) else val) or default
 
-uid  = _qp_get("uid")
+uid  = _qp_get("uid") or str(uuid.uuid4())
 page = _qp_get("page", "chat")
-if not uid:
-    uid = str(uuid.uuid4())
-    st.query_params = {"uid": uid, "page": page}
+st.query_params = {"uid": uid, "page": page}
 USER_ID = uid
 PAGE     = page
 
@@ -68,51 +60,48 @@ st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
 [data-testid="stSidebar"] * { font-size: 18px !important; }
-/* 버블 */
-.user-bubble { background:#b91c1c;color:#fff;border-radius:12px;padding:10px 16px;margin:8px 0;display:inline-block; }
-.bot-bubble { font-size:21px;line-height:1.8;border-radius:14px;padding:14px 18px;margin:10px 0;
+.user-bubble {
+  background:#b91c1c;color:#fff;border-radius:14px;padding:10px 18px;margin:8px 0;
+  display:inline-block;box-shadow:0 0 10px rgba(255,0,0,0.3);
+}
+.bot-bubble {
+  font-size:21px;line-height:1.8;border-radius:16px;padding:16px 20px;margin:10px 0;
   background:rgba(15,15,30,.85);color:#fff;border:2px solid transparent;
   border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
-  animation:neon-glow 1.8s ease-in-out infinite alternate; }
-@keyframes neon-glow { from{box-shadow:0 0 5px #ff8800;} to{box-shadow:0 0 25px #ffaa00;} }
-/* 상태칩 */
-.status { font-size:15px; padding:8px 12px; border-radius:10px; display:inline-block;
-  margin-bottom:8px; background:rgba(255,255,255,.06); }
+  box-shadow:0 0 12px #ffaa00;animation:neon 1.6s ease-in-out infinite alternate;
+}
+@keyframes neon {from{box-shadow:0 0 8px #ffaa00;}to{box-shadow:0 0 22px #ffcc33;}}
+.status {
+  font-size:15px; padding:8px 12px; border-radius:10px;
+  display:inline-block;margin-bottom:8px; background:rgba(255,255,255,.06);
+}
 </style>
 """, unsafe_allow_html=True)
-
 st.title("💙 마음을 기댈 수 있는 AI 친구")
 
-# === 전역: 자동 색상 반전 ===
+# === 자동 색상 반전 ===
 def inject_auto_contrast():
     components.html("""
     <script>
     (function(){
-      function parseRGB(c){var m=c&&c.match(/\\d+/g); return m?m.map(Number):[255,255,255];}
+      function rgb(c){var m=c&&c.match(/\\d+/g);return m?m.map(Number):[255,255,255];}
       function setTheme(){
-        var bg = getComputedStyle(document.body).backgroundColor;
-        var rgb = parseRGB(bg);
-        var brightness = 0.299*rgb[0] + 0.587*rgb[1] + 0.114*rgb[2];
-        var root = document.documentElement;
-        if(brightness > 180){ // Light
-          root.style.setProperty('--text-color','#111');
-          root.style.setProperty('--sub-color','#333');
-          root.style.setProperty('--link-color','#0070f3');
-        } else { // Dark
-          root.style.setProperty('--text-color','#fff');
-          root.style.setProperty('--sub-color','#ddd');
-          root.style.setProperty('--link-color','#9CDCFE');
-        }
-      }
-      new MutationObserver(setTheme).observe(document.body,{attributes:true,childList:true,subtree:true});
+        var bg=getComputedStyle(document.body).backgroundColor;
+        var [r,g,b]=rgb(bg);
+        var bright=0.299*r+0.587*g+0.114*b;
+        var root=document.documentElement;
+        if(bright>180){
+          root.style.setProperty('--text','#111');root.style.setProperty('--link','#0070f3');
+        }else{
+          root.style.setProperty('--text','#fff');root.style.setProperty('--link','#9CDCFE');
+        }}
+      new MutationObserver(setTheme).observe(document.body,{childList:true,subtree:true});
       setTheme();
     })();
     </script>
     <style>
-      body, html { color: var(--text-color); transition: color .3s ease, background-color .3s ease; }
-      p, span, div, h1, h2, h3, h4, h5, h6, label { color: var(--text-color) !important; }
-      a, b { color: var(--link-color) !important; }
-      .status { color: var(--sub-color) !important; }
+      body,html{color:var(--text);transition:.3s ease;}
+      a,b{color:var(--link)!important;}
     </style>
     """, height=0)
 inject_auto_contrast()
@@ -123,8 +112,7 @@ user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
 if snap.exists:
     data = snap.to_dict() or {}
-    for k, v in defaults.items():
-        st.session_state[k] = data.get(k, v)
+    st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
 else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
@@ -132,44 +120,46 @@ else:
 def persist_user(fields: dict):
     try:
         user_ref.set(fields, merge=True)
-        time.sleep(0.4)
         st.session_state.update(fields)
         return True
     except Exception as e:
         st.error(f"Firestore 저장 실패: {e}")
         return False
 
-# ================= 감정 인식 로직 =================
-def get_emotion_prompt(user_message: str) -> str:
-    text = user_message.lower()
-    if any(w in text for w in ["불안", "초조", "걱정", "긴장"]):
-        return "사용자가 불안을 표현했습니다. 원인을 묻지 말고 지금 그 감정을 그대로 인정해주는 따뜻한 말로 답해주세요."
-    if any(w in text for w in ["외로워", "혼자", "쓸쓸", "고독"]):
-        return "사용자가 외로움을 표현했습니다. 누군가 곁에 있는 듯한 문장을 만들어주세요."
-    if any(w in text for w in ["나 싫어", "못해", "쓸모없어", "가치없어"]):
-        return "사용자가 자기혐오를 표현했습니다. 공감적으로 이해하고, 자존감을 회복시키는 문장을 포함해주세요."
-    if any(w in text for w in ["하기 싫", "지쳤", "힘들어", "귀찮"]):
-        return "사용자가 무기력을 표현했습니다. 행동을 강요하지 않고, 존재 자체가 괜찮다는 위로를 전달해주세요."
-    return "사용자가 일상 대화를 하고 있습니다. 부드럽고 따뜻하게 이어가세요."
+# ================= 감정 인식 =================
+def get_emotion_prompt(msg: str):
+    msg = msg.lower()
+    if any(w in msg for w in ["불안", "초조", "걱정", "긴장"]):
+        return "사용자가 불안을 표현했습니다. 부드럽게 안정감을 주는 말을 해주세요."
+    if any(w in msg for w in ["외로워", "혼자", "쓸쓸", "고독"]):
+        return "사용자가 외로움을 표현했습니다. 누군가 곁에 있는 듯한 말로 위로해주세요."
+    if any(w in msg for w in ["힘들", "귀찮", "하기 싫", "지쳤"]):
+        return "사용자가 무기력을 표현했습니다. 강요하지 않고 존재 자체를 인정해주세요."
+    if any(w in msg for w in ["싫어", "쓸모없", "못해", "가치없"]):
+        return "사용자가 자기혐오를 표현했습니다. 공감하며 따뜻하게 자존감을 세워주세요."
+    return "사용자가 일상 대화를 하고 있습니다. 다정하고 편하게 이어가세요."
 
 # ================= OpenAI 답변 =================
-def stream_reply(text):
+def stream_reply(user_input):
     if not client: return
-    emotion_prompt = get_emotion_prompt(text)
+    emotion_prompt = get_emotion_prompt(user_input)
     sys = f"""
-당신은 {DEFAULT_TONE} 말투의 심리상담사이자 친구입니다.
-답변은 3문단 이내로 짧고 따뜻하게.
+당신은 {DEFAULT_TONE} 말투의 심리상담사입니다.
 감정별 가이드: {emotion_prompt}
+답변은 2~3문단으로 따뜻하고 공감 있게 해주세요.
 """
     try:
         stream = client.chat.completions.create(
             model="gpt-4o-mini",
-            temperature=0.7,
+            temperature=0.85,
+            max_output_tokens=300,
             stream=True,
-            messages=[{"role": "system", "content": sys}, {"role": "user", "content": text}]
+            messages=[
+                {"role": "system", "content": sys},
+                {"role": "user", "content": user_input}
+            ]
         )
-        msg = ""
-        placeholder = st.empty()
+        msg, placeholder = "", st.empty()
         for chunk in stream:
             delta = getattr(chunk.choices[0], "delta", None)
             if delta and getattr(delta, "content", None):
@@ -180,12 +170,12 @@ def stream_reply(text):
     except Exception as e:
         st.error(f"OpenAI 오류: {e}")
 
-# ================= 상태 표시 =================
+# ================= 상태칩 =================
 def status_chip():
     if st.session_state.get("is_paid"):
-        st.markdown(
-            f"<div class='status'>💎 유료({st.session_state.get('plan')}) — 남은 {st.session_state.get('remaining_paid_uses',0)}/{st.session_state.get('limit',0)}회</div>",
-            unsafe_allow_html=True)
+        left = st.session_state.get("remaining_paid_uses", 0)
+        total = st.session_state.get("limit", 30)
+        st.markdown(f"<div class='status'>💎 유료 이용중 — 남은 {left}/{total}회</div>", unsafe_allow_html=True)
     else:
         left = st.session_state["limit"] - st.session_state["usage_count"]
         st.markdown(f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
@@ -214,12 +204,12 @@ def render_plans_page():
         🔒 비밀번호 입력 후 바로 30회 상담 이용이 가능합니다.
       </p>
     </div>
-    """, height=320)
+    """, height=300)
 
     st.markdown("---")
     st.subheader("🔐 관리자 인증 (자동 적용)")
-
     pw = st.text_input("관리자 비밀번호", type="password")
+
     if pw:
         if check_admin(pw):
             st.success("✅ 관리자 인증 완료! 베이직 30회 이용권을 적용합니다...")
@@ -229,37 +219,29 @@ def render_plans_page():
                 "remaining_paid_uses": BASIC_LIMIT
             }
             if persist_user(fields):
-                st.success("🎉 베이직 30회 이용권 적용 완료! 채팅으로 이동 중...")
-                time.sleep(0.8)
+                st.success("🎉 이용권이 적용되었습니다. 채팅으로 이동 중...")
+                time.sleep(1)
                 st.session_state.clear()
                 st.query_params = {"uid": USER_ID, "page": "chat"}
-                st.experimental_rerun()
+                st.rerun()
         else:
             st.error("비밀번호가 올바르지 않습니다.")
 
-    # ================= 피드백 섹션 =================
+    # ================= 피드백 =================
     st.markdown("---")
     st.subheader("💌 서비스 피드백")
-    st.markdown(
-        "앱을 사용하면서 느낀 점이나 개선 아이디어를 남겨주세요 💙<br>"
-        "당신의 한마디가 앱을 더 따뜻하게 만듭니다 🌷",
-        unsafe_allow_html=True
-    )
-
-    feedback = st.text_area("무엇이든 자유롭게 남겨주세요.", placeholder="예: 결제 과정이 헷갈렸어요 / 답변이 따뜻했어요 😊")
-
+    feedback = st.text_area("무엇이든 자유롭게 남겨주세요 💬", placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
     if st.button("📩 피드백 보내기"):
         if feedback.strip():
             try:
-                fb_ref = db.collection("feedback").document()
-                fb_ref.set({
+                db.collection("feedback").add({
                     "uid": USER_ID,
                     "feedback": feedback.strip(),
                     "created_at": datetime.now(timezone.utc).isoformat()
                 })
                 st.success("💖 피드백이 소중히 전달되었습니다. 감사합니다!")
             except Exception as e:
-                st.error(f"Firestore 저장 실패: {e}")
+                st.error(f"Firestore 오류: {e}")
         else:
             st.warning("내용을 입력해주세요 💬")
 
@@ -267,30 +249,26 @@ def render_plans_page():
         st.query_params = {"uid": USER_ID, "page": "chat"}
         st.rerun()
 
-# ================= 채팅 페이지 =================
+# ================= 채팅 =================
 def render_chat_page():
     status_chip()
-
-    # 💬 인사 메시지 (앱 처음 실행 시 1회)
     if "greeted" not in st.session_state:
         greetings = [
             "안녕 💙 오늘 하루 어땠어?",
             "마음이 조금 무거운 날이지? 내가 들어줄게 ☁️",
-            "요즘 많이 지쳤다 그치... 잠깐 쉬어가도 돼 🌙",
-            "오늘은 그냥 나랑 얘기만 해보자 🌷",
+            "요즘 많이 지쳤지... 잠깐 쉬어가자 🌙",
+            "오늘은 그냥 나랑 얘기만 하자 🌷",
             "괜찮아, 잘하고 있어. 난 네 얘기 듣고 싶어 🕊️"
         ]
         greet = random.choice(greetings)
         st.markdown(f"<div class='bot-bubble'>🧡 {greet}</div>", unsafe_allow_html=True)
         st.session_state["greeted"] = True
 
-    # 제한 확인
-    if st.session_state.get("is_paid"):
-        if st.session_state["remaining_paid_uses"] <= 0:
-            st.warning("💳 이용권이 소진되었습니다. 결제 후 이용해주세요.")
-            return
-    elif st.session_state["usage_count"] >= FREE_LIMIT:
+    if not st.session_state.get("is_paid") and st.session_state["usage_count"] >= FREE_LIMIT:
         st.warning("🌱 무료 체험이 끝났어요. 유료 이용권을 구매해주세요.")
+        return
+    if st.session_state.get("is_paid") and st.session_state["remaining_paid_uses"] <= 0:
+        st.warning("💳 이용권이 소진되었습니다. 결제 후 이용해주세요.")
         return
 
     user_input = st.chat_input("지금 어떤 기분이야?")
@@ -300,16 +278,16 @@ def render_chat_page():
     reply = stream_reply(user_input)
     if not reply: return
 
-    if st.session_state["is_paid"]:
+    if st.session_state.get("is_paid"):
         persist_user({"remaining_paid_uses": st.session_state["remaining_paid_uses"] - 1})
     else:
         persist_user({"usage_count": st.session_state["usage_count"] + 1})
 
-# ================= 사이드바 =================
+# ================= Sidebar =================
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 if PAGE == "chat":
-    if st.sidebar.button("💳 결제/FAQ 열기"):
+    if st.sidebar.button("💳 결제 / FAQ 열기"):
         st.query_params = {"uid": USER_ID, "page": "plans"}
         st.rerun()
 else:
