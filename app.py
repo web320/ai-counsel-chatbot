@@ -1,4 +1,4 @@
-import os, uuid, json
+import os, uuid, json, hmac
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -8,11 +8,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import firestore as gcf  # SERVER_TIMESTAMP
 
-APP_VERSION = "v1.1.0"
+APP_VERSION = "v1.1.1"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-FEEDBACK_COLLECTION = "feedback"   # 🔥 콘솔과 맞춤(단수)
-FREE_LIMIT = 4                     # 무료 체험 횟수
-PAID_LIMIT = 30                    # 결제 플랜 기본 횟수
+FEEDBACK_COLLECTION = "feedback"   # 콘솔과 동일(단수)
+FREE_LIMIT = 4                     # 무료 체험
+PAID_LIMIT = 30                    # 유료 기본 횟수
 DEFAULT_TONE = "따뜻하게"           # 톤 고정
 
 # ===== OPENAI =====
@@ -34,6 +34,15 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# ===== ADMIN KEY =====
+ADMIN_KEY = (st.secrets.get("ADMIN_KEY") or os.getenv("ADMIN_KEY")
+             or "6U4urDCJLr7D0EWa4nST")  # ← 네가 준 키로 폴백(배포 시 secrets로 옮겨줘!)
+def check_admin(pw: str) -> bool:
+    try:
+        return hmac.compare_digest(str(pw or ""), str(ADMIN_KEY))
+    except Exception:
+        return False
+
 # ===== QUERY PARAM =====
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
@@ -46,7 +55,6 @@ page = _qp_get("page", "chat")
 if not uid:
     uid = str(uuid.uuid4())
     st.query_params = {"uid": uid, "page": page}
-
 USER_ID = uid
 PAGE     = page
 
@@ -56,21 +64,10 @@ st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
 [data-testid="stSidebar"] * { font-size: 18px !important; }
-
-.user-bubble {
-    background: #b91c1c; color: white; border-radius: 12px;
-    padding: 10px 16px; margin: 8px 0; display: inline-block;
-}
-.bot-bubble {
-    font-size: 21px; line-height: 1.8; border-radius: 14px;
-    padding: 14px 18px; margin: 10px 0;
-    background: rgba(15,15,30,0.85); color: #fff;
-    border: 2px solid transparent;
-    border-image: linear-gradient(90deg, #ff8800, #ffaa00, #ff8800) 1;
-    animation: neon-glow 1.8s ease-in-out infinite alternate;
-}
-@keyframes neon-glow { from{box-shadow:0 0 5px #ff8800,0 0 10px #ffaa00;}
-to{box-shadow:0 0 20px #ff8800,0 0 40px #ffaa00,0 0 60px #ff8800;} }
+.user-bubble { background:#b91c1c;color:#fff;border-radius:12px;padding:10px 16px;margin:8px 0;display:inline-block; }
+.bot-bubble { font-size:21px;line-height:1.8;border-radius:14px;padding:14px 18px;margin:10px 0;background:rgba(15,15,30,.85);color:#fff;
+  border:2px solid transparent;border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;animation:neon-glow 1.8s ease-in-out infinite alternate; }
+@keyframes neon-glow { from{box-shadow:0 0 5px #ff8800,0 0 10px #ffaa00;} to{box-shadow:0 0 20px #ff8800,0 0 40px #ffaa00,0 0 60px #ff8800;} }
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,10 +77,11 @@ st.title("💙 마음을 기댈 수 있는 AI 친구")
 defaults = {
     "chat_history": [],
     "is_paid": False,
-    "limit": FREE_LIMIT,        # 무료 4회
+    "limit": FREE_LIMIT,
     "usage_count": 0,
     "plan": None,
     "remaining_paid_uses": 0,
+    "is_admin": False,
 }
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
@@ -97,15 +95,15 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
-# ===== OPENAI STREAM =====
+# ===== GPT STREAM =====
 def stream_reply(user_input: str):
     if client is None:
         st.error("OPENAI_API_KEY가 설정되어 있지 않습니다.")
         return
     sys_prompt = f"""
     너는 {DEFAULT_TONE} 말투의 심리상담사야.
-    - 감정을 공감하고 → 구체적인 조언 → 실천 제안 순으로 3문단 이내로 답해.
-    - 현실적으로, 문장은 짧게.
+    - 공감 → 구체 조언 → 실천 제안, 3문단 이내.
+    - 현실적이고 짧게.
     """
     try:
         stream = client.chat.completions.create(
@@ -134,19 +132,18 @@ def show_paypal_button(message):
     <div style='text-align:center;'>
         <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
         <a href='{PAYPAL_URL}' target='_blank'>
-            <button style='background:#0070ba;color:white;padding:12px 20px;
-            border:none;border-radius:10px;font-size:18px;cursor:pointer;'>
-            💳 PayPal로 결제하기 ($3)
+            <button style='background:#0070ba;color:white;padding:12px 20px;border:none;border-radius:10px;font-size:18px;cursor:pointer;'>
+              💳 PayPal로 결제하기 ($3)
             </button>
         </a>
         <p style='opacity:.75;margin-top:8px;'>
-          결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요. <br>
+          결제 후 카카오톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로 스크린샷을 보내주세요.<br>
           관리자 비밀번호를 알려드려요.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-# ===== FEEDBACK SAVE =====
+# ===== FEEDBACK =====
 def save_feedback(uid: str, text: str, page_name: str):
     try:
         doc = {
@@ -154,7 +151,7 @@ def save_feedback(uid: str, text: str, page_name: str):
             "feedback": text.strip(),
             "app_version": APP_VERSION,
             "page": page_name,
-            "ts": gcf.SERVER_TIMESTAMP,  # 서버 시간
+            "ts": gcf.SERVER_TIMESTAMP,
         }
         db.collection(FEEDBACK_COLLECTION).add(doc)
         st.toast("피드백이 저장되었어요 💙", icon="✅")
@@ -185,15 +182,12 @@ def render_chat_page():
         return
 
     # 라이트 감정 힌트
-    hint = ""
     if any(k in user_input for k in ["힘들", "피곤", "짜증", "불안", "우울"]):
-        hint = "💭 지금 마음이 많이 지쳐 있네요... 그래도 괜찮아요."
+        st.markdown("<div class='bot-bubble'>💭 많이 지쳐 있네요... 그래도 괜찮아요.</div>", unsafe_allow_html=True)
     elif any(k in user_input for k in ["행복", "좋아", "괜찮", "고마워"]):
-        hint = "🌤️ 그 기분, 참 소중하네요."
-    if hint:
-        st.markdown(f"<div class='bot-bubble'>{hint}</div>", unsafe_allow_html=True)
+        st.markdown("<div class='bot-bubble'>🌤️ 그 기분, 참 소중하네요.</div>", unsafe_allow_html=True)
 
-    # 대화
+    # 대화 스트림
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
     for token in stream_reply(user_input):
@@ -212,14 +206,14 @@ def render_chat_page():
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
 
-    # 체험 종료 시 CTA
+    # 체험 종료 CTA
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         show_paypal_button("무료 체험이 끝났어요. 다음 대화부터는 유료 이용권이 필요해요 💳")
 
     # 피드백
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("📝 대화에 대한 피드백을 남겨주세요")
-    fb = st.text_area("좋았던 점/아쉬운 점을 자유롭게 적어주세요",
+    fb = st.text_area("좋았던 점/아쉬운 점을 적어주세요",
                       placeholder="예: 위로가 많이 됐어요 / 답변이 조금 짧았어요 / 결제 안내가 헷갈려요")
     if st.button("📩 피드백 제출"):
         if fb and fb.strip():
@@ -238,8 +232,8 @@ def render_plans_page():
     cards_html = f"""
     <style>
       .pricing-wrap{{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;}}
-      .card{{width:280px;border-radius:16px;padding:18px;color:#fff;
-             background:rgba(255,255,255,0.05);box-shadow:0 6px 22px rgba(0,0,0,.25);}}
+      .card{{width:280px;border-radius:16px;padding:18px;color:#fff;background:rgba(255,255,255,.05);
+             box-shadow:0 6px 22px rgba(0,0,0,.25);}}
       .card.basic{{border:2px solid #ffaa00;}}
       .card.pro{{border:2px solid #00d4ff;}}
       .card h3{{margin:0;font-weight:700;}}
@@ -288,29 +282,42 @@ def render_plans_page():
     """
     components.html(header_html + cards_html, height=620, scrolling=False)
 
-    # 관리자 영역
+    # ---- 관리자 로그인/영역 ----
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("🔐 관리자 모드")
-    admin_pw = st.text_input("관리자 비밀번호", type="password")
-    if admin_pw == "4321":
-        st.success("관리자 인증 완료 ✅")
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✅ 베이직 30회 적용 ($3)"):
-                st.session_state.update({
-                    "is_paid": True, "limit": PAID_LIMIT, "usage_count": 0,
-                    "remaining_paid_uses": PAID_LIMIT, "plan": "basic"
-                })
-                user_ref.update(st.session_state)
-                st.success("🎉 베이직 30회 이용권이 적용되었어요!")
-        with c2:
-            if st.button("✅ 프로 100회 적용 ($6)"):
-                st.session_state.update({
-                    "is_paid": True, "limit": 100, "usage_count": 0,
-                    "remaining_paid_uses": 100, "plan": "pro"
-                })
-                user_ref.update(st.session_state)
-                st.success("💎 프로 100회 이용권이 적용되었어요!")
+
+    if not st.session_state.get("is_admin"):
+        pw = st.text_input("관리자 비밀번호", type="password", key="admin_pw_input")
+        if st.button("🔑 관리자 로그인"):
+            if check_admin(pw):
+                st.session_state["is_admin"] = True
+                st.success("관리자 인증 완료 ✅")
+            else:
+                st.error("비밀번호가 올바르지 않습니다.")
+        return
+
+    # (로그인 후) 이용권 적용 버튼
+    c1, c2, c3 = st.columns([1,1,1])
+    with c1:
+        if st.button("✅ 베이직 30회 적용 ($3)"):
+            st.session_state.update({
+                "is_paid": True, "limit": PAID_LIMIT, "usage_count": 0,
+                "remaining_paid_uses": PAID_LIMIT, "plan": "basic"
+            })
+            user_ref.update(st.session_state)
+            st.success("🎉 베이직 30회 이용권이 적용되었어요!")
+    with c2:
+        if st.button("✅ 프로 100회 적용 ($6)"):
+            st.session_state.update({
+                "is_paid": True, "limit": 100, "usage_count": 0,
+                "remaining_paid_uses": 100, "plan": "pro"
+            })
+            user_ref.update(st.session_state)
+            st.success("💎 프로 100회 이용권이 적용되었어요!")
+    with c3:
+        if st.button("🚪 로그아웃"):
+            st.session_state["is_admin"] = False
+            st.success("로그아웃되었습니다.")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
@@ -319,7 +326,6 @@ def render_plans_page():
 # ===== SIDEBAR =====
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
-
 if PAGE == "chat":
     if st.sidebar.button("💳 결제/FAQ 열기"):
         st.query_params = {"uid": USER_ID, "page": "plans"}
