@@ -1,26 +1,27 @@
 import os, uuid, json, hmac
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
 import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google.cloud import firestore as gcf  # SERVER_TIMESTAMP
 
-APP_VERSION = "v1.1.1"
+# ========= 앱 설정 =========
+APP_VERSION = "v1.2.0"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FEEDBACK_COLLECTION = "feedback"   # 콘솔과 동일(단수)
-FREE_LIMIT = 4                     # 무료 체험
-PAID_LIMIT = 30                    # 유료 기본 횟수
-DEFAULT_TONE = "따뜻하게"           # 톤 고정
+FREE_LIMIT = 4
+PAID_LIMIT = 30
+DEFAULT_TONE = "따뜻하게"
+DEFAULT_ADMIN_KEY = "6U4urDCJLr7D0EWa4nST"
 
-# ===== OPENAI =====
+# ========= OpenAI =========
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# ===== FIREBASE =====
+# ========= Firebase Admin =========
 def _firebase_config():
     raw = st.secrets.get("firebase")
     if raw is None:
@@ -34,16 +35,15 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ===== ADMIN KEY =====
-ADMIN_KEY = (st.secrets.get("ADMIN_KEY") or os.getenv("ADMIN_KEY")
-             or "6U4urDCJLr7D0EWa4nST")  # ← 네가 준 키로 폴백(배포 시 secrets로 옮겨줘!)
+# ========= Admin Key =========
+ADMIN_KEY = (st.secrets.get("ADMIN_KEY") or os.getenv("ADMIN_KEY") or DEFAULT_ADMIN_KEY)
 def check_admin(pw: str) -> bool:
     try:
         return hmac.compare_digest(str(pw or ""), str(ADMIN_KEY))
     except Exception:
         return False
 
-# ===== QUERY PARAM =====
+# ========= URL 파라미터 =========
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
     if isinstance(val, list):
@@ -58,7 +58,7 @@ if not uid:
 USER_ID = uid
 PAGE     = page
 
-# ===== STYLE =====
+# ========= 공통 스타일 =========
 st.set_page_config(page_title="당신을 기댈 수 있는 AI 친구", layout="wide")
 st.markdown("""
 <style>
@@ -73,7 +73,7 @@ html, body, [class*="css"] { font-size: 18px; }
 
 st.title("💙 마음을 기댈 수 있는 AI 친구")
 
-# ===== SESSION =====
+# ========= 세션 =========
 defaults = {
     "chat_history": [],
     "is_paid": False,
@@ -95,7 +95,7 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
-# ===== GPT STREAM =====
+# ========= GPT 스트림 =========
 def stream_reply(user_input: str):
     if client is None:
         st.error("OPENAI_API_KEY가 설정되어 있지 않습니다.")
@@ -124,7 +124,7 @@ def stream_reply(user_input: str):
         st.error("OpenAI 응답 오류")
         st.code(str(e))
 
-# ===== CTA =====
+# ========= 결제 CTA =========
 def show_paypal_button(message):
     st.warning(message)
     st.markdown(f"""
@@ -143,25 +143,31 @@ def show_paypal_button(message):
     </div>
     """, unsafe_allow_html=True)
 
-# ===== FEEDBACK =====
+# ========= 피드백 저장(확정 저장) =========
 def save_feedback(uid: str, text: str, page_name: str):
     try:
+        content = (text or "").strip()
+        if not content:
+            st.warning("내용을 입력해주세요 😊")
+            return None
         doc = {
             "user_id": uid,
-            "feedback": text.strip(),
+            "feedback": content,
             "app_version": APP_VERSION,
             "page": page_name,
-            "ts": gcf.SERVER_TIMESTAMP,
+            # 서버센티넬 대신 ISO 문자열 → 어떤 환경에서도 바로 보임/정렬 쉬움
+            "ts": datetime.now(timezone.utc).isoformat()
         }
-        db.collection(FEEDBACK_COLLECTION).add(doc)
-        st.toast("피드백이 저장되었어요 💙", icon="✅")
-        return True
+        ref = db.collection(FEEDBACK_COLLECTION).add(doc)[1]  # (write_result, ref)
+        st.success("피드백이 저장되었어요 💙")
+        st.info(f"문서 ID: {ref.id}")  # 👉 콘솔에서 바로 찾을 수 있게
+        return ref.id
     except Exception as e:
         st.error("피드백 저장 실패")
         st.code(str(e))
-        return False
+        return None
 
-# ===== CHAT PAGE =====
+# ========= 채팅 페이지 =========
 def render_chat_page():
     # 이용 제한
     if st.session_state.is_paid:
@@ -221,7 +227,7 @@ def render_chat_page():
         else:
             st.warning("내용을 입력해주세요 😊")
 
-# ===== PLANS PAGE =====
+# ========= 결제/플랜 페이지 =========
 def render_plans_page():
     header_html = """
     <div style='text-align:center; padding-top:8px;'>
@@ -296,7 +302,6 @@ def render_plans_page():
                 st.error("비밀번호가 올바르지 않습니다.")
         return
 
-    # (로그인 후) 이용권 적용 버튼
     c1, c2, c3 = st.columns([1,1,1])
     with c1:
         if st.button("✅ 베이직 30회 적용 ($3)"):
@@ -319,11 +324,21 @@ def render_plans_page():
             st.session_state["is_admin"] = False
             st.success("로그아웃되었습니다.")
 
+    st.markdown("---")
+    st.caption("📥 최근 피드백 10건(저장 확인용)")
+    try:
+        docs = db.collection(FEEDBACK_COLLECTION).order_by("ts", direction=firestore.Query.DESCENDING).limit(10).stream()
+        for d in docs:
+            data = d.to_dict() or {}
+            st.write(f"• [{d.id}] {data.get('ts','')} — {data.get('feedback','')}")
+    except Exception as e:
+        st.code(f"피드백 로드 오류: {e}")
+
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
         st.rerun()
 
-# ===== SIDEBAR =====
+# ========= 사이드바 & 라우팅 =========
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 if PAGE == "chat":
@@ -335,7 +350,6 @@ else:
         st.query_params = {"uid": USER_ID, "page": "chat"}
         st.rerun()
 
-# ===== MAIN =====
 if PAGE == "chat":
     render_chat_page()
 elif PAGE == "plans":
