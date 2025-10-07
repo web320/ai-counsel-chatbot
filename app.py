@@ -55,7 +55,7 @@ USER_ID = uid
 PAGE     = page
 
 # ================= Styles =================
-st.set_page_config(page_title="💙 마음을 기댈 수 있는 AI 친구", layout="wide")
+st.set_page_config(page_title="💙 마음을 기댈 수 있는 따뜻한 AI 친구", layout="wide")
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
@@ -77,7 +77,7 @@ html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
 }
 </style>
 """, unsafe_allow_html=True)
-st.title("💙 마음을 기댈 수 있는 AI 친구")
+st.title("💙 마음을 기댈 수 있는 따뜻한 AI 친구")
 
 # === 자동 색상 반전 ===
 def inject_auto_contrast():
@@ -132,12 +132,12 @@ def get_emotion_prompt(msg: str):
     if any(w in msg for w in ["불안", "초조", "걱정", "긴장"]):
         return "사용자가 불안을 표현했습니다. 부드럽게 안정감을 주는 말을 해주세요."
     if any(w in msg for w in ["외로워", "혼자", "쓸쓸", "고독"]):
-        return "사용자가 외로움을 표현했습니다. 누군가 곁에 있는 듯한 말로 위로해주세요."
+        return "사용자가 외로움을 표현했습니다. 마음을 토닥여주고 누군가 곁에 있는 듯한 말로 위로해주세요."
     if any(w in msg for w in ["힘들", "귀찮", "하기 싫", "지쳤"]):
         return "사용자가 무기력을 표현했습니다. 강요하지 않고 존재 자체를 인정해주세요."
     if any(w in msg for w in ["싫어", "쓸모없", "못해", "가치없"]):
         return "사용자가 자기혐오를 표현했습니다. 공감하며 따뜻하게 자존감을 세워주세요."
-    return "사용자가 일상 대화를 하고 있습니다. 다정하고 편하게 이어가세요."
+    return "사용자가 일상 대화를 하고 있습니다. 일상의 일을 공감하고 따뜻하게 대화를 이어가주세요."
 
 # ================= OpenAI 답변 =================
 def stream_reply(user_input):
@@ -146,7 +146,7 @@ def stream_reply(user_input):
     sys = f"""
 당신은 {DEFAULT_TONE} 말투의 심리상담사입니다.
 감정별 가이드: {emotion_prompt}
-답변은 2~3문단으로 따뜻하고 공감 있게 해주세요.
+답변은 3~4문단으로 따뜻하고 공감 있게 해주세요.
 """
     try:
         stream = client.chat.completions.create(
@@ -219,7 +219,7 @@ def render_plans_page():
                 "remaining_paid_uses": BASIC_LIMIT
             }
             if persist_user(fields):
-                st.success("🎉 이용권이 적용되었습니다. 채팅으로 이동 중...")
+                st.success("🎉 이용권이 적용되었습니다! 감사합니다! 채팅으로 이동 중...")
                 time.sleep(1)
                 st.session_state.clear()
                 st.query_params = {"uid": USER_ID, "page": "chat"}
@@ -239,7 +239,7 @@ def render_plans_page():
                     "feedback": feedback.strip(),
                     "created_at": datetime.now(timezone.utc).isoformat()
                 })
-                st.success("💖 피드백이 소중히 전달되었습니다. 감사합니다!")
+                st.success("💖 피드백이 소중히 전달되었습니다. 진심으로 감사합니다!")
             except Exception as e:
                 st.error(f"Firestore 오류: {e}")
         else:
@@ -254,24 +254,24 @@ def render_chat_page():
     status_chip()
     if "greeted" not in st.session_state:
         greetings = [
-            "안녕 💙 오늘 하루 어땠어?",
-            "마음이 조금 무거운 날이지? 내가 들어줄게 ☁️",
-            "요즘 많이 지쳤지... 잠깐 쉬어가자 🌙",
-            "오늘은 그냥 나랑 얘기만 하자 🌷",
-            "괜찮아, 잘하고 있어. 난 네 얘기 듣고 싶어 🕊️"
+            "안녕 💙 오늘 하루 많이 지쳤지?? 궁금해 듣고싶어요",
+            "마음이 조금 무거운 날이죠? 제가 마음껏 들을께요 ☁️",
+            "요즘 많이 지쳤죠??  =여기서 현실을 잠시 잊고 쉬어가세요 🌙",
+            "오늘은 저랑 얘기만 해도 괜찮아요 🌷",
+            "괜찮아요, 잘하고 있어요. 🕊️"
         ]
         greet = random.choice(greetings)
         st.markdown(f"<div class='bot-bubble'>🧡 {greet}</div>", unsafe_allow_html=True)
         st.session_state["greeted"] = True
 
     if not st.session_state.get("is_paid") and st.session_state["usage_count"] >= FREE_LIMIT:
-        st.warning("🌱 무료 체험이 끝났어요. 유료 이용권을 구매해주세요.")
+        st.warning("🌱 무료 체험이 끝났습니다. 더 이용하고 싶으시다면 유료 이용권을 구매해주세요.")
         return
     if st.session_state.get("is_paid") and st.session_state["remaining_paid_uses"] <= 0:
         st.warning("💳 이용권이 소진되었습니다. 결제 후 이용해주세요.")
         return
 
-    user_input = st.chat_input("지금 어떤 기분이야?")
+    user_input = st.chat_input("지금 어떤 기분이예요?")
     if not user_input: return
 
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
