@@ -1,5 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.0 (감정인식 + 결제 피드백 통합)
+# 💙 AI 심리상담 앱 v1.8.1
+# (감정인식 + 결제 안내 + 피드백 + 자동 색상반전)
 # ==========================================
 import os, uuid, json, time, hmac
 from datetime import datetime, timezone
@@ -11,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.0"
+APP_VERSION = "v1.8.1"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
@@ -67,30 +68,54 @@ st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
 [data-testid="stSidebar"] * { font-size: 18px !important; }
-
-/* 버블 디자인 */
+/* 버블 */
 .user-bubble { background:#b91c1c;color:#fff;border-radius:12px;padding:10px 16px;margin:8px 0;display:inline-block; }
 .bot-bubble { font-size:21px;line-height:1.8;border-radius:14px;padding:14px 18px;margin:10px 0;
-  background:rgba(15,15,30,.85);color:#fff;
-  border:2px solid transparent;border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
+  background:rgba(15,15,30,.85);color:#fff;border:2px solid transparent;
+  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
   animation:neon-glow 1.8s ease-in-out infinite alternate; }
 @keyframes neon-glow { from{box-shadow:0 0 5px #ff8800;} to{box-shadow:0 0 25px #ffaa00;} }
-
-/* 상태 표시 */
+/* 상태칩 */
 .status { font-size:15px; padding:8px 12px; border-radius:10px; display:inline-block;
   margin-bottom:8px; background:rgba(255,255,255,.06); }
-
-/* 자동 다크/라이트 모드 지원 */
-@media (prefers-color-scheme: light) {
-  body, html { background:#fff; color:#111; }
-  .bot-bubble { background:#f7f7f7; color:#111; border-image:linear-gradient(90deg,#ff8800,#ffaa00) 1; }
-  .status { background:#eee; color:#333; }
-  .user-bubble { background:#ff4d4d; }
-}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("💙 마음을 기댈 수 있는 AI 친구")
+
+# === 전역: 배경 밝기 감지 → 자동 색상 반전(JS는 components.html로 주입) ===
+def inject_auto_contrast():
+    components.html("""
+    <script>
+    (function(){
+      function parseRGB(c){var m=c&&c.match(/\\d+/g); return m?m.map(Number):[255,255,255];}
+      function setTheme(){
+        var bg = getComputedStyle(document.body).backgroundColor;
+        var rgb = parseRGB(bg);
+        var brightness = 0.299*rgb[0] + 0.587*rgb[1] + 0.114*rgb[2];
+        var root = document.documentElement;
+        if(brightness > 180){ // Light
+          root.style.setProperty('--text-color','#111');
+          root.style.setProperty('--sub-color','#333');
+          root.style.setProperty('--link-color','#0070f3');
+        } else { // Dark
+          root.style.setProperty('--text-color','#fff');
+          root.style.setProperty('--sub-color','#ddd');
+          root.style.setProperty('--link-color','#9CDCFE');
+        }
+      }
+      new MutationObserver(setTheme).observe(document.body,{attributes:true,childList:true,subtree:true});
+      setTheme();
+    })();
+    </script>
+    <style>
+      body, html { color: var(--text-color); transition: color .3s ease, background-color .3s ease; }
+      p, span, div, h1, h2, h3, h4, h5, h6, label { color: var(--text-color) !important; }
+      a, b { color: var(--link-color) !important; }
+      .status { color: var(--sub-color) !important; }
+    </style>
+    """, height=0)
+inject_auto_contrast()
 
 # ================= Firestore User =================
 defaults = {"is_paid": False, "plan": None, "limit": FREE_LIMIT, "usage_count": 0, "remaining_paid_uses": 0}
@@ -117,16 +142,15 @@ def persist_user(fields: dict):
 # ================= 감정 인식 로직 =================
 def get_emotion_prompt(user_message: str) -> str:
     text = user_message.lower()
-    if any(word in text for word in ["불안", "초조", "걱정", "긴장"]):
+    if any(w in text for w in ["불안", "초조", "걱정", "긴장"]):
         return "사용자가 불안을 표현했습니다. 원인을 묻지 말고 지금 그 감정을 그대로 인정해주는 따뜻한 말로 답해주세요."
-    elif any(word in text for word in ["외로워", "혼자", "쓸쓸", "고독"]):
+    if any(w in text for w in ["외로워", "혼자", "쓸쓸", "고독"]):
         return "사용자가 외로움을 표현했습니다. 누군가 곁에 있는 듯한 문장을 만들어주세요."
-    elif any(word in text for word in ["나 싫어", "못해", "쓸모없어", "가치없어"]):
+    if any(w in text for w in ["나 싫어", "못해", "쓸모없어", "가치없어"]):
         return "사용자가 자기혐오를 표현했습니다. 공감적으로 이해하고, 자존감을 회복시키는 문장을 포함해주세요."
-    elif any(word in text for word in ["하기 싫", "지쳤", "힘들어", "귀찮"]):
+    if any(w in text for w in ["하기 싫", "지쳤", "힘들어", "귀찮"]):
         return "사용자가 무기력을 표현했습니다. 행동을 강요하지 않고, 존재 자체가 괜찮다는 위로를 전달해주세요."
-    else:
-        return "사용자가 일상 대화를 하고 있습니다. 부드럽고 따뜻하게 이어가세요."
+    return "사용자가 일상 대화를 하고 있습니다. 부드럽고 따뜻하게 이어가세요."
 
 # ================= OpenAI 답변 =================
 def stream_reply(text):
@@ -192,53 +216,7 @@ def render_plans_page():
     </div>
     """, height=320)
 
-   st.markdown("""
-<script>
-(function() {
-  const body = document.body;
-  const root = document.documentElement;
-
-  function setTheme() {
-    const bgColor = window.getComputedStyle(body).backgroundColor;
-    // 밝은 배경이면 다크 텍스트로, 어두운 배경이면 밝은 텍스트로
-    const rgb = bgColor.match(/\\d+/g);
-    if (!rgb) return;
-    const brightness = (0.299 * rgb[0]) + (0.587 * rgb[1]) + (0.114 * rgb[2]);
-    if (brightness > 180) {
-      // Light mode
-      root.style.setProperty('--text-color', '#111');
-      root.style.setProperty('--sub-color', '#333');
-      root.style.setProperty('--link-color', '#0070f3');
-    } else {
-      // Dark mode
-      root.style.setProperty('--text-color', '#fff');
-      root.style.setProperty('--sub-color', '#ddd');
-      root.style.setProperty('--link-color', '#9CDCFE');
-    }
-  }
-
-  const observer = new MutationObserver(setTheme);
-  observer.observe(body, { attributes: true, childList: true, subtree: true });
-  setTheme();
-})();
-</script>
-<style>
-body, html {
-  color: var(--text-color);
-  transition: color 0.3s ease, background-color 0.3s ease;
-}
-p, span, div, h1, h2, h3, h4, h5, h6, label {
-  color: var(--text-color) !important;
-}
-a, b {
-  color: var(--link-color) !important;
-}
-.status {
-  color: var(--sub-color) !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
+    st.markdown("---")
     st.subheader("🔐 관리자 인증 (자동 적용)")
 
     pw = st.text_input("관리자 비밀번호", type="password")
@@ -332,4 +310,3 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
-
