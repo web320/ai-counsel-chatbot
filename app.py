@@ -192,7 +192,53 @@ def render_plans_page():
     </div>
     """, height=320)
 
-    st.markdown("---")
+   st.markdown("""
+<script>
+(function() {
+  const body = document.body;
+  const root = document.documentElement;
+
+  function setTheme() {
+    const bgColor = window.getComputedStyle(body).backgroundColor;
+    // 밝은 배경이면 다크 텍스트로, 어두운 배경이면 밝은 텍스트로
+    const rgb = bgColor.match(/\\d+/g);
+    if (!rgb) return;
+    const brightness = (0.299 * rgb[0]) + (0.587 * rgb[1]) + (0.114 * rgb[2]);
+    if (brightness > 180) {
+      // Light mode
+      root.style.setProperty('--text-color', '#111');
+      root.style.setProperty('--sub-color', '#333');
+      root.style.setProperty('--link-color', '#0070f3');
+    } else {
+      // Dark mode
+      root.style.setProperty('--text-color', '#fff');
+      root.style.setProperty('--sub-color', '#ddd');
+      root.style.setProperty('--link-color', '#9CDCFE');
+    }
+  }
+
+  const observer = new MutationObserver(setTheme);
+  observer.observe(body, { attributes: true, childList: true, subtree: true });
+  setTheme();
+})();
+</script>
+<style>
+body, html {
+  color: var(--text-color);
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+p, span, div, h1, h2, h3, h4, h5, h6, label {
+  color: var(--text-color) !important;
+}
+a, b {
+  color: var(--link-color) !important;
+}
+.status {
+  color: var(--sub-color) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
     st.subheader("🔐 관리자 인증 (자동 적용)")
 
     pw = st.text_input("관리자 비밀번호", type="password")
