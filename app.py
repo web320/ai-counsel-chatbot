@@ -10,7 +10,9 @@ from google.cloud import firestore as gcf  # SERVER_TIMESTAMP & project 확인
 
 # ===== OPENAI =====
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+def _get_openai_key():
+    return os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+OPENAI_API_KEY = _get_openai_key()
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # ===== FIREBASE =====
@@ -93,26 +95,36 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
-# ===== GPT HELPER =====
+# ===== GPT STREAM (안정화) =====
 def stream_reply(user_input: str, tone: str):
     if client is None:
-        yield type("x", (), {"choices":[type("y",(),{"delta":type("z",(),{"content":"⚠️ OPENAI_API_KEY가 설정되어 있지 않습니다."})()})()]})()
-        return
+        raise RuntimeError("OPENAI_API_KEY가 설정되어 있지 않습니다. Streamlit Secrets 또는 환경변수로 넣어주세요.")
     sys_prompt = f"""
     너는 {tone} 말투의 심리상담사야.
     - 감정을 공감하고 → 구체적인 조언 → 실천 제안 순으로 3문단 이내로 답해.
     - 따뜻하고 현실적으로, 문장은 짧게 써줘.
     """
-    return client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0.4,
-        max_tokens=600,
-        stream=True,
-        messages=[
-            {"role": "system", "content": sys_prompt},
-            {"role": "user", "content": user_input}
-        ]
-    )
+    try:
+        stream = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.4,
+            max_tokens=600,
+            stream=True,
+            messages=[
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            timeout=60  # 초
+        )
+        for chunk in stream:
+            delta = getattr(chunk.choices[0], "delta", None)
+            if delta and getattr(delta, "content", None):
+                yield delta.content
+    except Exception as e:
+        # 스트림 호출 예외를 화면에 표시
+        st.error("OpenAI 응답 중 오류가 발생했어요.")
+        st.code(str(e))
+        return
 
 # ===== PAYPAL CTA =====
 def show_paypal_button(message):
@@ -131,7 +143,7 @@ def show_paypal_button(message):
     </div>
     """, unsafe_allow_html=True)
 
-# ===== FEEDBACK SAVE =====
+# ===== FEEDBACK SAVE (안정화) =====
 def save_feedback(uid: str, text: str):
     try:
         if not text or not text.strip():
@@ -153,8 +165,12 @@ def save_feedback(uid: str, text: str):
 
 # ===== CHAT PAGE =====
 def render_chat_page():
-    st.caption("마음 편히 얘기해 💬")
+    # 키/프로젝트 간단 상태 표시(디버깅 도움)
+    with st.expander("🔎 연결 상태 보기", expanded=False):
+        st.write("OpenAI Key 설정됨:", bool(OPENAI_API_KEY))
+        st.write("Firebase Project:", db.project)
 
+    st.caption("마음 편히 얘기해 💬")
     tone = st.radio(
         "🎭 상담 톤을 선택해주세요:",
         ["따뜻하게", "직설적으로", "철학적으로"],
@@ -193,15 +209,17 @@ def render_chat_page():
     # 대화
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
-    stream = stream_reply(user_input, tone)
-    for chunk in stream:
-        delta = chunk.choices[0].delta
-        if getattr(delta, "content", None):
-            streamed += delta.content
+    try:
+        for token in stream_reply(user_input, tone):
+            streamed += token
             placeholder.markdown(
                 f"<div class='bot-bubble'>🧡 {streamed.replace('\n\n','<br><br>')}</div>",
                 unsafe_allow_html=True
             )
+    except Exception as e:
+        st.error("응답 생성 중 문제가 생겼어요.")
+        st.code(str(e))
+        return
 
     # 기록/차감
     st.session_state.chat_history.append((user_input, streamed))
