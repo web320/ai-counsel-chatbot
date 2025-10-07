@@ -143,22 +143,11 @@ def get_emotion_prompt(msg: str):
 
 # ================= OpenAI 답변 + 광고 삽입 =================
 def stream_reply(user_input):
-    if not client: return
-    emotion_prompt = get_emotion_prompt(user_input)
-    sys = f"""
-당신은 {DEFAULT_TONE} 말투의 심리상담사입니다.
-감정별 가이드: {emotion_prompt}
-답변은 3~4문단으로 따뜻하고 공감 있게 해주세요.
-"""
-    try:
-        stream = client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0.85,
-            max_tokens=400,
-            stream=True,
-            messages=[
-                {"role": "system", "content": sys},
-                {"role": "user", "content": user_input}
+  def stream_reply(user_input):
+    # 임시모드: OpenAI 없이 더미 응답
+    st.markdown(f"<div class='bot-bubble'>🧡 (테스트 모드) '{user_input}' 에 대한 답변 예시입니다.<br>지금은 AI 연결이 꺼져있어요.</div>", unsafe_allow_html=True)
+    return "테스트 모드 응답"
+
             ]
         )
         msg, placeholder = "", st.empty()
