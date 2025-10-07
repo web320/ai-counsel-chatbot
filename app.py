@@ -1,5 +1,5 @@
 import os, uuid, json
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
@@ -80,8 +80,7 @@ st.title("💙 마음을 기댈 수 있는 AI 친구")
 # ===== SESSION =====
 defaults = {
     "chat_history": [], "is_paid": False, "limit": 4, "usage_count": 0,
-    "plan": None, "purchase_ts": None, "refund_until_ts": None,
-    "sessions_since_purchase": 0, "refund_count": 0, "refund_requested": False
+    "plan": None, "tone": "따뜻하게"
 }
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
@@ -95,12 +94,12 @@ if snap.exists:
 else:
     user_ref.set(defaults)
 
-# ===== GPT STREAM =====
-def stream_reply(user_input: str):
-    sys_prompt = """너는 다정하고 현실적인 심리상담사야.
+# ===== GPT HELPER =====
+def stream_reply(user_input: str, tone: str):
+    sys_prompt = f"""
+    너는 {tone} 말투의 심리상담사야.
     - 감정을 공감하고 → 구체적인 조언 → 실천 제안 순으로 3문단 이내로 답해.
-    - 문체는 따뜻하고 현실적으로, 문장은 짧고 쉽게 써줘.
-    - 너무 장황하거나 이론적으로 설명하지 마.
+    - 따뜻하고 현실적으로, 문장은 짧게 써줘.
     """
     return client.chat.completions.create(
         model="gpt-4o-mini",
@@ -113,9 +112,30 @@ def stream_reply(user_input: str):
         ]
     )
 
+def make_summary(text: str):
+    """마음 한 줄 요약 생성"""
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "사용자의 대화 내용을 요약해서 오늘의 마음 한 줄 명언처럼 만들어줘."},
+            {"role": "user", "content": text}
+        ]
+    )
+    return res.choices[0].message.content.strip()
+
 # ===== CHAT PAGE =====
 def render_chat_page():
     st.caption("마음 편히 얘기해 💬")
+
+    # 상담 톤 선택
+    tone = st.radio(
+        "🎭 상담 톤을 선택해주세요:",
+        ["따뜻하게", "직설적으로", "철학적으로"],
+        horizontal=True,
+        index=["따뜻하게", "직설적으로", "철학적으로"].index(st.session_state.tone)
+    )
+    st.session_state.tone = tone
+    user_ref.update({"tone": tone})
 
     if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
         st.warning("🚫 무료 4회가 모두 사용되었습니다.")
@@ -128,17 +148,33 @@ def render_chat_page():
     if not user_input:
         return
 
+    # 간단한 감정 반응 (피드백)
+    mood_hint = ""
+    if any(k in user_input for k in ["힘들", "피곤", "짜증", "불안", "우울"]):
+        mood_hint = "💭 지금 마음이 많이 지쳐 있네요... 그래도 괜찮아요."
+    elif any(k in user_input for k in ["행복", "좋아", "괜찮", "고마워"]):
+        mood_hint = "🌤️ 그 기분, 참 소중하네요."
+    if mood_hint:
+        st.markdown(f"<div class='bot-bubble'>{mood_hint}</div>", unsafe_allow_html=True)
+
+    # 사용자 입력 표시
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
 
-    for chunk in stream_reply(user_input):
+    # GPT 답변 스트리밍
+    for chunk in stream_reply(user_input, tone):
         delta = chunk.choices[0].delta
         if getattr(delta, "content", None):
             streamed += delta.content
             safe_stream = streamed.replace("\n\n", "<br><br>")
             placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe_stream}</div>", unsafe_allow_html=True)
 
-    st.session_state.chat_history.append((user_input, streamed))
+    # 한 줄 요약
+    summary = make_summary(user_input)
+    st.markdown(f"<div class='bot-bubble'>💡 오늘의 마음 노트: <b>{summary}</b></div>", unsafe_allow_html=True)
+
+    # 기록 저장
+    st.session_state.chat_history.append((user_input, streamed, summary))
 
     if not st.session_state.is_paid:
         st.session_state.usage_count += 1
@@ -147,9 +183,6 @@ def render_chat_page():
             st.success("무료 체험이 끝났어요. 결제 페이지로 이동합니다.")
             st.query_params = {"uid": USER_ID, "page": "plans"}
             st.rerun()
-    else:
-        st.session_state.sessions_since_purchase += 1
-        user_ref.update({"sessions_since_purchase": st.session_state.sessions_since_purchase})
 
 # ===== PLANS PAGE =====
 def render_plans_page():
