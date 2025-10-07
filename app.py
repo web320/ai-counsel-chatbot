@@ -7,21 +7,20 @@ import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ===== App Config =====
-APP_VERSION = "v1.3.0"
+# ============ App Config ============
+APP_VERSION = "v1.4.0"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-FEEDBACK_COLLECTION = "feedback"   # 콘솔과 동일(단수)
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
 PRO_LIMIT   = 100
-DEFAULT_TONE = "따뜻하게"
+DEFAULT_TONE = "따뜻하게"  # 고정 톤
 
-# ===== OpenAI =====
+# ============ OpenAI ============
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# ===== Firebase Admin =====
+# ============ Firebase Admin ============
 def _firebase_config():
     raw = st.secrets.get("firebase")
     if raw is None:
@@ -35,14 +34,16 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ===== Admin Keys (둘 다 허용) =====
-PRIMARY_KEY = st.secrets.get("ADMIN_KEY") or os.getenv("ADMIN_KEY") or "6U4urDCJLr7D0EWa4nST"
-LEGACY_KEY  = "4321"
-def check_admin(pw: str) -> bool:
-    candidates = [PRIMARY_KEY, LEGACY_KEY]
-    return any(k and hmac.compare_digest(str(pw or ""), str(k)) for k in candidates)
+# ============ Admin Keys (둘 다 허용 + Secrets 덮어쓰기) ============
+ADMIN_KEYS = []
+for k in [st.secrets.get("ADMIN_KEY"), os.getenv("ADMIN_KEY"), "6U4urDCJLr7D0EWa4nST", "4321"]:
+    if k and k not in ADMIN_KEYS:
+        ADMIN_KEYS.append(str(k))
 
-# ===== Query Params =====
+def check_admin(pw: str) -> bool:
+    return any(hmac.compare_digest(str(pw or ""), key) for key in ADMIN_KEYS)
+
+# ============ Query Params ============
 def _qp_get(name: str, default=None):
     val = st.query_params.get(name)
     if isinstance(val, list):
@@ -57,7 +58,7 @@ if not uid:
 USER_ID = uid
 PAGE     = page
 
-# ===== UI Style =====
+# ============ Global Styles ============
 st.set_page_config(page_title="당신을 기댈 수 있는 AI 친구", layout="wide")
 st.markdown("""
 <style>
@@ -67,12 +68,13 @@ html, body, [class*="css"] { font-size: 18px; }
 .bot-bubble { font-size:21px;line-height:1.8;border-radius:14px;padding:14px 18px;margin:10px 0;background:rgba(15,15,30,.85);color:#fff;
   border:2px solid transparent;border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;animation:neon-glow 1.8s ease-in-out infinite alternate; }
 @keyframes neon-glow { from{box-shadow:0 0 5px #ff8800,0 0 10px #ffaa00;} to{box-shadow:0 0 20px #ff8800,0 0 40px #ffaa00,0 0 60px #ff8800;} }
+.status { font-size:15px; padding:8px 12px; border-radius:10px; display:inline-block; margin-bottom:8px; background:rgba(255,255,255,.06); }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("💙 마음을 기댈 수 있는 AI 친구")
 
-# ===== Session & User Doc =====
+# ============ Session & User Doc ============
 defaults = {
     "chat_history": [],
     "is_paid": False,
@@ -90,15 +92,22 @@ snap = user_ref.get()
 if snap.exists:
     data = snap.to_dict() or {}
     for k, v in defaults.items():
-        st.session_state[k] = data.get(k, v) if data.get(k, v) is not None else st.session_state[k]
+        if data.get(k) is not None:
+            st.session_state[k] = data.get(k)
 else:
     user_ref.set(defaults)
 
-# ===== Helpers =====
+# ============ Helpers ============
 def persist_user(fields: dict) -> bool:
-    """users/{USER_ID}에 필요한 필드만 merge 저장하고 세션 반영"""
+    """users/{USER_ID}에 필요한 필드만 merge 저장 + 검증"""
     try:
-        db.collection("users").document(USER_ID).set(fields, merge=True)
+        user_ref.set(fields, merge=True)
+        # 저장 직후 재조회하여 확정 검증
+        re = user_ref.get().to_dict() or {}
+        ok = all(re.get(k) == v for k, v in fields.items())
+        if not ok:
+            st.error("저장 검증 실패: 다시 시도해주세요.")
+            return False
         st.session_state.update(fields)
         return True
     except Exception as e:
@@ -137,40 +146,41 @@ def save_feedback(uid: str, text: str, page_name: str):
             "page": page_name,
             "ts": datetime.now(timezone.utc).isoformat()
         }
-        # 안전하게 명시적 ID 생성 후 set
-        doc_ref = db.collection(FEEDBACK_COLLECTION).document()
-        doc_ref.set(doc)
+        dr = db.collection("feedback").document()
+        dr.set(doc)
         st.success("피드백이 저장되었어요 💙")
-        st.info(f"문서 ID: {doc_ref.id}")
-        return doc_ref.id
+        st.info(f"문서 ID: {dr.id}")
+        return dr.id
     except Exception as e:
         st.error("피드백 저장 실패")
         st.code(str(e))
         return None
 
-def apply_plan(plan: str):
-    if plan == "basic":
-        fields = {
-            "is_paid": True, "plan": "basic",
-            "limit": BASIC_LIMIT,
-            "usage_count": 0,
-            "remaining_paid_uses": BASIC_LIMIT,
-        }
-    elif plan == "pro":
-        fields = {
-            "is_paid": True, "plan": "pro",
-            "limit": PRO_LIMIT,
-            "usage_count": 0,
-            "remaining_paid_uses": PRO_LIMIT,
-        }
-    else:
-        return
+def apply_plan_basic():
+    fields = {
+        "is_paid": True, "plan": "basic",
+        "limit": BASIC_LIMIT,
+        "usage_count": 0,
+        "remaining_paid_uses": BASIC_LIMIT,
+    }
     if persist_user(fields):
-        st.success("권한 적용 완료! 채팅으로 이동합니다.")
+        st.success("베이직 30회 적용 완료! 채팅으로 이동합니다.")
         st.query_params = {"uid": USER_ID, "page": "chat"}
         st.rerun()
 
-# ===== OpenAI Stream =====
+def apply_plan_pro():
+    fields = {
+        "is_paid": True, "plan": "pro",
+        "limit": PRO_LIMIT,
+        "usage_count": 0,
+        "remaining_paid_uses": PRO_LIMIT,
+    }
+    if persist_user(fields):
+        st.success("프로 100회 적용 완료! 채팅으로 이동합니다.")
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
+
+# ============ OpenAI Stream ============
 def stream_reply(user_input: str):
     if client is None:
         st.error("OPENAI_API_KEY가 설정되어 있지 않습니다.")
@@ -199,35 +209,45 @@ def stream_reply(user_input: str):
         st.error("OpenAI 응답 오류")
         st.code(str(e))
 
-# ===== Pages =====
+# ============ Pages ============
+def render_status_chip():
+    if st.session_state.get("is_paid"):
+        st.markdown(
+            f"<div class='status'>💎 유료({st.session_state.get('plan')}) — 남은 {st.session_state.get('remaining_paid_uses',0)}/{st.session_state.get('limit',0)}회</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        left = int(st.session_state.get("limit", FREE_LIMIT)) - int(st.session_state.get("usage_count", 0))
+        st.markdown(
+            f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>",
+            unsafe_allow_html=True
+        )
+
 def render_chat_page():
-    # 제한/잔여 표시
+    render_status_chip()
+
+    # 제한 로직
     if st.session_state.get("is_paid"):
         remaining = int(st.session_state.get("remaining_paid_uses", 0))
-        st.caption(f"💎 남은 상담 횟수: {remaining}회 / {st.session_state.get('limit', 0)}회")
         if remaining <= 0:
             show_paypal_button("💳 이용권이 모두 소진되었습니다. 새로 결제 후 이용해주세요.")
             return
     else:
         used = int(st.session_state.get("usage_count", 0))
-        left = int(st.session_state.get("limit", FREE_LIMIT)) - used
-        if used >= st.session_state.get("limit", FREE_LIMIT):
+        if used >= int(st.session_state.get("limit", FREE_LIMIT)):
             show_paypal_button("무료 체험이 모두 끝났어요 💙")
             return
-        st.caption(f"🌱 무료 체험 남은 횟수: {left}회")
 
-    # 입력
+    # 입력 & 라이트 힌트
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input:
         return
-
-    # 가벼운 감정 힌트
     if any(k in user_input for k in ["힘들", "피곤", "짜증", "불안", "우울"]):
         st.markdown("<div class='bot-bubble'>💭 많이 지쳐 있네요... 그래도 괜찮아요.</div>", unsafe_allow_html=True)
     elif any(k in user_input for k in ["행복", "좋아", "괜찮", "고마워"]):
         st.markdown("<div class='bot-bubble'>🌤️ 그 기분, 참 소중하네요.</div>", unsafe_allow_html=True)
 
-    # 대화 스트림
+    # 스트리밍
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     placeholder, streamed = st.empty(), ""
     for token in stream_reply(user_input):
@@ -235,7 +255,7 @@ def render_chat_page():
         safe = streamed.replace("\n\n", "<br><br>")
         placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe}</div>", unsafe_allow_html=True)
 
-    # 기록/차감 (필드만 저장)
+    # 기록/차감
     st.session_state.chat_history.append((user_input, streamed))
     if st.session_state.get("is_paid"):
         new_left = max(0, int(st.session_state.get("remaining_paid_uses", 0)) - 1)
@@ -244,7 +264,7 @@ def render_chat_page():
         new_usage = int(st.session_state.get("usage_count", 0)) + 1
         persist_user({"usage_count": new_usage})
 
-    # 체험 종료되면 CTA
+    # 체험 끝 CTA
     if (not st.session_state.get("is_paid")) and (st.session_state.get("usage_count", 0) >= st.session_state.get("limit", FREE_LIMIT)):
         show_paypal_button("무료 체험이 끝났어요. 다음 대화부터는 유료 이용권이 필요해요 💳")
 
@@ -260,6 +280,8 @@ def render_chat_page():
             st.warning("내용을 입력해주세요 😊")
 
 def render_plans_page():
+    render_status_chip()
+
     header_html = """
     <div style='text-align:center; padding-top:8px;'>
       <h2 style="margin:0 0 6px 0;">💙 마음을 기댈 수 있는 AI 친구</h2>
@@ -336,10 +358,10 @@ def render_plans_page():
     c1, c2, c3 = st.columns([1,1,1])
     with c1:
         if st.button("✅ 베이직 30회 적용 ($3)"):
-            apply_plan("basic")
+            apply_plan_basic()
     with c2:
         if st.button("✅ 프로 100회 적용 ($6)"):
-            apply_plan("pro")
+            apply_plan_pro()
     with c3:
         if st.button("🚪 로그아웃"):
             st.session_state["is_admin"] = False
@@ -349,7 +371,7 @@ def render_plans_page():
         st.query_params = {"uid": USER_ID, "page": "chat"}
         st.rerun()
 
-# ===== Sidebar & Routing =====
+# ============ Sidebar & Routing ============
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 if PAGE == "chat":
