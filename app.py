@@ -79,8 +79,13 @@ st.title("💙 마음을 기댈 수 있는 AI 친구")
 
 # ===== SESSION =====
 defaults = {
-    "chat_history": [], "is_paid": False, "limit": 4, "usage_count": 0,
-    "plan": None, "tone": "따뜻하게"
+    "chat_history": [],
+    "is_paid": False,
+    "limit": 4,  # 무료 체험 4회
+    "usage_count": 0,
+    "plan": None,
+    "remaining_paid_uses": 0,
+    "tone": "따뜻하게"
 }
 for k, v in defaults.items():
     st.session_state.setdefault(k, v)
@@ -104,7 +109,7 @@ def stream_reply(user_input: str, tone: str):
     return client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0.4,
-        max_tokens=700,
+        max_tokens=600,
         stream=True,
         messages=[
             {"role": "system", "content": sys_prompt},
@@ -137,12 +142,26 @@ def render_chat_page():
     st.session_state.tone = tone
     user_ref.update({"tone": tone})
 
-    if not st.session_state.is_paid and st.session_state.usage_count >= st.session_state.limit:
-        st.warning("🚫 무료 4회가 모두 사용되었습니다.")
-        if st.button("💳 결제/FAQ로 이동"):
-            st.query_params = {"uid": USER_ID, "page": "plans"}
-            st.rerun()
-        return
+    # 이용 제한 체크
+    if st.session_state.is_paid:
+        remaining = st.session_state.remaining_paid_uses
+        st.caption(f"💎 남은 상담 횟수: {remaining}회 / 30회")
+        if remaining <= 0:
+            st.warning("💳 30회 이용권이 모두 소진되었습니다. 새로 결제 후 이용해주세요.")
+            if st.button("결제 페이지로 이동"):
+                st.query_params = {"uid": USER_ID, "page": "plans"}
+                st.rerun()
+            return
+    else:
+        if st.session_state.usage_count >= st.session_state.limit:
+            st.warning("🚫 무료 4회 체험이 모두 사용되었습니다.")
+            if st.button("💳 결제/FAQ로 이동"):
+                st.query_params = {"uid": USER_ID, "page": "plans"}
+                st.rerun()
+            return
+        else:
+            left = st.session_state.limit - st.session_state.usage_count
+            st.caption(f"🌱 무료 체험 남은 횟수: {left}회")
 
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input:
@@ -173,37 +192,47 @@ def render_chat_page():
     summary = make_summary(user_input)
     st.markdown(f"<div class='bot-bubble'>💡 오늘의 마음 노트: <b>{summary}</b></div>", unsafe_allow_html=True)
 
-    # 기록 저장
+    # 기록 및 횟수 차감
     st.session_state.chat_history.append((user_input, streamed, summary))
-
-    if not st.session_state.is_paid:
+    if st.session_state.is_paid:
+        st.session_state.remaining_paid_uses -= 1
+        user_ref.update({"remaining_paid_uses": st.session_state.remaining_paid_uses})
+    else:
         st.session_state.usage_count += 1
         user_ref.update({"usage_count": st.session_state.usage_count})
-        if st.session_state.usage_count >= st.session_state.limit:
-            st.success("무료 체험이 끝났어요. 결제 페이지로 이동합니다.")
-            st.query_params = {"uid": USER_ID, "page": "plans"}
-            st.rerun()
 
 # ===== PLANS PAGE =====
 def render_plans_page():
     st.markdown("""
     ### 💳 결제 안내 (예시)
-    **:star: 베이직 60회 — $3**  
-    **💎 프로 140회 — $6**  
+    **:star: 베이직 30회 — $3**  
+    **💎 프로 100회 — $6**  
     <p style='opacity:0.7;'>현재는 예시 모드이며 실제 결제는 진행되지 않습니다.</p>
     """, unsafe_allow_html=True)
 
     admin_pw = st.text_input("관리자 비밀번호", type="password")
     if admin_pw == "4321":
         st.success("관리자 인증 완료 ✅")
-        if st.button("✅ 베이직 60회 적용"):
-            st.session_state.update({"is_paid": True, "limit": 60, "usage_count": 0})
+        if st.button("✅ 베이직 30회 적용 ($3)"):
+            st.session_state.update({
+                "is_paid": True,
+                "limit": 30,
+                "usage_count": 0,
+                "remaining_paid_uses": 30,
+                "plan": "basic"
+            })
             user_ref.update(st.session_state)
-            st.success("베이직 60회 적용 완료!")
-        if st.button("✅ 프로 140회 적용"):
-            st.session_state.update({"is_paid": True, "limit": 140, "usage_count": 0})
+            st.success("🎉 베이직 30회 이용권이 적용되었어요!")
+        if st.button("✅ 프로 100회 적용 ($6)"):
+            st.session_state.update({
+                "is_paid": True,
+                "limit": 100,
+                "usage_count": 0,
+                "remaining_paid_uses": 100,
+                "plan": "pro"
+            })
             user_ref.update(st.session_state)
-            st.success("프로 140회 적용 완료!")
+            st.success("💎 프로 100회 이용권이 적용되었어요!")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
