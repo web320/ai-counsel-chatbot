@@ -153,90 +153,18 @@ def status_chip():
 
 # ================= 결제 페이지 =================
 def render_plans_page():
-    status_chip()
-    st.markdown("""
-    <div style='text-align:center;'>
-      <h2>💳 결제 안내</h2>
-      <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    components.html(f"""
-    <div style="text-align:center">
-      <a href="{PAYPAL_URL}" target="_blank">
-        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
-          💳 PayPal로 결제하기 ($3)
-        </button>
-      </a>
-      <p style="opacity:0.8;margin-top:10px;">결제 후 카톡 <b>jeuspo</b> 또는 이메일 <b>mwiby91@gmail.com</b>으로<br>스크린샷을 보내주시면 비밀번호를 알려드립니다.</p>
-    </div>
-    """, height=280)
-
-    st.markdown("---")
-    st.subheader("🔐 관리자 인증 (자동 적용)")
-
-    pw = st.text_input("관리자 비밀번호", type="password")
-    if pw:
-        if check_admin(pw):
-            st.success("✅ 관리자 인증 완료! 베이직 30회 이용권을 적용합니다...")
-            fields = {
-                "is_paid": True, "plan": "basic",
-                "limit": BASIC_LIMIT, "usage_count": 0,
-                "remaining_paid_uses": BASIC_LIMIT
-            }
-            if persist_user(fields):
-                st.success("🎉 베이직 30회 이용권 적용 완료! 채팅으로 이동 중...")
-                time.sleep(0.8)
-                st.session_state.clear()
-                st.query_params = {"uid": USER_ID, "page": "chat"}
-                st.experimental_rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-
-    if st.button("⬅ 채팅으로 돌아가기"):
-        st.query_params = {"uid": USER_ID, "page": "chat"}
-        st.rerun()
-
-# ================= 채팅 페이지 =================
-def render_chat_page():
-    status_chip()
-    if st.session_state.get("is_paid"):
-        if st.session_state["remaining_paid_uses"] <= 0:
-            st.warning("💳 이용권이 소진되었습니다. 결제 후 이용해주세요.")
-            return
-    elif st.session_state["usage_count"] >= FREE_LIMIT:
-        st.warning("🌱 무료 체험이 끝났어요. 유료 이용권을 구매해주세요.")
-        return
-
-    user_input = st.chat_input("지금 어떤 기분이야?")
-    if not user_input: return
-
-    st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
-    reply = stream_reply(user_input)
-    if not reply: return
-
-    if st.session_state["is_paid"]:
-        persist_user({"remaining_paid_uses": st.session_state["remaining_paid_uses"] - 1})
-    else:
-        persist_user({"usage_count": st.session_state["usage_count"] + 1})
-
-# ================= 사이드바 =================
-st.sidebar.header("📜 대화 기록")
-st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
-if PAGE == "chat":
-    if st.sidebar.button("💳 결제/FAQ 열기"):
-        st.query_params = {"uid": USER_ID, "page": "plans"}
-        st.rerun()
-else:
-    if st.sidebar.button("⬅ 채팅으로 돌아가기"):
-        st.query_params = {"uid": USER_ID, "page": "chat"}
-        st.rerun()
-
-# ================= Routing =================
-if PAGE == "chat":
-    render_chat_page()
-elif PAGE == "plans":
-    render_plans_page()
-else:
-    st.query_params = {"uid": USER_ID, "page": "chat"}
-    st.rerun()
+ components.html(f"""
+<div style="text-align:center">
+  <a href="{PAYPAL_URL}" target="_blank">
+    <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
+      💳 PayPal로 결제하기 ($3)
+    </button>
+  </a>
+  <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+    결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b><br>
+    또는 <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b><br>
+    로 결제 <b>스크린샷을 보내주시면</b> 이용 비밀번호를 알려드립니다.<br><br>
+    🔒 비밀번호 입력 후 바로 30회 상담 이용이 가능합니다.
+  </p>
+</div>
+""", height=320)
