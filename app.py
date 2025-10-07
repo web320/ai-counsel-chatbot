@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.5
-# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고 + 안정화)
+# 💙 AI 심리상담 앱 v1.8.5 (테스트 안정화 버전)
+# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고 + 오류수정)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, timezone
@@ -141,33 +141,17 @@ def get_emotion_prompt(msg: str):
         return "사용자가 자기혐오를 표현했습니다. 공감하며 따뜻하게 자존감을 세워주세요."
     return "사용자가 일상 대화를 하고 있습니다. 일상의 일을 공감하고 따뜻하게 대화를 이어가주세요."
 
-# ================= OpenAI 답변 + 광고 삽입 =================
+# ================= OpenAI 대신 임시 테스트 응답 =================
 def stream_reply(user_input):
-  def stream_reply(user_input):
-    # 임시모드: OpenAI 없이 더미 응답
-    st.markdown(f"<div class='bot-bubble'>🧡 (테스트 모드) '{user_input}' 에 대한 답변 예시입니다.<br>지금은 AI 연결이 꺼져있어요.</div>", unsafe_allow_html=True)
+    """AI 대신 테스트 모드용 더미 응답"""
+    st.markdown(f"<div class='bot-bubble'>🧡 (테스트 모드) '{user_input}' 에 대한 예시 답변입니다.<br>지금은 AI 연결이 꺼져있어요 💫</div>", unsafe_allow_html=True)
+    components.html("""
+    <div style='text-align:center;margin:20px 0;'>
+        <iframe src="https://youradserver.com/banner.html"
+                width="320" height="100" style="border:none;overflow:hidden;"></iframe>
+    </div>
+    """, height=120)
     return "테스트 모드 응답"
-
-            ]
-        )
-        msg, placeholder = "", st.empty()
-        for chunk in stream:
-            delta = getattr(chunk.choices[0], "delta", None)
-            if delta and getattr(delta, "content", None):
-                msg += delta.content
-                safe = msg.replace("\n\n", "<br><br>")
-                placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe}</div>", unsafe_allow_html=True)
-
-        # ✅ 광고 ①: 답변 후 삽입
-        components.html("""
-        <div style='text-align:center;margin:20px 0;'>
-            <iframe src="https://youradserver.com/banner.html"
-                    width="320" height="100" style="border:none;overflow:hidden;"></iframe>
-        </div>
-        """, height=120)
-        return msg
-    except Exception as e:
-        st.error(f"OpenAI 오류: {e}")
 
 # ================= 결제 페이지 =================
 def render_plans_page():
@@ -319,3 +303,4 @@ elif PAGE == "plans":
 else:
     st.query_params = {"uid": USER_ID, "page": "chat"}
     st.rerun()
+
