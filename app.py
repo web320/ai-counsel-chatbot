@@ -277,6 +277,20 @@ def render_chat_page():
     elif st.session_state["usage_count"] >= FREE_LIMIT:
         st.warning("🌱 무료 체험이 끝났어요. 유료 이용권을 구매해주세요.")
         return
+# ================= 인사 메시지 (앱 시작 시 한 번만 표시) =================
+import random
+
+if "greeted" not in st.session_state:
+    greetings = [
+        "안녕 💙 오늘 하루 어땠어?",
+        "마음이 조금 무거운 날이지? 내가 들어줄게 ☁️",
+        "요즘 많이 지쳤다 그치... 잠깐 쉬어가도 돼 🌙",
+        "오늘은 그냥 나랑 얘기만 해보자 🌷",
+        "괜찮아, 잘하고 있어. 난 네 얘기 듣고 싶어 🕊️"
+    ]
+    greet = random.choice(greetings)
+    st.markdown(f"<div class='bot-bubble'>🧡 {greet}</div>", unsafe_allow_html=True)
+    st.session_state["greeted"] = True
 
     user_input = st.chat_input("지금 어떤 기분이야?")
     if not user_input: return
