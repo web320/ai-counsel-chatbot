@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.3
-# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + rerun fix)
+# 💙 AI 심리상담 앱 v1.8.4
+# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, timezone
@@ -12,11 +12,13 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.3"
+APP_VERSION = "v1.8.4"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
 DEFAULT_TONE = "따뜻하게"
+DAILY_FREE_LIMIT = 7
+BONUS_AFTER_AD = 3
 
 # ================= OpenAI =================
 load_dotenv()
@@ -107,7 +109,7 @@ def inject_auto_contrast():
 inject_auto_contrast()
 
 # ================= Firestore User =================
-defaults = {"is_paid": False, "plan": None, "limit": FREE_LIMIT, "usage_count": 0, "remaining_paid_uses": 0}
+defaults = {"is_paid": False, "plan": None, "limit": FREE_LIMIT, "usage_count": 0, "remaining_paid_uses": 0, "last_use_date": None}
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
 if snap.exists:
@@ -139,7 +141,7 @@ def get_emotion_prompt(msg: str):
         return "사용자가 자기혐오를 표현했습니다. 공감하며 따뜻하게 자존감을 세워주세요."
     return "사용자가 일상 대화를 하고 있습니다. 일상의 일을 공감하고 따뜻하게 대화를 이어가주세요."
 
-# ================= OpenAI 답변 =================
+# ================= OpenAI 답변 + 광고 삽입 =================
 def stream_reply(user_input):
     if not client: return
     emotion_prompt = get_emotion_prompt(user_input)
@@ -166,6 +168,14 @@ def stream_reply(user_input):
                 msg += delta.content
                 safe = msg.replace("\n\n", "<br><br>")
                 placeholder.markdown(f"<div class='bot-bubble'>🧡 {safe}</div>", unsafe_allow_html=True)
+
+        # ✅ 광고 ①: 답변 후 자연 삽입
+        components.html("""
+        <div style='text-align:center;margin:20px 0;'>
+            <iframe src="https://youradserver.com/banner.html" 
+                    width="320" height="100" style="border:none;"></iframe>
+        </div>
+        """, height=120)
         return msg
     except Exception as e:
         st.error(f"OpenAI 오류: {e}")
@@ -180,96 +190,36 @@ def status_chip():
         left = st.session_state["limit"] - st.session_state["usage_count"]
         st.markdown(f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
-# ================= 결제 페이지 =================
-def render_plans_page():
-    status_chip()
-    st.markdown("""
-    <div style='text-align:center;'>
-      <h2>💳 결제 안내</h2>
-      <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    components.html(f"""
-    <div style="text-align:center">
-      <a href="{PAYPAL_URL}" target="_blank">
-        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
-          💳 PayPal로 결제하기 ($3)
-        </button>
-      </a>
-      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b><br>
-        또는 <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b><br>
-        로 결제 <b>스크린샷을 보내주시면</b> 이용 비밀번호를 알려드립니다.<br><br>
-        🔒 비밀번호 입력 후 바로 30회 상담 이용이 가능합니다.
-      </p>
-    </div>
-    """, height=300)
-
-    st.markdown("---")
-    st.subheader("🔐 관리자 인증 (자동 적용)")
-    pw = st.text_input("관리자 비밀번호", type="password")
-
-    if pw:
-        if check_admin(pw):
-            st.success("✅ 관리자 인증 완료! 베이직 30회 이용권을 적용합니다...")
-            fields = {
-                "is_paid": True, "plan": "basic",
-                "limit": BASIC_LIMIT, "usage_count": 0,
-                "remaining_paid_uses": BASIC_LIMIT
-            }
-            if persist_user(fields):
-                st.success("🎉 이용권이 적용되었습니다! 감사합니다! 채팅으로 이동 중...")
-                time.sleep(1)
-                st.session_state.clear()
-                st.query_params = {"uid": USER_ID, "page": "chat"}
-                st.rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-
-    # ================= 피드백 =================
-    st.markdown("---")
-    st.subheader("💌 서비스 피드백")
-    feedback = st.text_area("무엇이든 자유롭게 남겨주세요 💬", placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
-    if st.button("📩 피드백 보내기"):
-        if feedback.strip():
-            try:
-                db.collection("feedback").add({
-                    "uid": USER_ID,
-                    "feedback": feedback.strip(),
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                })
-                st.success("💖 피드백이 소중히 전달되었습니다. 진심으로 감사합니다!")
-            except Exception as e:
-                st.error(f"Firestore 오류: {e}")
-        else:
-            st.warning("내용을 입력해주세요 💬")
-
-    if st.button("⬅ 채팅으로 돌아가기"):
-        st.query_params = {"uid": USER_ID, "page": "chat"}
-        st.rerun()
-
 # ================= 채팅 =================
 def render_chat_page():
     status_chip()
+    today = datetime.now().strftime("%Y-%m-%d")
+    if st.session_state.get("last_use_date") != today:
+        persist_user({"usage_count": 0, "last_use_date": today})
+
+    if not st.session_state.get("is_paid") and st.session_state["usage_count"] >= DAILY_FREE_LIMIT:
+        st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
+        if st.button("🎬 광고 보기로 3회 추가하기"):
+            components.html("""
+            <div style='text-align:center;margin:10px 0;'>
+                <iframe src="https://youradserver.com/ad.html" 
+                        width="320" height="100" style="border:none;"></iframe>
+            </div>
+            """, height=120)
+            time.sleep(3)
+            persist_user({"usage_count": st.session_state["usage_count"] - BONUS_AFTER_AD})
+            st.success("🎉 광고 시청 완료! 추가 3회가 지급되었어요 💙")
+        return
+
     if "greeted" not in st.session_state:
         greetings = [
-            "안녕 💙 오늘 하루 많이 지쳤지?? 궁금해 듣고싶어요",
-            "마음이 조금 무거운 날이죠? 제가 마음껏 들을께요 ☁️",
-            "요즘 많이 지쳤죠??  =여기서 현실을 잠시 잊고 쉬어가세요 🌙",
-            "오늘은 저랑 얘기만 해도 괜찮아요 🌷",
-            "괜찮아요, 잘하고 있어요. 🕊️"
+            "안녕 💙 오늘 하루 많이 지쳤지? 내가 들어줄게 ☁️",
+            "마음이 조금 무거운 날이지? 나랑 얘기하자 🌙",
+            "괜찮아, 그냥 나한테 털어놔도 돼 🌷",
+            "오늘은 힘든 일 있었어? 내가 곁에 있을게 🕊️"
         ]
-        greet = random.choice(greetings)
-        st.markdown(f"<div class='bot-bubble'>🧡 {greet}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='bot-bubble'>🧡 {random.choice(greetings)}</div>", unsafe_allow_html=True)
         st.session_state["greeted"] = True
-
-    if not st.session_state.get("is_paid") and st.session_state["usage_count"] >= FREE_LIMIT:
-        st.warning("🌱 무료 체험이 끝났습니다. 더 이용하고 싶으시다면 유료 이용권을 구매해주세요.")
-        return
-    if st.session_state.get("is_paid") and st.session_state["remaining_paid_uses"] <= 0:
-        st.warning("💳 이용권이 소진되었습니다. 결제 후 이용해주세요.")
-        return
 
     user_input = st.chat_input("지금 어떤 기분이예요?")
     if not user_input: return
@@ -283,7 +233,7 @@ def render_chat_page():
     else:
         persist_user({"usage_count": st.session_state["usage_count"] + 1})
 
-# ================= Sidebar =================
+# ================= Sidebar & Routing =================
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 if PAGE == "chat":
@@ -295,7 +245,6 @@ else:
         st.query_params = {"uid": USER_ID, "page": "chat"}
         st.rerun()
 
-# ================= Routing =================
 if PAGE == "chat":
     render_chat_page()
 elif PAGE == "plans":
