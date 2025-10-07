@@ -152,9 +152,9 @@ def render_chat_page():
     # 이용 제한 체크
     if st.session_state.is_paid:
         remaining = st.session_state.remaining_paid_uses
-        st.caption(f"💎 남은 상담 횟수: {remaining}회 / 30회")
+        st.caption(f"💎 남은 상담 횟수: {remaining}회 / {st.session_state.limit}회")
         if remaining <= 0:
-            show_paypal_button("💳 30회 이용권이 모두 소진되었습니다. 새로 결제 후 이용해주세요.")
+            show_paypal_button("💳 이용권이 모두 소진되었습니다. 새로 결제 후 이용해주세요.")
             return
     else:
         if st.session_state.usage_count >= st.session_state.limit:
@@ -206,7 +206,7 @@ def render_chat_page():
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("📝 대화에 대한 피드백을 남겨주세요")
     feedback_text = st.text_area("어떤 점이 좋았나요? 또는 개선했으면 하는 점이 있나요?",
-                                 placeholder="예: 대답이 따뜻했어요 / 답변이 너무 짧아요 / 디자인이 좋아요")
+                                 placeholder="예: 대답이 따뜻했어요 / 답변이 조금 짧아요 / 디자인이 좋아요")
     if st.button("📩 피드백 제출"):
         if feedback_text.strip():
             db.collection("feedbacks").add({
