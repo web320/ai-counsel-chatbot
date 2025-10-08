@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.6 (AdSense 포함 안정화 버전)
-# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고 + 오류수정 + 광고수익 연결)
+# 💙 AI 심리상담 앱 v1.8.6 (AdSense + 안정화 버전)
+# (감정인식 + 결제 안내 + 피드백 + 색상반전 + 인사 + 광고 + 오류수정 + 수익화)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, timezone
@@ -41,6 +41,7 @@ db = firestore.client()
 
 # ================= Admin Keys =================
 ADMIN_KEYS = [str(k) for k in [st.secrets.get("ADMIN_KEY"), os.getenv("ADMIN_KEY"), "6U4urDCJLr7D0EWa4nST", "4321"] if k]
+
 def check_admin(pw: str) -> bool:
     return any(hmac.compare_digest(pw.strip(), key) for key in ADMIN_KEYS)
 
@@ -58,13 +59,14 @@ PAGE     = page
 # ================= Styles =================
 st.set_page_config(page_title="💙 마음을 기댈 수 있는 따뜻한 AI 친구", layout="wide")
 
-# === ✅ Google AdSense 코드 (사이트 소유권 인증용) ===
+# === ✅ Google AdSense 코드 추가 (소유권 확인용) ===
 st.markdown("""
-<!-- Google AdSense 소유권 코드 -->
+<!-- Google AdSense 소유권 인증 -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5846666879010880"
      crossorigin="anonymous"></script>
 """, unsafe_allow_html=True)
 
+# === 기본 스타일 ===
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
@@ -86,7 +88,6 @@ html, body, [class*="css"] { font-size: 18px; transition: all 0.3s ease; }
 }
 </style>
 """, unsafe_allow_html=True)
-
 st.title("💙 마음을 기댈 수 있는 따뜻한 AI 친구")
 
 # === 자동 색상 반전 ===
@@ -136,17 +137,18 @@ def persist_user(fields: dict):
 def get_emotion_prompt(msg: str):
     msg = msg.lower()
     if any(w in msg for w in ["불안", "초조", "걱정", "긴장"]):
-        return "사용자가 불안을 표현했습니다. 안정감을 주는 말을 해주세요."
+        return "사용자가 불안을 표현했습니다. 부드럽게 안정감을 주는 말을 해주세요."
     if any(w in msg for w in ["외로워", "혼자", "쓸쓸", "고독"]):
-        return "사용자가 외로움을 표현했습니다. 부드럽게 위로해주세요."
+        return "사용자가 외로움을 표현했습니다. 따뜻한 말로 위로해주세요."
     if any(w in msg for w in ["힘들", "귀찮", "하기 싫", "지쳤"]):
         return "사용자가 무기력을 표현했습니다. 존재 자체를 인정해주세요."
-    return "사용자가 일상 대화를 하고 있습니다. 따뜻하게 공감해주세요."
+    return "사용자가 일상 대화를 하고 있습니다. 공감하며 따뜻하게 답해주세요."
 
-# ================= 테스트 응답 + 광고 배너 =================
+# ================= 테스트용 응답 + 광고 표시 =================
 def stream_reply(user_input):
     st.markdown(f"<div class='bot-bubble'>🧡 (테스트 모드) '{user_input}' 에 대한 예시 답변입니다.<br>지금은 AI 연결이 꺼져있어요 💫</div>", unsafe_allow_html=True)
-    # 🔸 Google 광고 영역 삽입
+
+    # ✅ Google AdSense 배너 노출 (하단)
     components.html("""
     <div style='text-align:center;margin:20px 0;'>
       <ins class="adsbygoogle"
@@ -158,8 +160,21 @@ def stream_reply(user_input):
       <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
     </div>
     """, height=120)
+
     return "테스트 모드 응답"
 
-# ================= 결제 / 피드백 / 채팅 페이지는 그대로 유지 =================
-# (생략 부분은 네 기존 코드 그대로 두면 OK)
+# ================= 이하 기존 코드 유지 =================
+# (결제 / 피드백 / 채팅 로직 그대로 둬도 됩니다)
+
+# ================= Sidebar & Routing (오타 수정됨) =================
+st.sidebar.header("📜 대화 기록")
+st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
+if PAGE == "chat":
+    if st.sidebar.button("💳 결제 / FAQ 열기"):
+        st.query_params = {"uid": USER_ID, "page": "plans"}  # ✅ 오타 수정됨
+        st.rerun()
+else:
+    if st.sidebar.button("⬅ 채팅으로 돌아가기"):
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
 
