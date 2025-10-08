@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.9.3
-# (GPT 실연결 + 스트리밍 오류 수정 + 3~4문장 중심)
+# 💙 AI 심리상담 앱 v1.9.4
+# (광고 제거 + 결제/피드백 유지 + 실시간 스트리밍)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, date
@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.9.3"
+APP_VERSION = "v1.9.4"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
 DEFAULT_TONE = "따뜻하게"
@@ -106,7 +106,7 @@ def stream_reply(user_input: str):
         stream = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "너는 따뜻하고 다정한 AI 상담사야. 인간처럼 한 문장씩 자연스럽게 이어 말해줘."},
+                {"role": "system", "content": "너는 따뜻하고 다정한 AI 상담사야. 인간처럼 부드럽게, 문장마다 감정을 담아 말해줘."},
                 {"role": "user", "content": full_prompt}
             ],
             temperature=0.85,
@@ -121,7 +121,7 @@ def stream_reply(user_input: str):
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
                 placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
-                time.sleep(0.03)  # 타이핑 속도감
+                time.sleep(0.03)
         return full_text.strip()
     except Exception as e:
         st.error(f"AI 응답 오류: {e}")
@@ -132,6 +132,52 @@ def status_chip():
     left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
     st.markdown(f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
+# ================= 결제/피드백 페이지 =================
+def render_plans_page():
+    status_chip()
+    st.markdown("""
+    <div style='text-align:center;'>
+      <h2>💳 결제 안내</h2>
+      <p>💙 단 3달러로 30회의 마음상담을 이어갈 수 있어요.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    components.html(f"""
+    <div style="text-align:center">
+      <a href="{PAYPAL_URL}" target="_blank">
+        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
+          💳 PayPal로 결제하기 ($3)
+        </button>
+      </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b><br>
+        또는 <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b><br>
+        로 결제 <b>스크린샷을 보내주시면</b> 이용 비밀번호를 알려드립니다.<br><br>
+        🔒 비밀번호 입력 후 바로 30회 상담 이용이 가능합니다.
+      </p>
+    </div>
+    """, height=320)
+
+    st.markdown("---")
+    st.subheader("💌 서비스 피드백")
+    feedback_text = st.text_area("무엇이든 자유롭게 남겨주세요 💬", 
+                                 placeholder="예: 상담이 따뜻했어요 😊")
+    if st.button("📩 피드백 보내기"):
+        text = feedback_text.strip()
+        if text:
+            db.collection("feedbacks").add({
+                "uid": USER_ID,
+                "feedback": text,
+                "created_at": datetime.now().isoformat()
+            })
+            st.success("💖 피드백이 전달되었습니다. 감사합니다!")
+        else:
+            st.warning("내용을 입력해주세요 💬")
+
+    if st.button("⬅ 채팅으로 돌아가기"):
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
+
 # ================= 채팅 페이지 =================
 def render_chat_page():
     status_chip()
@@ -141,6 +187,11 @@ def render_chat_page():
 
     if st.session_state["usage_count"] >= DAILY_FREE_LIMIT:
         st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
+        if st.button("💳 결제하러 가기"):
+            st.query_params = {"uid": USER_ID, "page": "plans"}
+            st.success("💎 결제 안내로 이동 중이에요...")
+            time.sleep(1)
+            st.rerun()
         return
 
     if "greeted" not in st.session_state:
@@ -167,5 +218,19 @@ def render_chat_page():
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
 
-render_chat_page()
+if PAGE == "chat":
+    if st.sidebar.button("💳 결제 / FAQ 열기"):
+        st.query_params = {"uid": USER_ID, "page": "plans"}
+        st.rerun()
+else:
+    if st.sidebar.button("⬅ 채팅으로 돌아가기"):
+        st.query_params = {"uid": USER_ID, "page": "chat"}
+        st.rerun()
 
+if PAGE == "chat":
+    render_chat_page()
+elif PAGE == "plans":
+    render_plans_page()
+else:
+    st.query_params = {"uid": USER_ID, "page": "chat"}
+    st.rerun()
