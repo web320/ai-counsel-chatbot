@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.7 (완전 안정화 버전)
-# (감정인식 + 결제 안내 + 피드백 1회 제한 + 색상반전 + 광고 + 오류제거)
+# 💙 AI 심리상담 앱 v1.8.8
+# (하루 무료 7회 + 광고보상 + 결제전환 + 피드백 안정화)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime
@@ -12,11 +12,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.7"
+APP_VERSION = "v1.8.8"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
-DAILY_FREE_LIMIT = 7
+DAILY_FREE_LIMIT = 7   # 하루 무료 상담 횟수
 BONUS_AFTER_AD = 3
 DEFAULT_TONE = "따뜻하게"
 
@@ -159,7 +159,7 @@ def status_chip():
         total = st.session_state.get("limit", 30)
         st.markdown(f"<div class='status'>💎 유료 이용중 — 남은 {left}/{total}회</div>", unsafe_allow_html=True)
     else:
-        left = st.session_state["limit"] - st.session_state["usage_count"]
+        left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
         st.markdown(f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
 # ================= 결제 / 피드백 페이지 =================
@@ -188,28 +188,7 @@ def render_plans_page():
     </div>
     """, height=300)
 
-    # 관리자 인증
-    st.markdown("---")
-    st.subheader("🔐 관리자 인증 (자동 적용)")
-    pw = st.text_input("관리자 비밀번호", type="password")
-    if pw:
-        if check_admin(pw):
-            st.success("✅ 관리자 인증 완료! 베이직 30회 이용권을 적용합니다...")
-            fields = {
-                "is_paid": True, "plan": "basic",
-                "limit": BASIC_LIMIT, "usage_count": 0,
-                "remaining_paid_uses": BASIC_LIMIT
-            }
-            if persist_user(fields):
-                st.success("🎉 이용권이 적용되었습니다! 채팅으로 이동 중...")
-                time.sleep(1)
-                st.session_state.clear()
-                st.query_params = {"uid": USER_ID, "page": "chat"}
-                st.rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-
-    # ===== 피드백 (한 번만 생성 & 안전 저장) =====
+    # 피드백 안정화
     st.markdown("---")
     st.subheader("💌 서비스 피드백")
 
@@ -217,10 +196,8 @@ def render_plans_page():
         st.session_state.feedback_submitted = False
 
     if not st.session_state.feedback_submitted:
-        feedback_text = st.text_area(
-            "무엇이든 자유롭게 남겨주세요 💬",
-            placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊"
-        )
+        feedback_text = st.text_area("무엇이든 자유롭게 남겨주세요 💬", 
+                                     placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
 
         if st.button("📩 피드백 보내기"):
             text = feedback_text.strip()
@@ -251,20 +228,35 @@ def render_chat_page():
     if st.session_state.get("last_use_date") != today:
         persist_user({"usage_count": 0, "last_use_date": today})
 
+    # ✅ 무료 7회 초과 시 결제/광고 유도
     if not st.session_state.get("is_paid") and st.session_state["usage_count"] >= DAILY_FREE_LIMIT:
         st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
-        if st.button("🎬 광고 보기로 3회 추가하기"):
-            components.html("""
-            <div style='text-align:center;margin:10px 0;'>
-                <iframe src="https://youradserver.com/ad.html"
-                        width="320" height="100" style="border:none;"></iframe>
-            </div>
-            """, height=120)
-            time.sleep(3)
-            persist_user({"usage_count": st.session_state["usage_count"] - BONUS_AFTER_AD})
-            st.success("🎉 광고 시청 완료! 추가 3회가 지급되었어요 💙")
+        st.markdown("#### 다음 중 하나를 선택해주세요 💙")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🎬 광고 보고 무료 3회 추가하기"):
+                components.html("""
+                <div style='text-align:center;margin:10px 0;'>
+                    <iframe src="https://youradserver.com/ad.html"
+                            width="320" height="100" style="border:none;"></iframe>
+                </div>
+                """, height=120)
+                time.sleep(3)
+                persist_user({"usage_count": st.session_state["usage_count"] - BONUS_AFTER_AD})
+                st.success("🎉 광고 시청 완료! 추가 3회가 지급되었어요 💙")
+                st.rerun()
+
+        with col2:
+            if st.button("💳 결제하러 가기"):
+                st.query_params = {"uid": USER_ID, "page": "plans"}
+                st.success("💎 결제 안내로 이동 중이에요...")
+                time.sleep(1)
+                st.rerun()
         return
 
+    # 인사
     if "greeted" not in st.session_state:
         greetings = [
             "안녕 💙 오늘 하루 많이 지쳤지? 내가 들어줄게 ☁️",
