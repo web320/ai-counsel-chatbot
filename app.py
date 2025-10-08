@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.6 (피드백 안정화 버전)
-# (감정인식 + 결제 안내 + 피드백 저장 개선 + 색상반전 + 인사 + 광고)
+# 💙 AI 심리상담 앱 v1.8.7 (완전 안정화 버전)
+# (감정인식 + 결제 안내 + 피드백 1회 제한 + 색상반전 + 광고 + 오류제거)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime
@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.6"
+APP_VERSION = "v1.8.7"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT  = 4
 BASIC_LIMIT = 30
@@ -141,7 +141,7 @@ def get_emotion_prompt(msg: str):
         return "사용자가 자기혐오를 표현했습니다. 공감하며 따뜻하게 자존감을 세워주세요."
     return "사용자가 일상 대화를 하고 있습니다. 일상의 일을 공감하고 따뜻하게 대화를 이어가주세요."
 
-# ================= OpenAI 대신 임시 테스트 응답 =================
+# ================= 테스트용 응답 =================
 def stream_reply(user_input):
     st.markdown(f"<div class='bot-bubble'>🧡 (테스트 모드) '{user_input}' 에 대한 예시 답변입니다.<br>지금은 AI 연결이 꺼져있어요 💫</div>", unsafe_allow_html=True)
     components.html("""
@@ -162,7 +162,7 @@ def status_chip():
         left = st.session_state["limit"] - st.session_state["usage_count"]
         st.markdown(f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
-# ================= 결제 페이지 =================
+# ================= 결제 / 피드백 페이지 =================
 def render_plans_page():
     status_chip()
     st.markdown("""
@@ -188,14 +188,6 @@ def render_plans_page():
     </div>
     """, height=300)
 
-    # 광고
-    components.html("""
-    <div style='text-align:center;margin:20px 0;'>
-        <iframe src="https://youradserver.com/banner.html"
-                width="320" height="100" style="border:none;overflow:hidden;"></iframe>
-    </div>
-    """, height=120)
-
     # 관리자 인증
     st.markdown("---")
     st.subheader("🔐 관리자 인증 (자동 적용)")
@@ -217,28 +209,36 @@ def render_plans_page():
         else:
             st.error("비밀번호가 올바르지 않습니다.")
 
-    # ===== 피드백 (개선된 저장 구조) =====
+    # ===== 피드백 (한 번만 생성 & 안전 저장) =====
     st.markdown("---")
     st.subheader("💌 서비스 피드백")
-    feedback_text = st.text_area("무엇이든 자유롭게 남겨주세요 💬", 
-                                placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊",
-                                key="feedback_input")
 
-    if st.button("📩 피드백 보내기", key="send_feedback"):
-        text = st.session_state.get("feedback_input", "").strip()
-        if text:
-            try:
-                db.collection("feedbacks").add({
-                    "uid": USER_ID,
-                    "feedback": text,
-                    "created_at": datetime.now().isoformat()
-                })
-                st.success("💖 피드백이 소중히 전달되었습니다. 감사합니다!")
-                st.session_state["feedback_input"] = ""
-            except Exception as e:
-                st.error(f"Firestore 오류: {e}")
-        else:
-            st.warning("내용을 입력해주세요 💬")
+    if "feedback_submitted" not in st.session_state:
+        st.session_state.feedback_submitted = False
+
+    if not st.session_state.feedback_submitted:
+        feedback_text = st.text_area(
+            "무엇이든 자유롭게 남겨주세요 💬",
+            placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊"
+        )
+
+        if st.button("📩 피드백 보내기"):
+            text = feedback_text.strip()
+            if text:
+                try:
+                    db.collection("feedbacks").add({
+                        "uid": USER_ID,
+                        "feedback": text,
+                        "created_at": datetime.now().isoformat()
+                    })
+                    st.success("💖 피드백이 소중히 전달되었습니다. 감사합니다!")
+                    st.session_state.feedback_submitted = True
+                except Exception as e:
+                    st.error(f"Firestore 오류: {e}")
+            else:
+                st.warning("내용을 입력해주세요 💬")
+    else:
+        st.info("🌸 이미 피드백을 남겨주셨습니다. 감사합니다!")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
