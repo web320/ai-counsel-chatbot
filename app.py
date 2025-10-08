@@ -1,9 +1,9 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.8.8
-# (하루 무료 7회 + 광고보상 + 결제전환 + 피드백 안정화)
+# 💙 AI 심리상담 앱 v1.9.0
+# (OpenAI 실연결 + 상담횟수 유지 + 광고제거 + 하루 7회 무료)
 # ==========================================
 import os, uuid, json, time, hmac, random
-from datetime import datetime
+from datetime import datetime, date
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
@@ -12,12 +12,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.8.8"
+APP_VERSION = "v1.9.0"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-FREE_LIMIT  = 4
+FREE_LIMIT = 4
 BASIC_LIMIT = 30
-DAILY_FREE_LIMIT = 7   # 하루 무료 상담 횟수
-BONUS_AFTER_AD = 3
+DAILY_FREE_LIMIT = 7
 DEFAULT_TONE = "따뜻하게"
 
 # ================= OpenAI =================
@@ -41,7 +40,6 @@ db = firestore.client()
 
 # ================= Admin Keys =================
 ADMIN_KEYS = [str(k) for k in [st.secrets.get("ADMIN_KEY"), os.getenv("ADMIN_KEY"), "6U4urDCJLr7D0EWa4nST", "4321"] if k]
-
 def check_admin(pw: str) -> bool:
     return any(hmac.compare_digest(pw.strip(), key) for key in ADMIN_KEYS)
 
@@ -54,7 +52,7 @@ uid  = _qp_get("uid") or str(uuid.uuid4())
 page = _qp_get("page", "chat")
 st.query_params = {"uid": uid, "page": page}
 USER_ID = uid
-PAGE     = page
+PAGE = page
 
 # ================= Styles =================
 st.set_page_config(page_title="💙 마음을 기댈 수 있는 따뜻한 AI 친구", layout="wide")
@@ -101,15 +99,15 @@ def inject_auto_contrast():
       setTheme();
     })();
     </script>
-    <style>
-      body,html{color:var(--text);transition:.3s ease;}
-      a,b{color:var(--link)!important;}
-    </style>
     """, height=0)
 inject_auto_contrast()
 
 # ================= Firestore User =================
-defaults = {"is_paid": False, "plan": None, "limit": FREE_LIMIT, "usage_count": 0, "remaining_paid_uses": 0, "last_use_date": None}
+defaults = {
+    "is_paid": False, "plan": None,
+    "limit": FREE_LIMIT, "usage_count": 0,
+    "remaining_paid_uses": 0, "last_use_date": str(date.today())
+}
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
 if snap.exists:
@@ -123,10 +121,8 @@ def persist_user(fields: dict):
     try:
         user_ref.set(fields, merge=True)
         st.session_state.update(fields)
-        return True
     except Exception as e:
         st.error(f"Firestore 저장 실패: {e}")
-        return False
 
 # ================= 감정 인식 =================
 def get_emotion_prompt(msg: str):
@@ -134,23 +130,31 @@ def get_emotion_prompt(msg: str):
     if any(w in msg for w in ["불안", "초조", "걱정", "긴장"]):
         return "사용자가 불안을 표현했습니다. 부드럽게 안정감을 주는 말을 해주세요."
     if any(w in msg for w in ["외로워", "혼자", "쓸쓸", "고독"]):
-        return "사용자가 외로움을 표현했습니다. 마음을 토닥여주고 누군가 곁에 있는 듯한 말로 위로해주세요."
+        return "사용자가 외로움을 표현했습니다. 따뜻하게 곁에 있어주는 말로 위로해주세요."
     if any(w in msg for w in ["힘들", "귀찮", "하기 싫", "지쳤"]):
-        return "사용자가 무기력을 표현했습니다. 강요하지 않고 존재 자체를 인정해주세요."
+        return "사용자가 무기력을 표현했습니다. 존재 자체를 인정하며, 다정하게 공감해주세요."
     if any(w in msg for w in ["싫어", "쓸모없", "못해", "가치없"]):
-        return "사용자가 자기혐오를 표현했습니다. 공감하며 따뜻하게 자존감을 세워주세요."
-    return "사용자가 일상 대화를 하고 있습니다. 일상의 일을 공감하고 따뜻하게 대화를 이어가주세요."
+        return "사용자가 자기혐오를 표현했습니다. 따뜻하게 자존감을 세워주는 말을 해주세요."
+    return "사용자가 일상 대화를 하고 있습니다. 부드럽고 따뜻한 말로 공감해주세요."
 
-# ================= 테스트용 응답 =================
-def stream_reply(user_input):
-    st.markdown(f"<div class='bot-bubble'>🧡 (테스트 모드) '{user_input}' 에 대한 예시 답변입니다.<br>지금은 AI 연결이 꺼져있어요 💫</div>", unsafe_allow_html=True)
-    components.html("""
-    <div style='text-align:center;margin:20px 0;'>
-        <iframe src="https://youradserver.com/banner.html"
-                width="320" height="100" style="border:none;overflow:hidden;"></iframe>
-    </div>
-    """, height=120)
-    return "테스트 모드 응답"
+# ================= 실제 AI 연결 =================
+def stream_reply(user_input: str):
+    try:
+        emotion_prompt = get_emotion_prompt(user_input)
+        full_prompt = f"{emotion_prompt}\n\n{DEFAULT_TONE}로 답변해주세요.\n사용자: {user_input}\nAI:"
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": "너는 따뜻하고 다정한 친구처럼 답변하는 AI 상담사야."},
+                      {"role": "user", "content": full_prompt}],
+            max_tokens=200,
+            temperature=0.8
+        )
+        reply = response.choices[0].message.content.strip()
+        st.markdown(f"<div class='bot-bubble'>{reply}</div>", unsafe_allow_html=True)
+        return reply
+    except Exception as e:
+        st.error(f"AI 응답 오류: {e}")
+        return None
 
 # ================= 상태칩 =================
 def status_chip():
@@ -162,7 +166,7 @@ def status_chip():
         left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
         st.markdown(f"<div class='status'>🌱 무료 체험 — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
-# ================= 결제 / 피드백 페이지 =================
+# ================= 결제 페이지 =================
 def render_plans_page():
     status_chip()
     st.markdown("""
@@ -188,34 +192,21 @@ def render_plans_page():
     </div>
     """, height=300)
 
-    # 피드백 안정화
     st.markdown("---")
     st.subheader("💌 서비스 피드백")
-
-    if "feedback_submitted" not in st.session_state:
-        st.session_state.feedback_submitted = False
-
-    if not st.session_state.feedback_submitted:
-        feedback_text = st.text_area("무엇이든 자유롭게 남겨주세요 💬", 
-                                     placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
-
-        if st.button("📩 피드백 보내기"):
-            text = feedback_text.strip()
-            if text:
-                try:
-                    db.collection("feedbacks").add({
-                        "uid": USER_ID,
-                        "feedback": text,
-                        "created_at": datetime.now().isoformat()
-                    })
-                    st.success("💖 피드백이 소중히 전달되었습니다. 감사합니다!")
-                    st.session_state.feedback_submitted = True
-                except Exception as e:
-                    st.error(f"Firestore 오류: {e}")
-            else:
-                st.warning("내용을 입력해주세요 💬")
-    else:
-        st.info("🌸 이미 피드백을 남겨주셨습니다. 감사합니다!")
+    feedback_text = st.text_area("무엇이든 자유롭게 남겨주세요 💬", 
+                                 placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
+    if st.button("📩 피드백 보내기"):
+        text = feedback_text.strip()
+        if text:
+            db.collection("feedbacks").add({
+                "uid": USER_ID,
+                "feedback": text,
+                "created_at": datetime.now().isoformat()
+            })
+            st.success("💖 피드백이 전달되었습니다. 감사합니다!")
+        else:
+            st.warning("내용을 입력해주세요 💬")
 
     if st.button("⬅ 채팅으로 돌아가기"):
         st.query_params = {"uid": USER_ID, "page": "chat"}
@@ -224,39 +215,19 @@ def render_plans_page():
 # ================= 채팅 =================
 def render_chat_page():
     status_chip()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = str(date.today())
     if st.session_state.get("last_use_date") != today:
         persist_user({"usage_count": 0, "last_use_date": today})
 
-    # ✅ 무료 7회 초과 시 결제/광고 유도
     if not st.session_state.get("is_paid") and st.session_state["usage_count"] >= DAILY_FREE_LIMIT:
         st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
-        st.markdown("#### 다음 중 하나를 선택해주세요 💙")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("🎬 광고 보고 무료 3회 추가하기"):
-                components.html("""
-                <div style='text-align:center;margin:10px 0;'>
-                    <iframe src="https://youradserver.com/ad.html"
-                            width="320" height="100" style="border:none;"></iframe>
-                </div>
-                """, height=120)
-                time.sleep(3)
-                persist_user({"usage_count": st.session_state["usage_count"] - BONUS_AFTER_AD})
-                st.success("🎉 광고 시청 완료! 추가 3회가 지급되었어요 💙")
-                st.rerun()
-
-        with col2:
-            if st.button("💳 결제하러 가기"):
-                st.query_params = {"uid": USER_ID, "page": "plans"}
-                st.success("💎 결제 안내로 이동 중이에요...")
-                time.sleep(1)
-                st.rerun()
+        if st.button("💳 결제하러 가기"):
+            st.query_params = {"uid": USER_ID, "page": "plans"}
+            st.success("💎 결제 안내로 이동 중이에요...")
+            time.sleep(1)
+            st.rerun()
         return
 
-    # 인사
     if "greeted" not in st.session_state:
         greetings = [
             "안녕 💙 오늘 하루 많이 지쳤지? 내가 들어줄게 ☁️",
@@ -268,20 +239,23 @@ def render_chat_page():
         st.session_state["greeted"] = True
 
     user_input = st.chat_input("지금 어떤 기분이예요?")
-    if not user_input: return
+    if not user_input:
+        return
 
     st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     reply = stream_reply(user_input)
-    if not reply: return
+    if not reply:
+        return
 
     if st.session_state.get("is_paid"):
-        persist_user({"remaining_paid_uses": st.session_state["remaining_paid_uses"] - 1})
+        persist_user({"remaining_paid_uses": max(st.session_state["remaining_paid_uses"] - 1, 0)})
     else:
         persist_user({"usage_count": st.session_state["usage_count"] + 1})
 
 # ================= Sidebar & Routing =================
 st.sidebar.header("📜 대화 기록")
 st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
+
 if PAGE == "chat":
     if st.sidebar.button("💳 결제 / FAQ 열기"):
         st.query_params = {"uid": USER_ID, "page": "plans"}
