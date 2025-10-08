@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v1.9.0
-# (OpenAI 실연결 + 상담횟수 유지 + 광고제거 + 하루 7회 무료)
+# 💙 AI 심리상담 앱 v1.9.2
+# (GPT 실연결 + 단어단위 스트리밍 + 3문장 제한 + 하루 7회)
 # ==========================================
 import os, uuid, json, time, hmac, random
 from datetime import datetime, date
@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v1.9.0"
+APP_VERSION = "v1.9.2"
 PAYPAL_URL  = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 FREE_LIMIT = 4
 BASIC_LIMIT = 30
@@ -128,30 +128,39 @@ def persist_user(fields: dict):
 def get_emotion_prompt(msg: str):
     msg = msg.lower()
     if any(w in msg for w in ["불안", "초조", "걱정", "긴장"]):
-        return "사용자가 불안을 표현했습니다. 부드럽게 안정감을 주는 말을 해주세요."
+        return "사용자가 불안을 표현했습니다. 부드럽고 안정감을 주는 말로 3문장 이내로 답해주세요."
     if any(w in msg for w in ["외로워", "혼자", "쓸쓸", "고독"]):
-        return "사용자가 외로움을 표현했습니다. 따뜻하게 곁에 있어주는 말로 위로해주세요."
+        return "사용자가 외로움을 표현했습니다. 따뜻하게 곁에 있어주는 말로 3문장 이내로 위로해주세요."
     if any(w in msg for w in ["힘들", "귀찮", "하기 싫", "지쳤"]):
-        return "사용자가 무기력을 표현했습니다. 존재 자체를 인정하며, 다정하게 공감해주세요."
+        return "사용자가 무기력을 표현했습니다. 존재를 인정하며 다정한 말로 3문장 이내로 공감해주세요."
     if any(w in msg for w in ["싫어", "쓸모없", "못해", "가치없"]):
-        return "사용자가 자기혐오를 표현했습니다. 따뜻하게 자존감을 세워주는 말을 해주세요."
-    return "사용자가 일상 대화를 하고 있습니다. 부드럽고 따뜻한 말로 공감해주세요."
+        return "사용자가 자기혐오를 표현했습니다. 자존감을 회복시키는 부드러운 말로 3문장 이내로 답해주세요."
+    return "일상 대화로 보입니다. 부드럽고 따뜻하게 3문장 이내로 대화해주세요."
 
-# ================= 실제 AI 연결 =================
+# ================= 실시간 스트리밍 AI 응답 =================
 def stream_reply(user_input: str):
     try:
         emotion_prompt = get_emotion_prompt(user_input)
         full_prompt = f"{emotion_prompt}\n\n{DEFAULT_TONE}로 답변해주세요.\n사용자: {user_input}\nAI:"
-        response = client.chat.completions.create(
+        response_stream = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "system", "content": "너는 따뜻하고 다정한 친구처럼 답변하는 AI 상담사야."},
-                      {"role": "user", "content": full_prompt}],
-            max_tokens=200,
-            temperature=0.8
+            messages=[
+                {"role": "system", "content": "너는 따뜻하고 다정한 AI 친구이자 상담사야."},
+                {"role": "user", "content": full_prompt}
+            ],
+            max_tokens=180,
+            temperature=0.8,
+            stream=True
         )
-        reply = response.choices[0].message.content.strip()
-        st.markdown(f"<div class='bot-bubble'>{reply}</div>", unsafe_allow_html=True)
-        return reply
+        placeholder = st.empty()
+        partial_text = ""
+        for chunk in response_stream:
+            delta = chunk.choices[0].delta.get("content", "")
+            if delta:
+                partial_text += delta
+                placeholder.markdown(f"<div class='bot-bubble'>{partial_text}💫</div>", unsafe_allow_html=True)
+                time.sleep(0.02)
+        return partial_text.strip()
     except Exception as e:
         st.error(f"AI 응답 오류: {e}")
         return None
@@ -183,19 +192,13 @@ def render_plans_page():
           💳 PayPal로 결제하기 ($3)
         </button>
       </a>
-      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b><br>
-        또는 <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b><br>
-        로 결제 <b>스크린샷을 보내주시면</b> 이용 비밀번호를 알려드립니다.<br><br>
-        🔒 비밀번호 입력 후 바로 30회 상담 이용이 가능합니다.
-      </p>
     </div>
-    """, height=300)
+    """, height=120)
 
     st.markdown("---")
     st.subheader("💌 서비스 피드백")
     feedback_text = st.text_area("무엇이든 자유롭게 남겨주세요 💬", 
-                                 placeholder="예: 결제 안내가 헷갈렸어요 / 상담이 따뜻했어요 😊")
+                                 placeholder="예: 상담이 따뜻했어요 😊")
     if st.button("📩 피드백 보내기"):
         text = feedback_text.strip()
         if text:
@@ -232,8 +235,7 @@ def render_chat_page():
         greetings = [
             "안녕 💙 오늘 하루 많이 지쳤지? 내가 들어줄게 ☁️",
             "마음이 조금 무거운 날이지? 나랑 얘기하자 🌙",
-            "괜찮아, 그냥 나한테 털어놔도 돼 🌷",
-            "오늘은 힘든 일 있었어? 내가 곁에 있을게 🕊️"
+            "괜찮아, 그냥 나한테 털어놔도 돼 🌷"
         ]
         st.markdown(f"<div class='bot-bubble'>🧡 {random.choice(greetings)}</div>", unsafe_allow_html=True)
         st.session_state["greeted"] = True
