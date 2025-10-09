@@ -11,6 +11,11 @@ import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+# ================= ads.txt 라우트 (맨 위에서 처리!) =================
+if "ads.txt" in st.query_params:
+    st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
+    st.stop()
+
 # ================= App Config =================
 APP_VERSION = "v2.1.1"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
@@ -264,15 +269,11 @@ st.sidebar.markdown("---")
 if st.sidebar.button("💳 결제 및 피드백 열기"):
     render_payment_and_feedback()
 
-# ================= ads.txt 라우트 (💡 맨 위로 이동!) =================
-if "ads.txt" in st.query_params:
-    st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
-    st.stop()
-
-# ================= 실행 =================
-render_chat_page()
 
 
 # ================= 실행 =================
 render_chat_page()
+
+
+
 
