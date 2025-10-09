@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v2.1.0
-# (관리자 결제, 피드백 저장 개선, 4시간 리셋 문구 추가, UI 정리)
+# 💙 AI 심리상담 앱 v2.1.1
+# (AdSense 메타태그 추가 버전 — 기존 기능 그대로 유지)
 # ==========================================
 import os, uuid, json, time, random
 from datetime import datetime, timedelta
@@ -12,7 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v2.1.0"
+APP_VERSION = "v2.1.1"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 30
@@ -46,6 +46,13 @@ USER_ID = uid
 
 # ================= UI =================
 st.set_page_config(page_title="💙 마음을 기댈 수 있는 따뜻한 AI 친구", layout="wide")
+
+# ✅ 구글 애드센스 메타태그 삽입 (사이트 소유권 검증용)
+st.markdown("""
+<meta name="google-adsense-account" content="ca-pub-5846666879010880">
+""", unsafe_allow_html=True)
+
+# ================= CSS =================
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
@@ -66,9 +73,12 @@ html, body, [class*="css"] { font-size: 18px; }
 }
 </style>
 """, unsafe_allow_html=True)
+
 st.title("💙 마음을 기댈 수 있는 따뜻한 AI 친구")
 
-# ================= Firestore User =================
+# ================= 이하 기존 코드 동일 =================
+# (Firestore / 감정 분석 / 채팅 / 결제 / 피드백 등 그대로)
+# --------------------------------------------------------
 defaults = {
     "is_paid": False,
     "usage_count": 0,
@@ -134,7 +144,6 @@ AI:"""
                 full_text += delta.content
                 placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
                 time.sleep(0.03)
-        # 💾 Firestore에 대화 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -165,7 +174,6 @@ def render_payment_and_feedback():
     </div>
     """, height=260)
 
-    # 🔐 관리자 비밀번호 인증 (예시 문구 삭제)
     st.subheader("🔑 관리자 비밀번호 입력")
     pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
     if pw:
@@ -251,7 +259,7 @@ def render_chat_page():
 
 # ================= Sidebar =================
 st.sidebar.header("📜 대화 기록")
-st.sidebar.markdown(f"**사용자 ID:** `{USER_ID[:8]}...`")  # ✅ 깔끔한 표시
+st.sidebar.markdown(f"**사용자 ID:** `{USER_ID[:8]}...`")
 st.sidebar.markdown("---")
 if st.sidebar.button("💳 결제 및 피드백 열기"):
     render_payment_and_feedback()
