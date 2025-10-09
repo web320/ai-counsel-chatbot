@@ -264,10 +264,15 @@ st.sidebar.markdown("---")
 if st.sidebar.button("💳 결제 및 피드백 열기"):
     render_payment_and_feedback()
 
-# ================= 실행 =================
-render_chat_page()
-# ================= ads.txt 라우트 =================
+# ================= ads.txt 라우트 (💡 맨 위로 이동!) =================
 if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
+
+# ================= 실행 =================
+render_chat_page()
+
+
+# ================= 실행 =================
+render_chat_page()
 
