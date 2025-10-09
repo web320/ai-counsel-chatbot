@@ -93,19 +93,30 @@ def get_emotion_prompt(msg: str):
         return "사용자가 자기혐오를 표현했습니다. 자존감을 세워주는 말로 3~4문장으로 답해주세요."
     return "일상 대화입니다. 따뜻하고 인간적인 말로 3~4문장 이내로 대화해주세요."
 
-# ================= 스트리밍 응답 =================
+# ================= 스트리밍 AI 응답 =================
 def stream_reply(user_input: str):
     try:
         emotion_prompt = get_emotion_prompt(user_input)
-        full_prompt = f"{emotion_prompt}\n\n{DEFAULT_TONE}로 답변해주세요.\n사용자: {user_input}\nAI:"
+        full_prompt = f"""
+{emotion_prompt}
+
+너는 따뜻하고 공감력 높은 전문 심리상담사야.
+한 문장씩 타이핑하듯 자연스럽게 말하되, 너무 짧지 않게 이야기해줘.
+3~4문장을 기본으로, 필요하면 최대 6문장까지 써도 괜찮아.
+사용자의 감정을 충분히 인정하고, 실제로 도움이 될 수 있는 조언과 구체적인 제안을 함께 말해줘.
+감정적인 위로와 현실적인 해결책이 균형을 이루도록 해줘.
+
+사용자: {user_input}
+AI:"""
+
         stream = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": "너는 따뜻하고 다정한 AI 상담사야. 인간처럼 한 문장씩 자연스럽게 이어 말해줘."},
+                {"role": "system", "content": "너는 따뜻하고 공감력 있는 상담사야. 부드럽고 안정된 어조로 답변해."},
                 {"role": "user", "content": full_prompt}
             ],
             temperature=0.85,
-            max_tokens=280,
+            max_tokens=500,  # ✅ 길이 늘림
             stream=True,
         )
 
@@ -116,8 +127,9 @@ def stream_reply(user_input: str):
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
                 placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
-                time.sleep(0.03)
+                time.sleep(0.03)  # 타이핑 속도감 유지
         return full_text.strip()
+
     except Exception as e:
         st.error(f"AI 응답 오류: {e}")
         return None
