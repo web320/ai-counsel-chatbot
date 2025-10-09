@@ -1,8 +1,8 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v2.0.0
-# (결제 관리자 비번 + 4시간마다 무료복구 + 피드백 안정화 + 채팅로그 저장)
+# 💙 AI 심리상담 앱 v2.1.0
+# (관리자 결제, 피드백 저장 개선, 4시간 리셋 문구 추가, UI 정리)
 # ==========================================
-import os, uuid, json, time, hmac, random
+import os, uuid, json, time, random
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -12,13 +12,13 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= App Config =================
-APP_VERSION = "v2.0.0"
+APP_VERSION = "v2.1.0"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
-DEFAULT_TONE = "따뜻하게"
 BASIC_LIMIT = 30
-RESET_INTERVAL_HOURS = 4  # 4시간마다 무료횟수 리셋
-ADMIN_KEYS = ["4321", "6U4urDCJLr7D0EWa4nST"]  # 🔐 관리자 비번
+DEFAULT_TONE = "따뜻하게"
+RESET_INTERVAL_HOURS = 4
+ADMIN_KEYS = ["4321"]  # 🔐 관리자 비밀번호 (절대 노출 금지)
 
 # ================= OpenAI =================
 load_dotenv()
@@ -70,7 +70,9 @@ st.title("💙 마음을 기댈 수 있는 따뜻한 AI 친구")
 
 # ================= Firestore User =================
 defaults = {
-    "is_paid": False, "usage_count": 0, "remaining_paid_uses": 0,
+    "is_paid": False,
+    "usage_count": 0,
+    "remaining_paid_uses": 0,
     "last_reset": datetime.utcnow().isoformat()
 }
 user_ref = db.collection("users").document(USER_ID)
@@ -99,7 +101,7 @@ def get_emotion_prompt(msg: str):
         return "사용자가 자기혐오를 표현했습니다. 자존감을 세워주는 따뜻한 말로 위로해주세요."
     return "일상 대화입니다. 공감하며 따뜻하게 대화를 이어가주세요."
 
-# ================= 스트리밍 AI 응답 =================
+# ================= 스트리밍 응답 =================
 def stream_reply(user_input: str):
     try:
         emotion_prompt = get_emotion_prompt(user_input)
@@ -113,6 +115,7 @@ def stream_reply(user_input: str):
 
 사용자: {user_input}
 AI:"""
+
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -136,14 +139,14 @@ AI:"""
             "uid": USER_ID,
             "input": user_input,
             "reply": full_text.strip(),
-            "timestamp": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat()
         })
         return full_text.strip()
     except Exception as e:
         st.error(f"AI 응답 오류: {e}")
         return None
 
-# ================= 결제 / 피드백 =================
+# ================= 결제 및 피드백 =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.markdown("### 💳 결제 안내")
@@ -157,40 +160,47 @@ def render_payment_and_feedback():
       <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
         결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b> 또는
         <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b> 으로 스크린샷을 보내주세요.<br>
-        🔒 확인 후 비밀번호를 발급해드리면 30회 이용이 가능합니다.
+        🔒 확인 후 비밀번호 입력 시 30회 이용권이 즉시 적용됩니다.
       </p>
     </div>
     """, height=260)
 
-    # 🔐 관리자 비번 인증
+    # 🔐 관리자 비밀번호 인증 (예시 문구 삭제)
     st.subheader("🔑 관리자 비밀번호 입력")
-    pw = st.text_input("관리자 비밀번호", type="password", placeholder="예: 4321")
+    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
     if pw:
         if pw.strip() in ADMIN_KEYS:
-            st.success("✅ 인증 성공! 30회 이용권이 활성화되었습니다.")
             persist_user({"is_paid": True, "remaining_paid_uses": BASIC_LIMIT})
+            st.success("✅ 인증 성공! 30회 이용권이 활성화되었습니다.")
         else:
             st.error("❌ 비밀번호가 올바르지 않습니다.")
 
     st.markdown("---")
     st.subheader("💌 서비스 피드백")
-    feedback = st.text_area("무엇이든 자유롭게 남겨주세요 💬", placeholder="예: 상담이 따뜻했어요 😊")
+    feedback = st.text_area("소중한 의견을 남겨주세요 💬", placeholder="예: 상담이 정말 따뜻했어요 🌷")
     if st.button("📩 피드백 보내기"):
         text = feedback.strip()
         if text:
-            db.collection("feedbacks").add({
-                "uid": USER_ID,
-                "feedback": text,
-                "created_at": datetime.utcnow().isoformat()
-            })
-            st.success("💖 피드백이 전달되었습니다. 감사합니다!")
+            try:
+                db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                    "uid": USER_ID,
+                    "feedback": text,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                st.success("💖 피드백이 안전하게 저장되었습니다. 감사합니다!")
+            except Exception as e:
+                st.error(f"⚠️ 피드백 저장 오류: {e}")
         else:
             st.warning("내용을 입력해주세요 💬")
 
 # ================= 상태 표시 =================
 def status_chip():
-    left = BASIC_LIMIT if st.session_state.get("is_paid") else (DAILY_FREE_LIMIT - st.session_state["usage_count"])
-    plan = "💎 유료 이용중" if st.session_state.get("is_paid") else "🌱 무료 체험중"
+    if st.session_state.get("is_paid"):
+        left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
+        plan = "💎 유료 이용중"
+    else:
+        left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
+        plan = "🌱 무료 체험중"
     st.markdown(f"<div class='status'>{plan} — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
 # ================= 채팅 =================
@@ -199,15 +209,16 @@ def render_chat_page():
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
     elapsed = (now - last_reset).total_seconds() / 3600
+
     if elapsed >= RESET_INTERVAL_HOURS:
         persist_user({"usage_count": 0, "last_reset": now.isoformat()})
-        st.info("⏰ 새로운 하루처럼! 4시간이 지나 무료 상담이 복구되었습니다 💙")
+        st.info("⏰ 무료 상담이 다시 가능해졌어요! (4시간마다 자동 복구)")
 
     usage = st.session_state["usage_count"]
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
-        st.info("💳 결제 안내 및 피드백으로 자동 이동합니다.")
-        time.sleep(1.5)
+        st.info("💳 결제 안내 및 피드백으로 이동합니다.")
+        time.sleep(1.2)
         render_payment_and_feedback()
         return
 
@@ -240,7 +251,7 @@ def render_chat_page():
 
 # ================= Sidebar =================
 st.sidebar.header("📜 대화 기록")
-st.sidebar.text_input(" ", value=USER_ID, disabled=True, label_visibility="collapsed")
+st.sidebar.markdown(f"**사용자 ID:** `{USER_ID[:8]}...`")  # ✅ 깔끔한 표시
 st.sidebar.markdown("---")
 if st.sidebar.button("💳 결제 및 피드백 열기"):
     render_payment_and_feedback()
