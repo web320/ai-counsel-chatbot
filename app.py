@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v2.1.1
-# (AdSense 메타태그 추가 버전 — 기존 기능 그대로 유지)
+# 💙 AI 심리상담 앱 v2.2
+# (결제창에서 대화바 숨김 + 대화창으로 돌아가기 버튼 추가)
 # ==========================================
 import os, uuid, json, time, random
 from datetime import datetime, timedelta
@@ -11,19 +11,19 @@ import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ================= ads.txt 라우트 (맨 위에서 처리!) =================
+# ================= ads.txt 라우트 =================
 if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
 # ================= App Config =================
-APP_VERSION = "v2.1.1"
+APP_VERSION = "v2.2"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 30
 DEFAULT_TONE = "따뜻하게"
 RESET_INTERVAL_HOURS = 4
-ADMIN_KEYS = ["4321"]  # 🔐 관리자 비밀번호 (절대 노출 금지)
+ADMIN_KEYS = ["4321"]
 
 # ================= OpenAI =================
 load_dotenv()
@@ -52,7 +52,7 @@ USER_ID = uid
 # ================= UI =================
 st.set_page_config(page_title="💙 마음을 기댈 수 있는 따뜻한 AI 친구", layout="wide")
 
-# ✅ 구글 애드센스 메타태그 삽입 (사이트 소유권 검증용)
+# ✅ 구글 애드센스 메타태그 삽입
 st.markdown("""
 <meta name="google-adsense-account" content="ca-pub-5846666879010880">
 """, unsafe_allow_html=True)
@@ -81,9 +81,7 @@ html, body, [class*="css"] { font-size: 18px; }
 
 st.title("💙 마음을 기댈 수 있는 따뜻한 AI 친구")
 
-# ================= 이하 기존 코드 동일 =================
-# (Firestore / 감정 분석 / 채팅 / 결제 / 피드백 등 그대로)
-# --------------------------------------------------------
+# ================= Firestore 사용자 기본값 =================
 defaults = {
     "is_paid": False,
     "usage_count": 0,
@@ -206,6 +204,12 @@ def render_payment_and_feedback():
         else:
             st.warning("내용을 입력해주세요 💬")
 
+    # ✅ 추가된 부분: 대화창으로 돌아가기 버튼
+    st.markdown("---")
+    if st.button("💬 대화창으로 돌아가기"):
+        st.session_state["show_payment"] = False
+        st.rerun()
+
 # ================= 상태 표시 =================
 def status_chip():
     if st.session_state.get("is_paid"):
@@ -231,9 +235,8 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
         st.info("💳 결제 안내 및 피드백으로 이동합니다.")
-        time.sleep(1.2)
-        render_payment_and_feedback()
-        return
+        st.session_state["show_payment"] = True
+        st.rerun()
 
     if "greeted" not in st.session_state:
         greetings = [
@@ -260,20 +263,19 @@ def render_chat_page():
 
     if (not st.session_state.get("is_paid")) and st.session_state["usage_count"] >= DAILY_FREE_LIMIT:
         st.info("🌙 오늘의 무료 상담이 모두 소진되었습니다.")
-        render_payment_and_feedback()
+        st.session_state["show_payment"] = True
+        st.rerun()
 
 # ================= Sidebar =================
 st.sidebar.header("📜 대화 기록")
 st.sidebar.markdown(f"**사용자 ID:** `{USER_ID[:8]}...`")
 st.sidebar.markdown("---")
 if st.sidebar.button("💳 결제 및 피드백 열기"):
-    render_payment_and_feedback()
-
-
+    st.session_state["show_payment"] = True
+    st.rerun()
 
 # ================= 실행 =================
-render_chat_page()
-
-
-
-
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
