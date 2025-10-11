@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 AI 심리상담 앱 v2.2
-# (결제창에서 대화바 숨김 + 대화창으로 돌아가기 버튼 추가)
+# 💙 AI 심리상담 앱 v2.3
+# (사이드바 버튼 → 💬 대화창으로 돌아가기 교체)
 # ==========================================
 import os, uuid, json, time, random
 from datetime import datetime, timedelta
@@ -17,11 +17,10 @@ if "ads.txt" in st.query_params:
     st.stop()
 
 # ================= App Config =================
-APP_VERSION = "v2.2"
+APP_VERSION = "v2.3"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 30
-DEFAULT_TONE = "따뜻하게"
 RESET_INTERVAL_HOURS = 4
 ADMIN_KEYS = ["4321"]
 
@@ -204,12 +203,6 @@ def render_payment_and_feedback():
         else:
             st.warning("내용을 입력해주세요 💬")
 
-    # ✅ 추가된 부분: 대화창으로 돌아가기 버튼
-    st.markdown("---")
-    if st.button("💬 대화창으로 돌아가기"):
-        st.session_state["show_payment"] = False
-        st.rerun()
-
 # ================= 상태 표시 =================
 def status_chip():
     if st.session_state.get("is_paid"):
@@ -270,12 +263,20 @@ def render_chat_page():
 st.sidebar.header("📜 대화 기록")
 st.sidebar.markdown(f"**사용자 ID:** `{USER_ID[:8]}...`")
 st.sidebar.markdown("---")
-if st.sidebar.button("💳 결제 및 피드백 열기"):
-    st.session_state["show_payment"] = True
-    st.rerun()
+
+# 💬 사이드바 버튼을 대화창 전환용으로 교체
+if st.session_state.get("show_payment"):
+    if st.sidebar.button("💬 대화창으로 돌아가기"):
+        st.session_state["show_payment"] = False
+        st.rerun()
+else:
+    if st.sidebar.button("💳 결제 및 피드백 열기"):
+        st.session_state["show_payment"] = True
+        st.rerun()
 
 # ================= 실행 =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
