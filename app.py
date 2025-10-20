@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.6 (ENG/KOR 5~7 sentences)
+# 💙 EOERWAY AI Therapy v2.7 (PayPal + Admin Key + 50 uses)
 # ==========================================
 import os, uuid, json, time, random
 from datetime import datetime
@@ -15,42 +15,13 @@ if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
-# ================= App Config =================
-APP_VERSION = "v2.4"
+# ================= Config =================
+APP_VERSION = "v2.7"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
-BASIC_LIMIT = 50  # 50회로 변경
+BASIC_LIMIT = 50  # 유료 이용권 50회
 RESET_INTERVAL_HOURS = 4
 ADMIN_KEYS = ["4321"]
-
-# ================= 결제 및 피드백 =================
-def render_payment_and_feedback():
-    st.markdown("---")
-    st.markdown("### 💳 결제 안내")
-    components.html(f"""
-    <div style="text-align:center">
-      <a href="{PAYPAL_URL}" target="_blank">
-        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
-          💳 PayPal로 결제하기 ($3)
-        </button>
-      </a>
-      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b> 또는
-        <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b> 으로 결제 완료 스크린샷을 보내주세요.<br>
-        🔒 확인 후 <b>관리자 비밀번호</b> 입력 시 50회 이용권이 즉시 활성화됩니다.
-      </p>
-    </div>
-    """, height=260)
-
-    st.subheader("🔑 관리자 비밀번호 입력")
-    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
-    if pw:
-        if pw.strip() in ADMIN_KEYS:
-            persist_user({"is_paid": True, "remaining_paid_uses": BASIC_LIMIT})
-            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
-        else:
-            st.error("❌ 비밀번호가 올바르지 않습니다.")
-
 
 # ================= OpenAI =================
 load_dotenv()
@@ -76,52 +47,12 @@ uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= UI & Language =================
-st.set_page_config(page_title="💙 EOERWAY AI Therapy", layout="wide")
-language = st.radio("🌐 Language / 언어 선택", ["English 🇺🇸", "한국어 🇰🇷"], horizontal=True, index=0)
+# ================= UI =================
+st.set_page_config(page_title="💙 EOERWAY — 마음을 기댈 수 있는 AI 친구", layout="wide")
 
-if language == "English 🇺🇸":
-    TEXT = {
-        "title": "💙 A Warm AI Friend You Can Lean On",
-        "free": "🌱 Free Trial",
-        "paid": "💎 Premium User",
-        "feeling": "How are you feeling today?",
-        "thinking": "Thinking...",
-        "warn_empty": "Please enter something.",
-        "usedup": "🌙 You've used all 7 free sessions for today!",
-        "reset": "⏰ Your free sessions have been reset! (Every 4 hours)",
-        "reply_error": "AI Response Error",
-        "feedback_placeholder": "e.g. The AI felt really comforting 💕",
-        "feedback_sent": "💖 Feedback saved safely. Thank you!",
-        "feedback_empty": "Please write something 💬",
-        "payment_title": "💳 Payment Guide",
-        "feedback_title": "💌 Service Feedback",
-        "chat_return": "💬 Back to Chat",
-        "chat_button": "💳 Open Payment & Feedback",
-        "status_left": "remaining",
-    }
-else:
-    TEXT = {
-        "title": "💙 마음을 기댈 수 있는 따뜻한 AI 친구",
-        "free": "🌱 무료 체험중",
-        "paid": "💎 유료 이용중",
-        "feeling": "지금 어떤 기분이예요?",
-        "thinking": "생각 중이에요...",
-        "warn_empty": "내용을 입력해주세요.",
-        "usedup": "🌙 오늘의 무료 상담 7회를 모두 사용했어요!",
-        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (4시간마다 자동 복구)",
-        "reply_error": "AI 응답 오류",
-        "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
-        "feedback_sent": "💖 피드백이 안전하게 저장되었습니다. 감사합니다!",
-        "feedback_empty": "내용을 입력해주세요 💬",
-        "payment_title": "💳 결제 안내",
-        "feedback_title": "💌 서비스 피드백",
-        "chat_return": "💬 대화창으로 돌아가기",
-        "chat_button": "💳 결제 및 피드백 열기",
-        "status_left": "남은",
-    }
-
-st.title(TEXT["title"])
+st.markdown("""
+<meta name="google-adsense-account" content="ca-pub-5846666879010880">
+""", unsafe_allow_html=True)
 
 # ================= CSS =================
 st.markdown("""
@@ -145,6 +76,8 @@ html, body, [class*="css"] { font-size: 18px; }
 </style>
 """, unsafe_allow_html=True)
 
+st.title("💙 EOERWAY — 마음을 기댈 수 있는 따뜻한 AI 친구")
+
 # ================= Firestore Defaults =================
 defaults = {
     "is_paid": False,
@@ -165,23 +98,41 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
+# ================= Emotion Prompt =================
+def get_emotion_prompt(msg: str):
+    msg = msg.lower()
+    if any(w in msg for w in ["불안", "걱정", "긴장", "초조"]):
+        return "사용자가 불안을 표현했습니다. 다정하고 안정감을 주는 말로 답해주세요."
+    if any(w in msg for w in ["외로워", "혼자", "쓸쓸", "고독"]):
+        return "사용자가 외로움을 표현했습니다. 따뜻하게 곁에 있어주는 말로 위로해주세요."
+    if any(w in msg for w in ["힘들", "귀찮", "하기 싫", "지쳤"]):
+        return "사용자가 무기력을 표현했습니다. 존재를 인정하며 다정하게 공감해주세요."
+    if any(w in msg for w in ["싫어", "쓸모없", "못해", "가치없"]):
+        return "사용자가 자기혐오를 표현했습니다. 자존감을 세워주는 따뜻한 말로 위로해주세요."
+    return "일상 대화입니다. 공감하며 따뜻하게 대화를 이어가주세요."
+
 # ================= AI Response =================
 def stream_reply(user_input: str):
     try:
-        system_prompt = (
-            "You are a kind and understanding AI counselor. Respond with warmth, empathy, and natural flow in English. Write 5–7 sentences that feel caring, realistic, and gentle. Each sentence should feel like part of a comforting conversation."
-            if language == "English 🇺🇸"
-            else "너는 따뜻하고 공감력 있는 상담사야. 현실적인 위로와 공감을 담아 5~7문장 정도로 자연스럽고 다정하게 이야기해줘. 문장마다 대화를 이어가는 듯한 편안한 말투로 답해줘."
-        )
+        emotion_prompt = get_emotion_prompt(user_input)
+        full_prompt = f"""
+{emotion_prompt}
+
+너는 따뜻하고 공감력 높은 상담사야.
+5~7문장으로 답하되, 한 문장씩 자연스럽게 이어지게 말해줘.
+사용자의 감정을 충분히 인정하고, 현실적으로 도움이 될 수 있는 말을 함께 전해줘.
+
+사용자: {user_input}
+AI:"""
 
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
+                {"role": "system", "content": "너는 따뜻하고 현실적인 AI 상담사야. 공감과 실질적인 위로를 함께 제공해."},
+                {"role": "user", "content": full_prompt}
             ],
             temperature=0.9,
-            max_tokens=800,
+            max_tokens=700,
             stream=True,
         )
 
@@ -198,58 +149,69 @@ def stream_reply(user_input: str):
             "uid": USER_ID,
             "input": user_input,
             "reply": full_text.strip(),
-            "lang": language,
             "created_at": datetime.utcnow().isoformat()
         })
         return full_text.strip()
+
     except Exception as e:
-        st.error(f"{TEXT['reply_error']}: {e}")
+        st.error(f"⚠️ AI 응답 오류: {e}")
         return None
+
+# ================= Payment =================
+def render_payment_and_feedback():
+    st.markdown("---")
+    st.markdown("### 💳 결제 안내")
+    components.html(f"""
+    <div style="text-align:center">
+      <a href="{PAYPAL_URL}" target="_blank">
+        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
+          💳 PayPal로 결제하기 ($3)
+        </button>
+      </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b> 또는  
+        <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b> 으로 결제 완료 스크린샷을 보내주세요.<br>
+        🔒 <b>메시지를 확인한 후</b> 1시간 이내에 50회 이용권이 활성화됩니다.
+      </p>
+    </div>
+    """, height=270)
+
+    st.subheader("🔑 관리자 비밀번호 입력")
+    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
+    if pw:
+        if pw.strip() in ADMIN_KEYS:
+            persist_user({"is_paid": True, "remaining_paid_uses": BASIC_LIMIT})
+            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
+        else:
+            st.error("❌ 비밀번호가 올바르지 않습니다.")
+
+    st.markdown("---")
+    st.subheader("💌 서비스 피드백")
+    feedback = st.text_area("소중한 의견을 남겨주세요 💬", placeholder="예: 상담이 정말 따뜻했어요 🌷")
+    if st.button("📩 피드백 보내기"):
+        text = feedback.strip()
+        if text:
+            try:
+                db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                    "uid": USER_ID,
+                    "feedback": text,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                st.success("💖 피드백이 저장되었습니다. 감사합니다!")
+            except Exception as e:
+                st.error(f"⚠️ 피드백 저장 오류: {e}")
+        else:
+            st.warning("내용을 입력해주세요 💬")
 
 # ================= Status =================
 def status_chip():
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
-        plan = TEXT["paid"]
+        plan = "💎 유료 이용중"
     else:
         left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
-        plan = TEXT["free"]
-    st.markdown(f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>", unsafe_allow_html=True)
-
-# ================= Payment =================
-def render_payment_and_feedback():
-    st.markdown("---")
-    st.subheader(TEXT["payment_title"])
-    components.html(f"""
-    <div style="text-align:center">
-      <a href="{PAYPAL_URL}" target="_blank">
-        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
-          💳 PayPal ($3)
-        </button>
-      </a>
-      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-      💬 <b>After completing your PayPal payment</b>, please send a screenshot to  
-      <b style="color:#FFD966;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌  
-      Your 30-use access will be activated within 1 hour. ⏳  
-      <br><br>
-      🇰🇷 <b>결제 후</b> 스크린샷을 <b style="color:#FFD966;">mwiby91@gmail.com</b> 또는  
-      <b>카톡 ID: jeuspo</b> 로 보내주세요.  
-      확인 후 1시간 이내에 50회 이용권이 활성화됩니다. 🌸
-      </p>
-    </div>
-    """, height=330)
-
-    st.subheader(TEXT["feedback_title"])
-    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-    if st.button("📩 Submit / 보내기"):
-        if not fb.strip():
-            st.warning(TEXT["feedback_empty"])
-        else:
-            db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                "uid": USER_ID, "feedback": fb, "lang": language,
-                "created_at": datetime.utcnow().isoformat()
-            })
-            st.success(TEXT["feedback_sent"])
+        plan = "🌱 무료 체험중"
+    st.markdown(f"<div class='status'>{plan} — 남은 {max(left,0)}회</div>", unsafe_allow_html=True)
 
 # ================= Chat =================
 def render_chat_page():
@@ -258,30 +220,33 @@ def render_chat_page():
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         persist_user({"usage_count": 0, "last_reset": now.isoformat()})
-        st.info(TEXT["reset"])
+        st.info("⏰ 무료 상담이 다시 가능해졌어요! (4시간마다 복구)")
 
     usage = st.session_state["usage_count"]
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
-        st.warning(TEXT["usedup"])
+        st.warning("🌙 오늘의 무료 상담 7회를 모두 사용했어요!")
         st.session_state["show_payment"] = True
         st.rerun()
 
-    user_input = st.chat_input(TEXT["feeling"])
+    user_input = st.chat_input("지금 어떤 기분이예요?")
     if not user_input:
         return
-    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='user-bubble'>😔 {user_input}</div>", unsafe_allow_html=True)
     reply = stream_reply(user_input)
     if reply:
-        persist_user({"usage_count": usage + 1})
+        if st.session_state.get("is_paid"):
+            persist_user({"remaining_paid_uses": st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1})
+        else:
+            persist_user({"usage_count": usage + 1})
 
 # ================= Sidebar =================
-st.sidebar.header("📜 History / 대화 기록")
+st.sidebar.header("📜 대화 기록")
 if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
+    if st.sidebar.button("💬 대화창으로 돌아가기"):
         st.session_state["show_payment"] = False
         st.rerun()
 else:
-    if st.sidebar.button(TEXT["chat_button"]):
+    if st.sidebar.button("💳 결제 및 피드백 열기"):
         st.session_state["show_payment"] = True
         st.rerun()
 
