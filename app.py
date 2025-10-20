@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.4 (KOR/ENG toggle)
+# 💙 EOERWAY AI Therapy v2.6 (ENG/KOR 5~7 sentences)
 # ==========================================
 import os, uuid, json, time, random
 from datetime import datetime
@@ -15,8 +15,8 @@ if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
-# ================= App Config =================
-APP_VERSION = "v2.4"
+# ================= Config =================
+APP_VERSION = "v2.6"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 30
@@ -47,9 +47,8 @@ uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= Language Toggle =================
+# ================= UI & Language =================
 st.set_page_config(page_title="💙 EOERWAY AI Therapy", layout="wide")
-
 language = st.radio("🌐 Language / 언어 선택", ["English 🇺🇸", "한국어 🇰🇷"], horizontal=True, index=0)
 
 if language == "English 🇺🇸":
@@ -117,7 +116,7 @@ html, body, [class*="css"] { font-size: 18px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= Firestore 기본값 =================
+# ================= Firestore Defaults =================
 defaults = {
     "is_paid": False,
     "usage_count": 0,
@@ -137,36 +136,26 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= 감정 프롬프트 =================
-def get_emotion_prompt(msg: str):
-    msg = msg.lower()
-    if language == "English 🇺🇸":
-        return "User expressed feelings. Respond warmly and empathetically like a real counselor."
-    if any(w in msg for w in ["불안", "걱정", "초조"]):
-        return "사용자가 불안을 표현했습니다. 다정하고 안정감을 주는 말로 답해주세요."
-    if any(w in msg for w in ["외로워", "혼자", "쓸쓸"]):
-        return "사용자가 외로움을 표현했습니다. 따뜻하게 곁에 있어주는 말로 위로해주세요."
-    if any(w in msg for w in ["힘들", "귀찮", "지쳤"]):
-        return "사용자가 무기력을 표현했습니다. 존재를 인정하며 다정하게 공감해주세요."
-    return "일상 대화입니다. 공감하며 따뜻하게 대화를 이어가주세요."
-
-# ================= 스트리밍 응답 =================
+# ================= AI Response =================
 def stream_reply(user_input: str):
     try:
-        emotion_prompt = get_emotion_prompt(user_input)
         system_prompt = (
-            "You are a kind and understanding AI counselor who speaks naturally in English."
+            "You are a kind and understanding AI counselor. Respond with warmth, empathy, and natural flow in English. Write 5–7 sentences that feel caring, realistic, and gentle. Each sentence should feel like part of a comforting conversation."
             if language == "English 🇺🇸"
-            else "너는 공감력 있고 따뜻한 상담사야. 현실적인 위로와 공감을 함께 말해."
+            else "너는 따뜻하고 공감력 있는 상담사야. 현실적인 위로와 공감을 담아 5~7문장 정도로 자연스럽고 다정하게 이야기해줘. 문장마다 대화를 이어가는 듯한 편안한 말투로 답해줘."
         )
+
         stream = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input},
             ],
+            temperature=0.9,
+            max_tokens=800,
             stream=True,
         )
+
         placeholder = st.empty()
         full_text = ""
         for chunk in stream:
@@ -175,6 +164,7 @@ def stream_reply(user_input: str):
                 full_text += delta.content
                 placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
                 time.sleep(0.03)
+
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -187,7 +177,7 @@ def stream_reply(user_input: str):
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-# ================= 상태 표시 =================
+# ================= Status =================
 def status_chip():
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
@@ -197,7 +187,7 @@ def status_chip():
         plan = TEXT["free"]
     st.markdown(f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>", unsafe_allow_html=True)
 
-# ================= 결제 및 피드백 =================
+# ================= Payment =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
@@ -208,8 +198,17 @@ def render_payment_and_feedback():
           💳 PayPal ($3)
         </button>
       </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+      💬 <b>After completing your PayPal payment</b>, please send a screenshot to  
+      <b style="color:#FFD966;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌  
+      Your 30-use access will be activated within 1 hour. ⏳  
+      <br><br>
+      🇰🇷 <b>결제 후</b> 스크린샷을 <b style="color:#FFD966;">mwiby91@gmail.com</b> 또는  
+      <b>카톡 ID: jeuspo</b> 로 보내주세요.  
+      확인 후 1시간 이내에 50회 이용권이 활성화됩니다. 🌸
+      </p>
     </div>
-    """, height=150)
+    """, height=330)
 
     st.subheader(TEXT["feedback_title"])
     fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
@@ -223,7 +222,7 @@ def render_payment_and_feedback():
             })
             st.success(TEXT["feedback_sent"])
 
-# ================= 채팅 =================
+# ================= Chat =================
 def render_chat_page():
     status_chip()
     now = datetime.utcnow()
@@ -257,7 +256,7 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
-# ================= 실행 =================
+# ================= Run =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
