@@ -49,7 +49,7 @@ st.query_params = {"uid": uid}
 USER_ID = uid
 
 # ================= UI Config =================
-st.set_page_config(page_title="💙 EOERWAY AI Therapy", layout="wide")
+st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # --- 작은 언어 전환 버튼 (기본 영어) ---
 if "lang" not in st.session_state:
