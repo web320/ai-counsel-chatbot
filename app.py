@@ -15,13 +15,42 @@ if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
-# ================= Config =================
-APP_VERSION = "v2.6"
+# ================= App Config =================
+APP_VERSION = "v2.4"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
-BASIC_LIMIT = 30
+BASIC_LIMIT = 50  # 50회로 변경
 RESET_INTERVAL_HOURS = 4
 ADMIN_KEYS = ["4321"]
+
+# ================= 결제 및 피드백 =================
+def render_payment_and_feedback():
+    st.markdown("---")
+    st.markdown("### 💳 결제 안내")
+    components.html(f"""
+    <div style="text-align:center">
+      <a href="{PAYPAL_URL}" target="_blank">
+        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;">
+          💳 PayPal로 결제하기 ($3)
+        </button>
+      </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+        결제 후 <b style="color:#FFD966;">카톡 ID: jeuspo</b> 또는
+        <b style="color:#9CDCFE;">이메일: mwiby91@gmail.com</b> 으로 결제 완료 스크린샷을 보내주세요.<br>
+        🔒 확인 후 <b>관리자 비밀번호</b> 입력 시 50회 이용권이 즉시 활성화됩니다.
+      </p>
+    </div>
+    """, height=260)
+
+    st.subheader("🔑 관리자 비밀번호 입력")
+    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
+    if pw:
+        if pw.strip() in ADMIN_KEYS:
+            persist_user({"is_paid": True, "remaining_paid_uses": BASIC_LIMIT})
+            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
+        else:
+            st.error("❌ 비밀번호가 올바르지 않습니다.")
+
 
 # ================= OpenAI =================
 load_dotenv()
