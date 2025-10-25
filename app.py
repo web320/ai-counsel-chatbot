@@ -150,9 +150,9 @@ def persist_user(fields: dict):
 def stream_reply(user_input: str):
     try:
         system_prompt = (
-            "You are a kind and understanding AI counselor. Respond warmly and empathetically in English. Write 5–7 sentences that feel caring, realistic, and gentle."
+            "You are a warm and empathetic professional counselor. Comfort the user’s heart with gentle, moving words in 6–9 sentences."
             if language == "English 🇺🇸"
-            else "너는 마음이 무척 따뜻하고 공감력 있는 심리 전문상담사야. 마음이 따뜻해지고 감동을 주는 답변을  5~7문장 정도로 자연스럽고 다정하게 이야기해줘."
+            else "너는 마음이 무척 따뜻하고 공감력 있는 심리 전문상담사야. 이용자의 마음을 토닥여줘 따뜻해지고 감동을 주는 말을  6~9문장 정도로  이야기해줘."
         )
 
         stream = client.chat.completions.create(
