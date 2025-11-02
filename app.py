@@ -1,44 +1,45 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v6.0-Loyal
-# (Retention + Safety + Monetization Optimized)
+# 💙 EOERWAY AI Therapy v2.8
+# (Default: English, Small Language Toggle Button)
 # ==========================================
 
-import os, uuid, json, time, random, re
-from datetime import datetime, timedelta
+import os, uuid, json, time, random
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
+import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ---------------------------------
-# 🌐 Basic App Config
-# ---------------------------------
-st.set_page_config(
-    page_title="💙 EOERWAY AI Therapy",
-    layout="wide"
-)
+# ================= Streamlit Page Config =================
+# ⚠️ MUST be the first Streamlit call before any other st.* usage
+st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
-load_dotenv()
-
-APP_VERSION = "v6.0-Loyal"
-DAILY_FREE_LIMIT = 7          # 무료 상담 가능 횟수
-BASIC_LIMIT = 50              # 유료(프리미엄) 남은 상담 횟수
-RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
+# ================= Constants / Config =================
+APP_VERSION = "v2.8"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-ADMIN_KEYS = ["4321"]         # 관리용 비밀번호
+DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
+BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
+RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
+ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
 
-# ---------------------------------
-# 🔐 OpenAI init
-# ---------------------------------
+# ================= ads.txt (for AdSense) =================
+# ?ads.txt 호출 시 ads.txt 내용을 그대로 반환하고 종료
+if "ads.txt" in st.query_params:
+    st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
+    st.stop()
+
+# ================= OpenAI (LLM) =================
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ---------------------------------
-# 🔥 Firebase init
-# ---------------------------------
+# ================= Firebase =================
 def _firebase_config():
     raw = st.secrets.get("firebase")
+    if raw is None:
+        raise RuntimeError("Secrets에 [firebase] 설정이 없습니다.")
     if isinstance(raw, str):
         return json.loads(raw)
     return dict(raw)
@@ -46,44 +47,92 @@ def _firebase_config():
 if not firebase_admin._apps:
     cred = credentials.Certificate(_firebase_config())
     firebase_admin.initialize_app(cred)
-
 db = firestore.client()
 
-# ---------------------------------
-# 🧍 User Session (anonymous uid)
-# ---------------------------------
+# ================= Query Params / UID =================
+# 유저마다 uid를 고정해서 추적
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ---------------------------------
-# 📢 ads.txt endpoint for AdSense
-# ---------------------------------
-if "ads.txt" in st.query_params:
-    st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
-    st.stop()
+# ================= Language State =================
+# 첫 접속 기본 언어는 영어
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "English 🇺🇸"
 
-# ---------------------------------
-# 🎨 CSS
-# ---------------------------------
-st.markdown("""
+col1, col2 = st.columns([5, 1])
+with col2:
+    lang_choice = st.radio(
+        " ",
+        ["English 🇺🇸", "한국어 🇰🇷"],
+        horizontal=True,
+        label_visibility="collapsed",
+        index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
+    )
+
+st.session_state["lang"] = lang_choice
+language = st.session_state["lang"]
+
+# ================= Text by Language =================
+if language == "English 🇺🇸":
+    TEXT = {
+        "title": "❤️ A Warm AI Friend You Can Lean On",
+        "free": "🌱 Free Trial",
+        "paid": "💎 Premium User",
+        "input": "How are you feeling right now?",
+        "warn": "Please enter something 💬",
+        "usedup": "🌙 You’ve used all 7 free sessions today!",
+        "reset": "⏰ Free sessions reset! (Every 4 hours)",
+        "reply_error": "AI response error",
+        "feedback_placeholder": "e.g., The AI felt really comforting 💕",
+        "feedback_sent": "💖 Feedback saved safely. Thank you!",
+        "feedback_empty": "Please write something 💬",
+        "payment_title": "💳 Payment Guide",
+        "feedback_title": "💌 Service Feedback",
+        "chat_return": "💬 Back to Chat",
+        "chat_button": "💳 Open Payment & Feedback",
+        "status_left": "remaining",
+    }
+else:
+    TEXT = {
+        "title": "❤️ 마음을 기댈 수 있는 따뜻한 AI 친구",
+        "free": "🌱 무료 체험중",
+        "paid": "💎 유료 이용중",
+        "input": "지금 어떤 기분이예요?",
+        "warn": "내용을 입력해주세요 💬",
+        "usedup": "🌙 오늘의 무료 상담 7회를 모두 사용했어요!",
+        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (4시간마다 복구)",
+        "reply_error": "AI 응답 오류",
+        "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
+        "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
+        "feedback_empty": "내용을 입력해주세요 💬",
+        "payment_title": "💳 결제 안내",
+        "feedback_title": "💌 서비스 피드백",
+        "chat_return": "💬 대화창으로 돌아가기",
+        "chat_button": "💳 결제 및 피드백 열기",
+        "status_left": "남은",
+    }
+
+st.title(TEXT["title"])
+
+# ================= CSS (Chat Bubble Style) =================
+st.markdown(
+    """
 <style>
-html, body, [class*="css"] { font-size:18px; }
+html, body, [class*="css"] { font-size: 18px; }
 
 .user-bubble {
   background:#b91c1c;
   color:#fff;
   border-radius:14px;
   padding:10px 18px;
-  margin:8px 0 4px 0;
+  margin:8px 0;
   display:inline-block;
   box-shadow:0 0 10px rgba(255,0,0,0.3);
-  max-width:90%;
-  word-break:break-word;
 }
 
 .bot-bubble {
-  font-size:20px;
+  font-size:21px;
   line-height:1.8;
   border-radius:16px;
   padding:16px 20px;
@@ -103,7 +152,7 @@ html, body, [class*="css"] { font-size:18px; }
   to   { box-shadow:0 0 22px #ffcc33; }
 }
 
-.status-chip {
+.status {
   font-size:15px;
   padding:8px 12px;
   border-radius:10px;
@@ -111,68 +160,12 @@ html, body, [class*="css"] { font-size:18px; }
   margin-bottom:8px;
   background:rgba(255,255,255,.06);
 }
-
-.emobar-wrap {
-  margin-top:6px;
-  width:100%;
-  max-width:340px;
-  background:#222;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,0.1);
-  padding:8px 12px;
-  color:#fff;
-  font-size:15px;
-  line-height:1.4;
-}
-
-.emobar-bar {
-  height:10px;
-  border-radius:6px;
-  margin-top:6px;
-  box-shadow:0 0 8px rgba(255,255,255,.4);
-}
-
-.history-box {
-  background:rgba(255,255,255,0.03);
-  border:1px solid rgba(255,255,255,0.08);
-  border-radius:12px;
-  padding:12px 16px;
-  font-size:14px;
-  line-height:1.5;
-  max-height:250px;
-  overflow-y:auto;
-}
-
-.history-item-me {
-  color:#ffcccc;
-  margin-bottom:6px;
-  font-weight:500;
-}
-
-.history-item-ai {
-  color:#fff;
-  opacity:0.8;
-  margin-bottom:12px;
-  font-style:italic;
-}
-
-.panic-box {
-  background:#2b0000;
-  border:1px solid #ff4d4d;
-  color:#fff;
-  border-radius:12px;
-  padding:16px;
-  font-size:16px;
-  line-height:1.6;
-  box-shadow:0 0 12px rgba(255,0,0,.5);
-  margin-top:12px;
-}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True
+)
 
-# ---------------------------------
-# 🧠 Firestore defaults / state
-# ---------------------------------
+# ================= Firestore Defaults / User State =================
 defaults = {
     "is_paid": False,
     "usage_count": 0,
@@ -182,383 +175,244 @@ defaults = {
 
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
+
 if snap.exists:
-    data_from_db = snap.to_dict() or {}
-    merged = {}
-    for k, v in defaults.items():
-        merged[k] = data_from_db.get(k, v)
-    st.session_state.update(merged)
+    data = snap.to_dict() or {}
+    # 세션에 기본값과 DB 값 합쳐서 로드
+    st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
 else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
 def persist_user(fields: dict):
+    """Firestore + session_state 동시 업데이트"""
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ---------------------------------
-# 💬 Helper: language detection (simple heuristic)
-# ---------------------------------
-def detect_language_simple(text: str) -> str:
-    # 매우 단순한 감지. 외부 번역 라이브러리 없이 동작
-    if re.search(r"[가-힣]", text):
-        return "ko"
-    return "en"
-
-# ---------------------------------
-# 💗 Helper: emotion scoring + visual bar
-# ---------------------------------
-def emotion_score_block(text: str):
-    sad_words = ["힘들", "지쳤", "무기력", "그만", "포기", "울고", "lonely", "tired", "empty", "sad", "worthless"]
-    good_words = ["고마", "소중", "괜찮", "편안", "사랑", "appreciate", "grateful", "loved", "hope", "better"]
-
-    sad_count = sum(text.lower().count(w.lower()) for w in sad_words)
-    good_count = sum(text.lower().count(w.lower()) for w in good_words)
-
-    # 기본값 50에서 감정 방향을 반영
-    raw = 50 + (good_count * 10) - (sad_count * 10)
-    score = max(0, min(100, raw))
-
-    if score < 30:
-        emoji = "💔"
-        bar_color = "linear-gradient(90deg,#550000,#ff0033)"
-        msg = "마음이 많이 무너진 상태에 가까워 보여요"
-    elif score < 60:
-        emoji = "🌙"
-        bar_color = "linear-gradient(90deg,#332244,#8844ff)"
-        msg = "지치고 예민해져 있는 순간일 수 있어요"
-    else:
-        emoji = "🌤️"
-        bar_color = "linear-gradient(90deg,#00a86b,#b6ff66)"
-        msg = "조금 숨 쉴 틈이 보이기 시작하고 있어요"
-
-    return {
-        "score": int(score),
-        "emoji": emoji,
-        "desc": msg,
-        "bar_color": bar_color
-    }
-
-def render_emotion_block(result: dict):
-    st.markdown(
-        f"""
-        <div class="emobar-wrap">
-            <div><b>{result['emoji']} Emotion Status:</b> {result['desc']}</div>
-            <div style="font-size:13px;opacity:.7;">Score: {result['score']} / 100</div>
-            <div class="emobar-bar" style="width:{result['score']}%; background:{result['bar_color']};"></div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-# ---------------------------------
-# 🚨 Crisis safety check
-# ---------------------------------
-def crisis_detect(text: str) -> bool:
-    crisis_keywords = [
-        "죽고 싶", "자살", "끝내고 싶", "살기 싫", "그만 살", "kill myself",
-        "end it all", "suicide", "i don't want to live"
-    ]
-    for k in crisis_keywords:
-        if k.lower() in text.lower():
-            return True
-    return False
-
-def render_crisis_box(lang: str):
-    if lang == "ko":
-        st.markdown(
-            """
-            <div class="panic-box">
-            지금 이 순간이 너무 벅차고, 정말로 혼자 못 버티겠다는 생각이 드신다면  
-            지금 바로 도움을 받을 수 있는 안전한 창구가 있어요요.  
-            한국에서는 24시간 가능한 자살 예방 상담전화 1393으로 전화하실 수 있어요요.  
-            완전히 익명이고, 그냥 “저 좀 힘들어요”라고만 말해도 괜찮아요요.  
-            혼자 견디지 않으셔도 괜찮아요요. 지금 이 순간 당신은 혼자가 아니예요요.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            """
-            <div class="panic-box">
-            If you're feeling like you might hurt yourself or you can’t hold on alone,  
-            you deserve immediate real human support right now.  
-            Please reach out to your local crisis hotline or emergency services.  
-            You are not a burden. You are worth staying.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-# ---------------------------------
-# 🧠 Core counselor reply builder (OpenAI)
-# ---------------------------------
-def counselor_reply(user_text: str, lang: str) -> str:
-    """
-    lang == 'ko' -> 한국어 존댓말, 모든 문장 '요'로 끝나도록 요청
-    lang == 'en' -> 부드러운 영어 톤
-    OpenAI 호출 실패 시 fallback 답변 리턴
-    """
-
-    if lang == "ko":
-        system_style = (
-            "너는 마음이 매우 따뜻하고 공감 능력이 뛰어난 전문 심리 상담사예요.\n"
-            "항상 존댓말을 쓰고 모든 문장은 반드시 '요'로 끝나요.\n"
-            "반드시 6~9문장 안에서 대답해요.\n\n"
-            "답변 구조는 항상 다음 네 가지 흐름을 모두 포함해야 해요:\n"
-            "1) 부드러운 첫 인사와 안전감 주기 ('이렇게 솔직하게 말해주셔서 고마워요' 같은 식으로 시작해요)\n"
-            "2) 사용자의 감정을 정확히 짚고 '그건 이상한 반응이 아니예요'라고 정상화해요\n"
-            "3) 지금 바로 할 수 있는 아주 작은 안정 행동을 조심스럽게 제안해요 (예: '혹시 괜찮다면 어깨 힘을 조금만 풀어볼까요' 같이)\n"
-            "4) 그 사람이 이미 충분히 잘 버티고 있고 가치 있는 존재라는 걸 진심으로 상기시켜줘요\n\n"
-            "절대 의료적 조언이나 약물 언급, 진단명 언급은 하지 말아요.\n"
-            "지금 사용자를 비난하거나 분석하지 말아요. 그냥 옆에서 같이 있는 사람처럼 말해요.\n"
-        )
-    else:
-        system_style = (
-            "You are a deeply gentle, emotionally safe, nonjudgmental mental health companion.\n"
-            "Speak in warm, human, soft English. 6-9 sentences total.\n\n"
-            "Your structure must always include:\n"
-            "1) Thank them for sharing and make them feel safe.\n"
-            "2) Name/validate their feelings and say it's understandable.\n"
-            "3) Offer one tiny grounding or soothing action they can try right now (breathing, relaxing shoulders).\n"
-            "4) Remind them they have worth, and that reaching out is already strength.\n\n"
-            "Do NOT give medical or medication advice. Do NOT diagnose.\n"
-            "Never judge or pressure. Be calm and reassuring.\n"
-        )
-
+# ================= AI Response Function =================
+def stream_reply(user_input: str):
     try:
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_style},
-                {"role": "user", "content": user_text},
-            ],
-            temperature=0.8,
-            max_tokens=600,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception:
-        if lang == "ko":
-            return (
-                "지금 마음을 이렇게 털어놔준 것만으로도 정말 큰 용기예요요. "
-                "지금 순간을 혼자 버티는 게 얼마나 힘들 수 있는지 저는 이해하고 싶어요요. "
-                "어깨랑 턱에 들어간 힘을 살짝만 풀고 천천히 길게 들이쉬고 내쉬는 숨을 세 번 해볼까요요. "
-                "당신은 이미 무너지고 싶은 순간에도 계속 버티고 있는 분이예요요. "
-                "그건 약한 게 아니라 정말 강한 거예요요."
+        if language == "English 🇺🇸":
+            system_prompt = (
+                "You are a warm and empathetic professional counselor. "
+                "Comfort the user’s heart with gentle, moving words in 6–9 sentences. "
+                "Focus on safety, self-kindness, immediate emotional relief, and do not give medical or medication advice."
             )
         else:
-            return (
-                "Thank you for opening up right now. You're not alone here. "
-                "If your body is tight, try loosening your jaw and shoulders and take one slow breath in, then let it out longer than you took it in. "
-                "You are already doing something strong by talking about this. "
-                "You deserve kindness, especially from yourself."
-            )
+            # ✅ 여기가 원래 깨졌던 부분: 이제 멀티라인 문자열로 안전하게 고쳤어요
+            system_prompt = """
+너는 마음이 무척 따뜻하고 공감력 있는 심리 전문상담사예요.
 
-# ---------------------------------
-# 📜 Recent chat history (for trust / retention)
-# ---------------------------------
-def get_recent_history(uid: str, limit: int = 10):
-    # 최신순으로 limit개 가져와서 시간순 정렬로 다시 보여줌
-    docs = (
-        db.collection("chats")
-        .where("uid", "==", uid)
-        .order_by("created_at", direction=firestore.Query.DESCENDING)
-        .limit(limit)
-        .stream()
-    )
-    items = []
-    for d in docs:
-        obj = d.to_dict()
-        items.append(obj)
-    # 다시 오래된 것부터 출력되도록 reverse
-    items.reverse()
-    return items
+모든 문장은 반드시 ‘요’로 끝나야 하고, 존댓말을 사용해요.
+항상 6~9문장 안에서 답변해요.
 
-def render_history_box(items):
-    if not items:
-        st.write("아직 대화 기록이 없어요. 지금 마음을 처음으로 들려주고 있어요 🌷")
-        return
-    st.markdown("<div class='history-box'>", unsafe_allow_html=True)
-    for c in items:
-        user_txt = c.get("input", "")
-        bot_txt  = c.get("reply", "")
-        st.markdown(f"<div class='history-item-me'>🙋‍♀️ {user_txt}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='history-item-ai'>💙 {bot_txt}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+당신의 목표는 이용자의 긴장과 죄책감을 줄이고,
+당장 조금 더 숨 쉬기 편하게 만들어주는 것이에요.
 
-# ---------------------------------
-# 🧾 Load usage state / reset logic
-# ---------------------------------
-def ensure_reset_window():
-    now = datetime.utcnow()
-    last_reset_raw = st.session_state.get("last_reset")
-    try:
-        last_reset_dt = datetime.fromisoformat(last_reset_raw)
-    except Exception:
-        last_reset_dt = now
-        persist_user({"last_reset": now.isoformat()})
+답변 형식은 반드시 아래 네 가지 흐름을 모두 포함해야 해요:
 
-    hours_passed = (now - last_reset_dt).total_seconds() / 3600
-    if hours_passed >= RESET_INTERVAL_HOURS:
-        # reset free usage counter
-        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
-        st.info("⏰ 무료 상담 기회가 새로 충전되었어요 (4시간마다 복구돼요).")
+1) 진심 어린 첫 인사
+   - "이렇게 솔직하게 이야기해 주셔서 정말 고마워요"처럼 시작해요.
+   - 사용자가 혼자가 아니라는 느낌을 주어요.
 
-ensure_reset_window()
+2) 감정 라벨링과 정상화
+   - 이용자가 겪는 감정을 구체적으로 짚어서 말해줘요.
+   - 예: "이건 단순한 게 아니라 지치고 무력해진 마음이라서 정말 버티기 어려운 상태예요"처럼 설명해줘요.
+   - "이런 반응은 충분히 자연스러워요"라고 확실하게 말해줘요.
 
-# ---------------------------------
-# 🏷 Status chip (plan / remaining)
-# ---------------------------------
-if st.session_state.get("is_paid"):
-    plan_label = "💎 Premium User"
-    left_count = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
-else:
-    plan_label = "🌱 Free Trial"
-    left_count = DAILY_FREE_LIMIT - st.session_state["usage_count"]
+3) 지금 바로 할 수 있는 매우 작은 안정 행동 한 가지를 부드럽게 제안해요
+   - 예: "혹시 괜찮다면 지금 어깨랑 턱 힘을 살짝만 풀어볼까요, 숨을 천천히 들이쉬고 길게 내쉬는 걸 세 번만 같이 해볼까요"처럼 몸을 진정시키는 행동을 안내해요.
+   - 명령처럼 하지 말고, 조심스럽게 제안해요.
 
-st.markdown(
-    f"<div class='status-chip'>{plan_label} — Remaining {max(left_count,0)} chats</div>",
-    unsafe_allow_html=True
-)
+4) 자기 가치와 지속 가능성 강조
+   - "당신은 이미 무너지고 싶은 순간에도 버티고 있는 분이고, 그건 정말 대단한 힘이에요"처럼 이용자의 존재 가치를 상기시켜줘요.
+   - "지금처럼 마음을 알아달라고 손을 내민 건 분명히 앞으로를 바꾸는 첫 걸음이에요"처럼 희망을 너무 과장하지 않으면서 조용하게 말해줘요.
 
-# ---------------------------------
-# 📂 Sidebar: recent chat history + manual premium unlock
-# ---------------------------------
-with st.sidebar:
-    st.markdown("### 📜 Your Comfort Record")
-    render_history_box(get_recent_history(USER_ID, limit=10))
+주의사항:
+- 해결책을 강요하지 말아요. "해야만 해요", "괜찮을 거예요"처럼 단정하거나 압박하지 말아요.
+- 이용자를 평가하거나 분석하지 말아요. "당신은 ~~한 성향이라서"처럼 단정하지 말아요.
+- 의학적 진단이나 약 복용 조언은 절대 하지 말아요.
+- 자살이나 안전에 관련된 생각이 감지되면, 아주 부드럽게 즉각적인 도움 자원을 언급해요.
+  예: "만약 바로 지금이 너무 벅차서 다 내려놓고 싶다는 생각까지 드신다면,
+  지금 이 순간을 혼자 버티지 않으셔도 괜찮아요.
+  24시간 가능한 도움을 바로 연결받을 수 있는 곳이 있어요.
+  한국에서는 1393 같은 자살 예방 상담전화가 익명으로 바로 연결돼요.
+  지금 이 대화를 끊지 않아도 되고요."
+"""
 
+        # OpenAI 스트리밍 응답
+        stream = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
+            temperature=0.9,
+            max_tokens=700,
+            stream=True,
+        )
+
+        placeholder = st.empty()
+        full_text = ""
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, "content") and delta.content:
+                full_text += delta.content
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.03)
+
+        # 대화 로그 저장
+        db.collection("chats").add({
+            "uid": USER_ID,
+            "input": user_input,
+            "reply": full_text.strip(),
+            "lang": language,
+            "created_at": datetime.utcnow().isoformat()
+        })
+
+        return full_text.strip()
+
+    except Exception as e:
+        st.error(f"{TEXT['reply_error']}: {e}")
+        return None
+
+# ================= Payment / Feedback Panel =================
+def render_payment_and_feedback():
     st.markdown("---")
-    st.markdown("### 💎 Premium Access (Manual)")
-    st.caption("이미 결제하셨다면 아래 코드를 입력해 주세요.")
-    pw = st.text_input("관리자 / 결제 확인 코드", type="password")
+    st.subheader(TEXT["payment_title"])
+
+    components.html(
+        f"""
+    <div style="text-align:center">
+      <a href="{PAYPAL_URL}" target="_blank">
+        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;cursor:pointer;">
+          💳 PayPal ($3)
+        </button>
+      </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+      After payment, please send a screenshot to  
+      <b style="color:#FFD966;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌<br>
+      🔒 <b>Once the message is read</b>, your 50-use access will be activated within 1 hour.  
+      <br><br>
+      🇰🇷 결제 후 <b style="color:#FFD966;">mwiby91@gmail.com</b> 또는  
+      <b>카톡 ID: jeuspo</b> 로 스크린샷을 보내주세요.<br>
+      메시지를 확인한 후 1시간 이내에 50회 이용권이 활성화됩니다. 🌸
+      </p>
+    </div>
+    """,
+        height=320
+    )
+
+    # 관리자 비밀번호로 유료권 수동 활성화
+    st.subheader("🔑 관리자 비밀번호 입력")
+    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
+
     if pw:
         if pw.strip() in ADMIN_KEYS:
             persist_user({
                 "is_paid": True,
                 "remaining_paid_uses": BASIC_LIMIT
             })
-            st.success("프리미엄이 활성화되었어요. 50회 상담 가능해요 💎")
+            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
         else:
-            st.error("코드가 맞지 않아요.")
+            st.error("❌ 비밀번호가 올바르지 않습니다.")
 
     st.markdown("---")
-    st.markdown("#### 💖 Upgrade & Support")
-    st.write(
-        f"• PayPal로 3달러 결제 후\n"
-        f"  스크린샷을 `mwiby91@gmail.com` 또는 카카오 `jeuspo` 로 보내주세요.\n\n"
-        f"• 확인되면 50회 이용권이 바로 열려요."
-    )
-    st.markdown(f"[💳 PayPal 결제 바로가기]({PAYPAL_URL})")
 
-# ---------------------------------
-# 🧊 If out of free usage → stop and upsell
-# ---------------------------------
-if (not st.session_state.get("is_paid")) and (st.session_state["usage_count"] >= DAILY_FREE_LIMIT):
-    st.warning(
-        "🌙 오늘의 무료 상담 7회를 모두 사용하셨어요.\n\n"
-        "지금은 마음이 많이 무거울 수도 있어요. 쉬어가는 것도 정말 괜찮아요.\n\n"
-        "조금 더 깊이 이야기하고 싶다면 프리미엄으로 전환하실 수 있어요 💎"
-    )
-    st.stop()
+    # 서비스 피드백
+    st.subheader(TEXT["feedback_title"])
+    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
 
-# ---------------------------------
-# 📝 Main Chat Input
-# ---------------------------------
-st.title("🫧 Tell me what's on your mind")
-st.caption("당신 얘기를 안전하게 들어줄 따뜻한 공간이에요. 익명이고, 판단하지 않아요.")
+    if st.button("📩 Submit / 보내기"):
+        if not fb.strip():
+            st.warning(TEXT["feedback_empty"])
+        else:
+            db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                "uid": USER_ID,
+                "feedback": fb,
+                "lang": language,
+                "created_at": datetime.utcnow().isoformat()
+            })
+            st.success(TEXT["feedback_sent"])
 
-user_input = st.chat_input("지금 어떤 기분인지 편하게 적어주세요 / Type anything you're feeling 💬")
-if not user_input:
-    st.stop()
+# ================= Chat Main Page =================
+def render_chat_page():
+    # 상태 텍스트 (무료 or 유료 / 남은 횟수)
+    if st.session_state.get("is_paid"):
+        left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
+        plan = TEXT["paid"]
+    else:
+        left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
+        plan = TEXT["free"]
 
-# 사용자 말풍선 먼저 출력
-st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
-
-# ---------------------------------
-# ❤️ Emotion Block
-# ---------------------------------
-emo_info = emotion_score_block(user_input)
-render_emotion_block(emo_info)
-
-# ---------------------------------
-# 🧠 Generate AI reply (personalized by language style)
-# ---------------------------------
-lang = detect_language_simple(user_input)
-reply_text = counselor_reply(user_input, lang)
-
-# AI 말풍선 출력
-st.markdown(f"<div class='bot-bubble'>{reply_text} 💫</div>", unsafe_allow_html=True)
-
-# ---------------------------------
-# 🚨 Crisis box if needed
-# ---------------------------------
-if crisis_detect(user_input):
-    render_crisis_box(lang)
-
-# ---------------------------------
-# 🗃 Save chat & usage
-# ---------------------------------
-now_iso = datetime.utcnow().isoformat()
-
-db.collection("chats").add({
-    "uid": USER_ID,
-    "input": user_input,
-    "reply": reply_text,
-    "lang": lang,
-    "emotion_score": emo_info["score"],
-    "created_at": now_iso
-})
-
-# 감정 기록 별도 저장 (향후 감정 타임라인 / 리텐션 분석 가능)
-db.collection("emotions").add({
-    "uid": USER_ID,
-    "score": emo_info["score"],
-    "tag": emo_info["emoji"],
-    "time": now_iso,
-    "raw": user_input[:500]
-})
-
-# 사용량 차감
-if st.session_state.get("is_paid"):
-    persist_user({
-        "remaining_paid_uses": max(
-            0,
-            st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
-        )
-    })
-else:
-    persist_user({"usage_count": st.session_state["usage_count"] + 1})
-
-# ---------------------------------
-# 🌷 Gentle footer affirmations
-# ---------------------------------
-st.markdown("---")
-if lang == "ko":
     st.markdown(
-        f"""
-        <div style='text-align:center;opacity:0.9;color:#fff;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;'>
-        오늘 이렇게 마음을 표현했다는 건 이미 무너지는 대신 나를 지키려고 했다는 뜻이예요요.<br>
-        그건 약함이 아니라 엄청난 강함이예요요.<br><br>
-        버티고 있는 당신은 소중한 사람이예요요.
-        <br><br>
-        <small>EOERWAY v{APP_VERSION} • Built with 💙 Streamlit + OpenAI</small>
-        </div>
-        """,
+        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
         unsafe_allow_html=True
     )
-else:
+
+    # 무료 카운트 회복 체크 (4시간마다)
+    now = datetime.utcnow()
+    last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
+
+    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
+        persist_user({
+            "usage_count": 0,
+            "last_reset": now.isoformat()
+        })
+        st.info(TEXT["reset"])
+
+    # 무료 한도 초과 시 결제 안내 화면으로 전환
+    usage = st.session_state["usage_count"]
+    if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
+        st.warning(TEXT["usedup"])
+        st.session_state["show_payment"] = True
+        st.rerun()
+
+    # 유저 입력
+    user_input = st.chat_input(TEXT["input"])
+    if not user_input:
+        return
+
+    # 유저 말풍선 표시
     st.markdown(
-        f"""
-        <div style='text-align:center;opacity:0.9;color:#fff;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;'>
-        The fact that you reached out means you chose care instead of disappearing.<br>
-        That's not weakness — that's real strength.<br><br>
-        You matter more than you think.
-        <br><br>
-        <small>EOERWAY v{APP_VERSION} • Built with 💙 Streamlit + OpenAI</small>
-        </div>
-        """,
+        f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
     )
+
+    # AI 답변 스트리밍
+    reply = stream_reply(user_input)
+
+    # 사용량 차감 / 기록
+    if reply:
+        if st.session_state.get("is_paid"):
+            persist_user({
+                "remaining_paid_uses": max(
+                    0,
+                    st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
+                )
+            })
+        else:
+            persist_user({"usage_count": usage + 1})
+
+# ================= Sidebar =================
+st.sidebar.header("📜 History / 대화 기록")
+
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
+
+# ================= Main Render =================
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
 
