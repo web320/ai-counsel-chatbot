@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v5.1-Stable
-# (GitHub Deploy - Error-Free Version)
+# 💙 EOERWAY AI Therapy v5.2-Optimized
+# (No External Graph Modules, GitHub Deploy)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -10,7 +10,6 @@ from openai import OpenAI
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import matplotlib.pyplot as plt
 
 # ---------------------------
 # CONFIG
@@ -18,7 +17,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="💙 EOERWAY AI Therapy", layout="wide")
 load_dotenv()
 
-APP_VERSION = "v5.1-Stable"
+APP_VERSION = "v5.2-Optimized"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 50
 RESET_INTERVAL_HOURS = 4
@@ -78,7 +77,7 @@ margin-bottom:8px;background:rgba(255,255,255,.06);}
 """, unsafe_allow_html=True)
 
 # ---------------------------
-# DEFAULTS
+# FIRESTORE DEFAULTS
 # ---------------------------
 defaults = {
     "is_paid": False,
@@ -103,42 +102,29 @@ def persist_user(fields):
 # HELPER FUNCTIONS
 # ---------------------------
 def detect_language(text):
-    if any(k in text for k in ["요", "안녕", "습니다", "그래요", "사랑해"]):
+    if any(k in text for k in ["요", "안녕", "사랑해", "입니다"]):
         return "ko"
     return "en"
-
-def translate_to_en(text):
-    return text  # deep_translator 제거, 번역 없이 그대로 사용
-
-def translate_from_en(text, lang):
-    return text  # deep_translator 제거, 번역 없이 그대로 사용
 
 def analyze_emotion(text):
     sad = sum(text.lower().count(k) for k in ["sad","lonely","tired","무기력","외로","슬퍼"])
     happy = sum(text.lower().count(k) for k in ["happy","love","기뻐","감사","좋아"])
-    return max(0, min(100, 50 + (happy - sad) * 10))
+    score = max(0, min(100, 50 + (happy - sad) * 10))
+    emoji = "😢" if score < 40 else "🙂" if score < 70 else "😊"
+    color = "linear-gradient(90deg,#ff3366,#ffaa00)" if score < 40 else "linear-gradient(90deg,#66ccff,#33cc33)"
+    return score, emoji, color
 
-def draw_emotion_graph(uid):
-    docs = db.collection("emotions").where("uid", "==", uid).order_by("time").limit(20).stream()
-    times, scores = [], []
-    for d in docs:
-        data = d.to_dict()
-        times.append(data["time"][-8:])
-        scores.append(data["score"])
-    if scores:
-        fig, ax = plt.subplots(figsize=(6,3))
-        ax.plot(times, scores, marker="o")
-        ax.set_ylim(0,100)
-        ax.set_title("💗 Emotion History")
-        st.pyplot(fig)
-    else:
-        st.info("아직 감정 데이터가 없어요 💫")
+def show_emotion_bar(score, emoji, color):
+    st.markdown(
+        f"<div style='background:{color};border-radius:10px;padding:8px 14px;width:{score}%;color:#fff'>{emoji} Emotion Score: {score}</div>",
+        unsafe_allow_html=True
+    )
 
 # ---------------------------
 # PAGE TITLE
 # ---------------------------
-st.title("💙 EOERWAY AI Therapy v5.1")
-st.caption("🌍 A Warm Global AI Friend That Listens and Cares")
+st.title("💙 EOERWAY AI Therapy v5.2")
+st.caption("🌍 Optimized Emotional AI Friend – Fast, Warm, and Reliable")
 
 # ---------------------------
 # STATUS BAR
@@ -152,7 +138,7 @@ else:
 st.markdown(f"<div class='status'>{plan} — Remaining {max(left,0)} chats</div>", unsafe_allow_html=True)
 
 # ---------------------------
-# RESET COUNTER (4H)
+# RESET COUNTER
 # ---------------------------
 now = datetime.utcnow()
 last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
@@ -161,61 +147,50 @@ if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
     st.info("⏰ Free sessions reset every 4 hours!")
 
 # ---------------------------
-# CHAT INPUT
+# CHAT
 # ---------------------------
-user_input = st.chat_input("Tell me how you feel... / 지금 어떤 기분이세요? 💬")
+user_input = st.chat_input("How are you feeling right now? / 지금 어떤 기분이세요? 💬")
 if not user_input:
     st.stop()
 
 st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
 
-# ---------------------------
-# LANGUAGE + EMOTION DETECTION
-# ---------------------------
-lang_code = detect_language(user_input)
-emotion_score = analyze_emotion(user_input)
-db.collection("emotions").add({
-    "uid": USER_ID,
-    "text": user_input,
-    "score": emotion_score,
-    "time": datetime.utcnow().isoformat()
-})
+lang = detect_language(user_input)
+emotion_score, emoji, color = analyze_emotion(user_input)
+show_emotion_bar(emotion_score, emoji, color)
 
 # ---------------------------
 # AI RESPONSE
 # ---------------------------
 system_prompt = (
-    "You are EOERWAY, a kind and empathetic AI counselor. "
-    "Speak warmly, in 6–9 sentences. Avoid medical advice. "
-    "Encourage calm breathing and remind them they matter."
+    "You are EOERWAY, a compassionate AI counselor. "
+    "Respond warmly in 6–9 sentences, use gentle tone, avoid medical advice."
 )
 
-translated_input = translate_to_en(user_input)
 try:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role":"system","content":system_prompt},
-            {"role":"user","content":translated_input}
+            {"role":"user","content":user_input}
         ],
         temperature=0.8,
         max_tokens=500
     )
     answer = resp.choices[0].message.content
 except:
-    answer = "I'm here with you, let's breathe slowly together 💙"
+    answer = "I'm here with you. Let's breathe slowly together 💙"
 
-translated_output = translate_from_en(answer, lang_code)
-st.markdown(f"<div class='bot-bubble'>{translated_output}💫</div>", unsafe_allow_html=True)
+st.markdown(f"<div class='bot-bubble'>{answer}💫</div>", unsafe_allow_html=True)
 
 # ---------------------------
-# SAVE CHAT + COUNTERS
+# FIRESTORE SAVE
 # ---------------------------
 db.collection("chats").add({
     "uid": USER_ID,
     "input": user_input,
-    "reply": translated_output,
-    "lang": lang_code,
+    "reply": answer,
+    "lang": lang,
     "emotion_score": emotion_score,
     "created_at": datetime.utcnow().isoformat()
 })
@@ -226,13 +201,7 @@ else:
     persist_user({"usage_count": st.session_state["usage_count"] + 1})
 
 # ---------------------------
-# EMOTION HISTORY
-# ---------------------------
-with st.expander("💗 감정 히스토리 보기 / View Emotion History"):
-    draw_emotion_graph(USER_ID)
-
-# ---------------------------
-# FOOTER / PAYMENT / AFFILIATE
+# FOOTER
 # ---------------------------
 st.markdown("---")
 st.markdown(
@@ -245,4 +214,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
