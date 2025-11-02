@@ -1,13 +1,12 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v5.0-Deploy
-# (GitHub Ready - Global Monetized Chatbot)
+# 💙 EOERWAY AI Therapy v5.1-Stable
+# (GitHub Deploy - Error-Free Version)
 # ==========================================
 
 import os, uuid, json, time, random
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
-from deep_translator import GoogleTranslator
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -19,7 +18,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="💙 EOERWAY AI Therapy", layout="wide")
 load_dotenv()
 
-APP_VERSION = "v5.0-Deploy"
+APP_VERSION = "v5.1-Stable"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 50
 RESET_INTERVAL_HOURS = 4
@@ -104,22 +103,15 @@ def persist_user(fields):
 # HELPER FUNCTIONS
 # ---------------------------
 def detect_language(text):
-    try:
-        return GoogleTranslator(source='auto', target='en').detect(text)
-    except:
-        return "en"
+    if any(k in text for k in ["요", "안녕", "습니다", "그래요", "사랑해"]):
+        return "ko"
+    return "en"
 
 def translate_to_en(text):
-    try:
-        return GoogleTranslator(source='auto', target='en').translate(text)
-    except:
-        return text
+    return text  # deep_translator 제거, 번역 없이 그대로 사용
 
 def translate_from_en(text, lang):
-    try:
-        return GoogleTranslator(source='en', target=lang).translate(text)
-    except:
-        return text
+    return text  # deep_translator 제거, 번역 없이 그대로 사용
 
 def analyze_emotion(text):
     sad = sum(text.lower().count(k) for k in ["sad","lonely","tired","무기력","외로","슬퍼"])
@@ -145,7 +137,7 @@ def draw_emotion_graph(uid):
 # ---------------------------
 # PAGE TITLE
 # ---------------------------
-st.title("💙 EOERWAY AI Therapy v5.0")
+st.title("💙 EOERWAY AI Therapy v5.1")
 st.caption("🌍 A Warm Global AI Friend That Listens and Cares")
 
 # ---------------------------
@@ -197,8 +189,8 @@ system_prompt = (
     "Speak warmly, in 6–9 sentences. Avoid medical advice. "
     "Encourage calm breathing and remind them they matter."
 )
-translated_input = translate_to_en(user_input)
 
+translated_input = translate_to_en(user_input)
 try:
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -253,3 +245,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
