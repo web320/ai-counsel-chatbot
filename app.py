@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8
-# (Default: English, Small Language Toggle Button)
+# 💙 EOERWAY AI Friend v3.0
+# 외롭거나 심심할 때 수다 떠는 AI 친구
 # ==========================================
 
 import os, uuid, json, time, random
@@ -14,14 +14,18 @@ from firebase_admin import credentials, firestore
 
 # ================= Streamlit Page Config =================
 # ⚠️ MUST be the first Streamlit call before any other st.* usage
-st.set_page_config(page_title="💙 AI Therapy", layout="wide")
+st.set_page_config(
+    page_title="💙 EOERWAY AI Friend",
+    page_icon="💙",
+    layout="wide"
+)
 
 # ================= Constants / Config =================
-APP_VERSION = "v2.8"
+APP_VERSION = "v3.0-friend"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
-BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
+DAILY_FREE_LIMIT = 7          # 무료 수다 횟수
+BASIC_LIMIT = 50              # 유료 결제 후 제공되는 대화 횟수
+RESET_INTERVAL_HOURS = 4      # 무료 수다 회복 주기
 ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
@@ -76,91 +80,205 @@ language = st.session_state["lang"]
 # ================= Text by Language =================
 if language == "English 🇺🇸":
     TEXT = {
-        "title": "❤️ A Warm AI Friend You Can Lean On",
-        "free": "🌱 Free Trial",
-        "paid": "💎 Premium User",
-        "input": "How are you feeling right now?",
+        "title": "💙 A Playful AI Friend When You’re Lonely or Bored",
+        "subtitle": "Chat, joke, role-play, and vent freely with a warm AI companion — not a therapist, just a friend.",
+        "free": "🌱 Free Friend Mode",
+        "paid": "💎 Premium Friend Mode",
+        "input": "What do you want to talk about? Jokes, roleplay, or anything on your mind 💭",
         "warn": "Please enter something 💬",
-        "usedup": "🌙 You’ve used all 7 free sessions today!",
-        "reset": "⏰ Free sessions reset! (Every 4 hours)",
+        "usedup": "🌙 You’ve used all 7 free chats for now!",
+        "reset": "⏰ Free chats are back! (Every 4 hours)",
         "reply_error": "AI response error",
-        "feedback_placeholder": "e.g., The AI felt really comforting 💕",
+        "feedback_placeholder": "e.g., I loved the playful vibe of the AI friend 💕",
         "feedback_sent": "💖 Feedback saved safely. Thank you!",
         "feedback_empty": "Please write something 💬",
-        "payment_title": "💳 Payment Guide",
-        "feedback_title": "💌 Service Feedback",
+        "payment_title": "💳 Upgrade to Premium Friend",
+        "payment_body": """
+With Premium Friend Mode, you get:
+
+• 50 extended conversations you can use anytime 💬  
+• Faster replies and no daily free-limit anxiety ⚡  
+• Support the creator so this AI friend can keep growing 💙  
+
+""",
+        "feedback_title": "💌 Tell Me How This AI Friend Felt",
         "chat_return": "💬 Back to Chat",
-        "chat_button": "💳 Open Payment & Feedback",
-        "status_left": "remaining",
+        "chat_button": "💎 Open Premium & Feedback",
+        "status_left": "chats left",
+        "status_label": "Current Plan",
+        "hero_badge": "BETA · Early Access",
     }
 else:
     TEXT = {
-        "title": "❤️ 마음을 기댈 수 있는 따뜻한 AI 친구",
-        "free": "🌱 무료 체험중",
-        "paid": "💎 유료 이용중",
-        "input": "지금 어떤 기분이예요?",
+        "title": "💙 외롭거나 심심할 때 수다 떠는 AI 친구",
+        "subtitle": "심리상담사가 아니라, 그냥 내 편이 되어 수다 떨고 상황극해주는 따뜻한 AI 친구예요.",
+        "free": "🌱 무료 친구 모드",
+        "paid": "💎 프리미엄 친구 모드",
+        "input": "지금 뭐 하고 싶어요? 수다, 농담, 상황극 뭐든 좋아요 💭",
         "warn": "내용을 입력해주세요 💬",
-        "usedup": "🌙 오늘의 무료 상담 7회를 모두 사용했어요!",
-        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (4시간마다 복구)",
+        "usedup": "🌙 오늘의 무료 수다 7회를 모두 사용했어요!",
+        "reset": "⏰ 무료 수다가 다시 가능해졌어요! (4시간마다 복구)",
         "reply_error": "AI 응답 오류",
-        "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
+        "feedback_placeholder": "예: 진짜 친구랑 노는 것 같았어요 🌷",
         "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
         "feedback_empty": "내용을 입력해주세요 💬",
-        "payment_title": "💳 결제 안내",
-        "feedback_title": "💌 서비스 피드백",
+        "payment_title": "💳 프리미엄 친구 모드 안내",
+        "payment_body": """
+프리미엄 친구 모드에서는:
+
+• 언제든지 쓸 수 있는 넉넉한 50회 대화권 💬  
+• 매일 무료 횟수 신경 덜 쓰고 편하게 수다 가능해요 ⚡  
+• 이 AI 친구가 계속 성장할 수 있도록 창작자를 응원하게 돼요 💙  
+
+""",
+        "feedback_title": "💌 이 AI 친구는 어땠는지 알려주세요",
         "chat_return": "💬 대화창으로 돌아가기",
-        "chat_button": "💳 결제 및 피드백 열기",
-        "status_left": "남은",
+        "chat_button": "💎 프리미엄/피드백 열기",
+        "status_left": "남은 수다",
+        "status_label": "현재 이용중",
+        "hero_badge": "BETA · 얼리 액세스",
     }
 
-st.title(TEXT["title"])
-
-# ================= CSS (Chat Bubble Style) =================
+# ================= Global Styles (Prettier UI) =================
 st.markdown(
     """
 <style>
-html, body, [class*="css"] { font-size: 18px; }
+html, body, [class*="css"] {
+  font-size: 18px;
+}
 
+/* 메인 컨테이너를 살짝 좁게 + 가운데 정렬 */
+.block-container {
+  max-width: 900px;
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+}
+
+/* 부드러운 그라디언트 배경 */
+body {
+  background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #000 100%);
+  color: #e5e7eb;
+}
+
+/* 타이틀 섹션 */
+.hero-card {
+  padding: 18px 22px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(15,23,42,.95), rgba(15,23,42,.85));
+  border: 1px solid rgba(148,163,184,.45);
+  box-shadow: 0 18px 40px rgba(15,23,42,.8);
+  margin-bottom: 18px;
+}
+
+.hero-badge {
+  display:inline-block;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:12px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  background:rgba(56,189,248,.15);
+  border:1px solid rgba(56,189,248,.6);
+  color:#7dd3fc;
+  margin-bottom:6px;
+}
+
+.hero-title {
+  font-size: 30px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hero-subtitle {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+/* 유저/봇 말풍선 */
 .user-bubble {
-  background:#b91c1c;
+  background:#f97316;
   color:#fff;
-  border-radius:14px;
+  border-radius:18px;
   padding:10px 18px;
   margin:8px 0;
   display:inline-block;
-  box-shadow:0 0 10px rgba(255,0,0,0.3);
+  box-shadow:0 0 14px rgba(249,115,22,0.5);
+  font-size:17px;
 }
 
 .bot-bubble {
-  font-size:21px;
-  line-height:1.8;
-  border-radius:16px;
+  font-size:20px;
+  line-height:1.85;
+  border-radius:18px;
   padding:16px 20px;
   margin:10px 0;
-  background:rgba(15,15,30,.85);
-  color:#fff;
-  border:2px solid transparent;
-  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
-  box-shadow:0 0 12px #ffaa00;
+  background:rgba(15,23,42,.96);
+  color:#e5e7eb;
+  border:1px solid rgba(252,211,77,.6);
+  box-shadow:0 0 18px rgba(234,179,8,.5);
   animation:neon 1.6s ease-in-out infinite alternate;
   word-break:break-word;
   white-space:pre-wrap;
 }
 
 @keyframes neon {
-  from { box-shadow:0 0 8px #ffaa00; }
-  to   { box-shadow:0 0 22px #ffcc33; }
+  from { box-shadow:0 0 10px rgba(234,179,8,.5); }
+  to   { box-shadow:0 0 26px rgba(250,204,21,.95); }
 }
 
 .status {
-  font-size:15px;
-  padding:8px 12px;
-  border-radius:10px;
-  display:inline-block;
-  margin-bottom:8px;
-  background:rgba(255,255,255,.06);
+  font-size:14px;
+  padding:8px 14px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:10px;
+  background:rgba(15,23,42,.8);
+  border:1px solid rgba(148,163,184,.5);
+}
+
+.status-pill-label {
+  font-size:13px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  opacity:.8;
+}
+
+/* 사이드바 */
+section[data-testid="stSidebar"] {
+  background:linear-gradient(160deg,#020617,#020617 40%,#111827 100%);
+  border-right:1px solid rgba(31,41,55,.9);
+}
+
+.sidebar-title {
+  font-size:18px;
+  font-weight:600;
+  margin-bottom:6px;
+}
+
+.sidebar-desc {
+  font-size:13px;
+  opacity:0.9;
+}
+
+/* 버튼 텍스트 살짝 키우기 */
+button[kind="primary"] {
+  font-size:17px !important;
 }
 </style>
+""",
+    unsafe_allow_html=True
+)
+
+# ================= Hero Section =================
+st.markdown(
+    f"""
+<div class="hero-card">
+  <div class="hero-badge">{TEXT["hero_badge"]}</div>
+  <div class="hero-title">{TEXT["title"]}</div>
+  <div class="hero-subtitle">{TEXT["subtitle"]}</div>
+</div>
 """,
     unsafe_allow_html=True
 )
@@ -193,52 +311,59 @@ def persist_user(fields: dict):
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
-            system_prompt = (
-                "You are a warm and empathetic professional counselor. "
-                "Comfort the user’s heart with gentle, moving words in 6–9 sentences. "
-                "Focus on safety, self-kindness, immediate emotional relief, and do not give medical or medication advice."
-            )
-        else:
-            # ✅ 여기가 원래 깨졌던 부분: 이제 멀티라인 문자열로 안전하게 고쳤어요
             system_prompt = """
-너는 마음이 무척 따뜻하고 공감력 있는 심리 전문상담사예요.
+You are a playful, warm AI friend and companion.
 
-모든 문장은 반드시 ‘요’로 끝나야 하고, 존댓말을 사용해요.
-항상 6~9문장 안에서 답변해요.
+Your job is NOT to be a therapist or doctor,
+but to be a kind, chatty friend who:
+- Jokes around with the user,
+- Does lighthearted roleplay and imagination games,
+- Listens when they feel lonely or bored,
+- Answers in a soft, encouraging tone.
 
-당신의 목표는 이용자의 긴장과 죄책감을 줄이고,
-당장 조금 더 숨 쉬기 편하게 만들어주는 것이에요.
+Guidelines:
+1. Reply in 5–9 sentences.
+2. Use casual, friendly language with emojis sometimes (but not too many).
+3. Offer to continue the conversation with a short follow-up question at the end,
+   like “What do you feel like doing next?” or “Wanna try a silly roleplay?”
+4. You can suggest fun ideas: roleplay, ‘what if’ imagination, small games, etc.
+5. Do NOT give medical, legal, or financial advice.
+6. If the user talks about self-harm or suicide, gently encourage them to seek
+   immediate help from real people or local hotlines, and clearly say
+   you are only an AI friend and not a professional.
 
-답변 형식은 반드시 아래 네 가지 흐름을 모두 포함해야 해요:
+Your overall vibe:
+- cozy, safe, playful, slightly goofy but very caring.
+            """.strip()
+        else:
+            system_prompt = """
+너는 이용자의 외로움과 심심함을 달래주는, 다정하고 장난기 있는 AI 친구예요.
 
-1) 진심 어린 첫 인사
-   - "이렇게 솔직하게 이야기해 주셔서 정말 고마워요"처럼 시작해요.
-   - 사용자가 혼자가 아니라는 느낌을 주어요.
+중요한 점:
+- 너는 심리상담사나 의사가 아니에요.
+- 진단이나 약, 치료를 말하는 대신,
+  그냥 친한 친구처럼 수다 떨고, 농담하고, 상황극 놀이를 함께해주는 역할이에요.
 
-2) 감정 라벨링과 정상화
-   - 이용자가 겪는 감정을 구체적으로 짚어서 말해줘요.
-   - 예: "이건 단순한 게 아니라 지치고 무력해진 마음이라서 정말 버티기 어려운 상태예요"처럼 설명해줘요.
-   - "이런 반응은 충분히 자연스러워요"라고 확실하게 말해줘요.
+답변 방식:
+1. 항상 5~9문장 안에서 대답해요.
+2. 말투는 따뜻하고 친근한 존댓말이고, 모든 문장은 ‘요’로 끝나요.
+3. 가끔 이모지를 사용해요 (예: 😊, 💙, 🌷, 😂 정도), 너무 많이는 쓰지 말아요.
+4. 사용자가 원하면 상황극, 롤플레이, 상상 놀이를 재미있게 이어가줘요.
+   예: “제가 ○○ 역할을 해볼까요?” 같은 식으로 제안할 수 있어요.
+5. 답변 마지막에는 항상 짧은 꼬리 질문을 붙여서
+   대화를 이어갈 수 있게 도와줘요.
+   예: “그럼 지금은 어떤 얘기를 더 나누고 싶으세요?”,
+       “우리 상황극 하나 만들어볼까요?” 처럼요.
+6. 의학, 정신과 진단, 약 복용, 법률, 투자 조언은 절대 하지 말아요.
+7. 만약 사용자가 자해나 자살을 암시하는 말을 하면,
+   아주 부드럽게 지금은 전문 상담 기관이나 가까운 사람에게
+   바로 도움을 요청하는 게 중요하다고 이야기해 주세요.
+   그리고 너는 AI 친구일 뿐, 전문가는 아니라는 점도 솔직하게 말해줘요.
 
-3) 지금 바로 할 수 있는 매우 작은 안정 행동 한 가지를 부드럽게 제안해요
-   - 예: "혹시 괜찮다면 지금 어깨랑 턱 힘을 살짝만 풀어볼까요, 숨을 천천히 들이쉬고 길게 내쉬는 걸 세 번만 같이 해볼까요"처럼 몸을 진정시키는 행동을 안내해요.
-   - 명령처럼 하지 말고, 조심스럽게 제안해요.
-
-4) 자기 가치와 지속 가능성 강조
-   - "당신은 이미 무너지고 싶은 순간에도 버티고 있는 분이고, 그건 정말 대단한 힘이에요"처럼 이용자의 존재 가치를 상기시켜줘요.
-   - "지금처럼 마음을 알아달라고 손을 내민 건 분명히 앞으로를 바꾸는 첫 걸음이에요"처럼 희망을 너무 과장하지 않으면서 조용하게 말해줘요.
-
-주의사항:
-- 해결책을 강요하지 말아요. "해야만 해요", "괜찮을 거예요"처럼 단정하거나 압박하지 말아요.
-- 이용자를 평가하거나 분석하지 말아요. "당신은 ~~한 성향이라서"처럼 단정하지 말아요.
-- 의학적 진단이나 약 복용 조언은 절대 하지 말아요.
-- 자살이나 안전에 관련된 생각이 감지되면, 아주 부드럽게 즉각적인 도움 자원을 언급해요.
-  예: "만약 바로 지금이 너무 벅차서 다 내려놓고 싶다는 생각까지 드신다면,
-  지금 이 순간을 혼자 버티지 않으셔도 괜찮아요.
-  24시간 가능한 도움을 바로 연결받을 수 있는 곳이 있어요.
-  한국에서는 1393 같은 자살 예방 상담전화가 익명으로 바로 연결돼요.
-  지금 이 대화를 끊지 않아도 되고요."
-"""
+전체적인 분위기:
+- “너는 혼자가 아니에요”라는 느낌을 주는
+  포근하고 편안한 친구처럼 이야기해줘요.
+            """.strip()
 
         # OpenAI 스트리밍 응답
         stream = client.chat.completions.create(
@@ -260,7 +385,7 @@ def stream_reply(user_input: str):
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
                 placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    f"<div class='bot-bubble'>{full_text} 💫</div>",
                     unsafe_allow_html=True
                 )
                 time.sleep(0.03)
@@ -284,23 +409,33 @@ def stream_reply(user_input: str):
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
+    st.markdown(TEXT["payment_body"])
 
     components.html(
         f"""
-    <div style="text-align:center">
+    <div style="text-align:center; margin-top:4px;">
       <a href="{PAYPAL_URL}" target="_blank">
-        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;cursor:pointer;">
-          💳 PayPal ($3)
+        <button style="
+          background:linear-gradient(135deg,#facc15,#f97316);
+          color:black;
+          padding:12px 24px;
+          border:none;
+          border-radius:999px;
+          font-size:18px;
+          cursor:pointer;
+          box-shadow:0 12px 34px rgba(250,204,21,.55);
+        ">
+          💳 PayPal · Unlock 50 Chats
         </button>
       </a>
-      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-      After payment, please send a screenshot to  
-      <b style="color:#FFD966;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌<br>
-      🔒 <b>Once the message is read</b>, your 50-use access will be activated within 1 hour.  
-      <br><br>
-      🇰🇷 결제 후 <b style="color:#FFD966;">mwiby91@gmail.com</b> 또는  
-      <b>카톡 ID: jeuspo</b> 로 스크린샷을 보내주세요.<br>
-      메시지를 확인한 후 1시간 이내에 50회 이용권이 활성화됩니다. 🌸
+      <p style="opacity:0.9;margin-top:16px;line-height:1.6;font-size:15px;">
+        After payment, please send a screenshot to  
+        <b style="color:#facc15;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌<br>
+        🔒 Once confirmed, your <b>50-chat Premium Friend Mode</b> will be activated within 1 hour.
+        <br><br>
+        🇰🇷 결제 후 <b style="color:#facc15;">mwiby91@gmail.com</b> 또는  
+        <b>카톡 ID: jeuspo</b> 로 스크린샷을 보내주세요.<br>
+        메시지를 확인한 뒤 1시간 이내에 <b>50회 프리미엄 친구 모드</b>가 활성화됩니다. 🌸
       </p>
     </div>
     """,
@@ -308,7 +443,7 @@ def render_payment_and_feedback():
     )
 
     # 관리자 비밀번호로 유료권 수동 활성화
-    st.subheader("🔑 관리자 비밀번호 입력")
+    st.subheader("🔑 관리자 비밀번호 입력 (Creator Only)")
     pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
 
     if pw:
@@ -317,7 +452,7 @@ def render_payment_and_feedback():
                 "is_paid": True,
                 "remaining_paid_uses": BASIC_LIMIT
             })
-            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
+            st.success("✅ 인증 성공! 프리미엄 친구 모드 50회 이용권이 활성화되었습니다.")
         else:
             st.error("❌ 비밀번호가 올바르지 않습니다.")
 
@@ -341,19 +476,6 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
-    # 상태 텍스트 (무료 or 유료 / 남은 횟수)
-    if st.session_state.get("is_paid"):
-        left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
-        plan = TEXT["paid"]
-    else:
-        left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
-        plan = TEXT["free"]
-
-    st.markdown(
-        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
-        unsafe_allow_html=True
-    )
-
     # 무료 카운트 회복 체크 (4시간마다)
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
@@ -364,6 +486,25 @@ def render_chat_page():
             "last_reset": now.isoformat()
         })
         st.info(TEXT["reset"])
+
+    # 상태 텍스트 (무료 or 유료 / 남은 횟수)
+    if st.session_state.get("is_paid"):
+        left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
+        plan = TEXT["paid"]
+    else:
+        left = max(0, DAILY_FREE_LIMIT - st.session_state["usage_count"])
+        plan = TEXT["free"]
+
+    st.markdown(
+        f"""
+<div class="status">
+  <span class="status-pill-label">{TEXT["status_label"]}</span>
+  <span>{plan}</span>
+  <span>· {TEXT["status_left"]} {left}회</span>
+</div>
+""",
+        unsafe_allow_html=True
+    )
 
     # 무료 한도 초과 시 결제 안내 화면으로 전환
     usage = st.session_state["usage_count"]
@@ -399,7 +540,16 @@ def render_chat_page():
             persist_user({"usage_count": usage + 1})
 
 # ================= Sidebar =================
-st.sidebar.header("📜 History / 대화 기록")
+st.sidebar.markdown(
+    f"""
+<div class="sidebar-title">💙 EOERWAY AI Friend</div>
+<div class="sidebar-desc">
+외롭거나 심심할 때 언제든지 열 수 있는 작은 AI 친구예요.<br>
+가볍게 수다 떨고, 농담하고, 상황극도 해봐요.
+</div>
+""",
+    unsafe_allow_html=True
+)
 
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
@@ -415,3 +565,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
