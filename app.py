@@ -1,9 +1,10 @@
 # ==========================================
-# 💙 EOERWAY AI Friend v3.2
+# 💙 EOERWAY AI Friend v3.3
 # 외롭거나 심심할 때 수다 떠는 AI 친구
 # - 7초 유휴 시 먼저 말 걸기
 # - 세션 기억
 # - 상황에 따라 답변 속도 다르게
+# - 나를 제외한 다른 사람 방문 데이터 상단 표시
 # ==========================================
 
 import os, uuid, json, time, random
@@ -23,7 +24,7 @@ st.set_page_config(
 )
 
 # ================= Constants / Config =================
-APP_VERSION = "v3.2-friend"
+APP_VERSION = "v3.3-friend"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7          # 무료 수다 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 대화 횟수
@@ -54,12 +55,11 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Query Params / UID / Idle Flag =================
-params = st.query_params
-uid = params.get("uid", [str(uuid.uuid4())])[0]
-idle_flag = params.get("idle", ["0"])[0]  # 7초 유휴 감지용
+# ================= Query Params / UID =================
+uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
+# URL에 uid만 유지 (세션 식별용)
+st.query_params = {"uid": uid}
 USER_ID = uid
-IDLE_FLAG = idle_flag
 
 # ================= Language State =================
 if "lang" not in st.session_state:
@@ -164,7 +164,7 @@ body {
   background: linear-gradient(135deg, rgba(15,23,42,.95), rgba(15,23,42,.85));
   border: 1px solid rgba(148,163,184,.45);
   box-shadow: 0 18px 40px rgba(15,23,42,.8);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 .hero-badge {
   display:inline-block;
@@ -186,6 +186,14 @@ body {
 .hero-subtitle {
   font-size: 16px;
   opacity: 0.9;
+}
+.activity-banner {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(15,23,42,.9);
+  border: 1px solid rgba(59,130,246,.7);
+  font-size: 14px;
 }
 .user-bubble {
   background:#f97316;
@@ -283,16 +291,71 @@ else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
+# 각 접속 때마다 이 유저의 최근 접속 시간 업데이트 (방문 데이터용)
+try:
+    user_ref.set(
+        {
+            "uid": USER_ID,
+            "last_seen_at": datetime.utcnow().isoformat(),
+            "last_lang": language,
+        },
+        merge=True,
+    )
+except Exception:
+    pass
+
 def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Chat State (Memory) =================
+# ================= Activity Banner (다른 사람 방문 데이터) =================
+def render_activity_banner():
+    try:
+        docs = (
+            db.collection("users")
+            .order_by("last_seen_at", direction=firestore.Query.DESCENDING)
+            .limit(10)
+            .stream()
+        )
+        others = []
+        for d in docs:
+            info = d.to_dict() or {}
+            if info.get("uid") == USER_ID:
+                continue
+            others.append(info)
+            if len(others) >= 3:
+                break
+        if not others:
+            return
+
+        count = len(others)
+        if language == "English 🇺🇸":
+            text = f"✨ {count} other people have recently opened this AI friend. You’re not the only one talking to it right now."
+        else:
+            text = f"✨ 방금 전까지도 다른 {count}명이 이 AI 친구를 열어봤어요. 지금 이 순간에도 혼자만 이런 마음인 건 아니에요 😊"
+
+        st.markdown(
+            f"""<div class="activity-banner">{text}</div>""",
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        # 에러 나도 메인 기능에는 영향 없게 그냥 무시
+        pass
+
+render_activity_banner()
+
+# ================= Chat State (Memory & Idle) =================
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
 if "last_idle_nudge" not in st.session_state:
     st.session_state["last_idle_nudge"] = 0.0
+
+if "idle_nudged" not in st.session_state:
+    st.session_state["idle_nudged"] = False
+
+if "last_interaction" not in st.session_state:
+    st.session_state["last_interaction"] = time.time()
 
 # ================= Greeting & Idle Nudge =================
 def get_greeting(lang: str) -> str:
@@ -326,19 +389,17 @@ def get_idle_nudge(lang: str) -> str:
 # ================= Typing Speed Depending on Situation =================
 def get_typing_delay(user_input: str) -> float:
     text_lower = user_input.lower()
-    # 힘든/무거운 단어 → 천천히
     slow_ko = ["죽고싶", "자살", "우울", "불안", "무기력", "힘들", "포기", "눈물", "괴롭"]
     slow_en = ["suicide", "kill myself", "die", "depressed", "depression",
                "anxious", "anxiety", "panic", "hopeless", "worthless"]
-    # 가벼운/장난 → 빠르게
     fast_ko = ["심심", "농담", "웃긴", "웃겨", "재밌", "게임", "상황극"]
     fast_en = ["bored", "joke", "funny", "lol", "haha", "game", "roleplay", "rp"]
 
     if any(k in user_input for k in slow_ko) or any(k in text_lower for k in slow_en):
-        return 0.06  # 조금 더 느리게
+        return 0.06
     if any(k in user_input for k in fast_ko) or any(k in text_lower for k in fast_en):
-        return 0.015  # 좀 더 빠르게
-    return 0.03  # 기본 속도
+        return 0.015
+    return 0.03
 
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
@@ -382,7 +443,7 @@ Overall vibe:
   필요할 때 “아까 ~라고 말씀해주셨잖아요”처럼 자연스럽게 다시 언급할 수 있어요.
 
 답변 방식:
-1. 항상 7~11문장 안에서 대답해요. (두 세 줄 정도 더 길게, 이야기하듯이)
+1. 항상 7~11문장 안에서 대답해요. (조금 더 길게, 이야기하듯이)
 2. 말투는 따뜻하고 친근한 존댓말이고, 모든 문장은 ‘요’로 끝나요.
 3. 가끔 이모지를 사용해요 (예: 😊, 💙, 🌷, 😂 정도), 너무 많이는 쓰지 말아요.
 4. 사용자가 원하면 상황극, 롤플레이, 상상 놀이를 재미있게 이어가줘요.
@@ -436,6 +497,9 @@ Overall vibe:
                 "created_at": datetime.utcnow().isoformat(),
             }
         )
+
+        # 마지막 상호작용 시간 업데이트
+        st.session_state["last_interaction"] = time.time()
 
         return full_text.strip()
 
@@ -513,25 +577,22 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
-    # 7초 유휴 감지: 아무 입력 없으면 idle=1로 새로고침
+    # 7초 유휴 감지를 위한 JS: 7초마다 streamlit:rerun 요청
     components.html(
-        f"""
+        """
     <script>
-    (function() {{
+    (function() {
         let timer;
-        function resetTimer() {{
+        function resetTimer() {
             clearTimeout(timer);
-            timer = setTimeout(function() {{
-                const url = new URL(window.location.href);
-                url.searchParams.set('uid', "{USER_ID}");
-                url.searchParams.set('idle', '1');
-                window.location.href = url.toString();
-            }}, 7000);
-        }}
+            timer = setTimeout(function() {
+                window.parent.postMessage({type: 'streamlit:rerun'}, '*');
+            }, 7000);
+        }
         window.addEventListener('load', resetTimer);
         window.addEventListener('click', resetTimer);
         window.addEventListener('keydown', resetTimer);
-    }})();
+    })();
     </script>
     """,
         height=0,
@@ -551,15 +612,21 @@ def render_chat_page():
         st.session_state["messages"].append(
             {"role": "assistant", "content": greeting}
         )
+        st.session_state["last_interaction"] = time.time()
     else:
-        # idle=1 이면, 7초 이후 먼저 말 걸기
+        # 7초 이상 조용했고, 아직 이번 사이클에서 농담/환기 멘트 안 보냈으면
         now_ts = time.time()
-        if IDLE_FLAG == "1" and now_ts - st.session_state.get("last_idle_nudge", 0) > 5:
+        idle_seconds = now_ts - st.session_state.get("last_interaction", now_ts)
+        if (
+            idle_seconds >= 7
+            and not st.session_state.get("idle_nudged", False)
+        ):
             nudge = get_idle_nudge(language)
             st.session_state["messages"].append(
                 {"role": "assistant", "content": nudge}
             )
-            st.session_state["last_idle_nudge"] = now_ts
+            st.session_state["idle_nudged"] = True
+            st.session_state["last_interaction"] = now_ts
 
     # 상태 표시
     if st.session_state.get("is_paid"):
@@ -607,6 +674,9 @@ def render_chat_page():
 
     # 유저 메시지 저장 + 표시
     st.session_state["messages"].append({"role": "user", "content": user_input})
+    st.session_state["idle_nudged"] = False
+    st.session_state["last_interaction"] = time.time()
+
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True,
@@ -619,6 +689,7 @@ def render_chat_page():
         st.session_state["messages"].append(
             {"role": "assistant", "content": reply}
         )
+        st.session_state["last_interaction"] = time.time()
         if st.session_state.get("is_paid"):
             persist_user(
                 {
