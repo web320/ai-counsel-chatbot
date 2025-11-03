@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 EOERWAY AI Friend v3.0
-# 외롭거나 심심할 때 수다 떠는 AI 친구
+# 💙 EOERWAY AI Friend v3.1
+# 외롭거나 심심할 때 수다 떠는 AI 친구 (+기억 + 7초 유머)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -13,15 +13,14 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= Streamlit Page Config =================
-# ⚠️ MUST be the first Streamlit call before any other st.* usage
 st.set_page_config(
     page_title="💙 EOERWAY AI Friend",
     page_icon="💙",
-    layout="wide"
+    layout="wide",
 )
 
 # ================= Constants / Config =================
-APP_VERSION = "v3.0-friend"
+APP_VERSION = "v3.1-friend"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7          # 무료 수다 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 대화 횟수
@@ -29,7 +28,6 @@ RESET_INTERVAL_HOURS = 4      # 무료 수다 회복 주기
 ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
-# ?ads.txt 호출 시 ads.txt 내용을 그대로 반환하고 종료
 if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
@@ -53,14 +51,18 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Query Params / UID =================
-# 유저마다 uid를 고정해서 추적
-uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
+# ================= Query Params / UID / Idle Flag =================
+params = st.query_params
+uid = params.get("uid", [str(uuid.uuid4())])[0]
+idle_flag = params.get("idle", ["0"])[0]  # 7초 유휴 감지용 플래그
+
+# uid만 다시 세팅해서 idle 파라미터는 한 번 쓰고 제거
 st.query_params = {"uid": uid}
+
 USER_ID = uid
+IDLE_FLAG = idle_flag  # 전역처럼 쓰기 위해 변수에 보관
 
 # ================= Language State =================
-# 첫 접속 기본 언어는 영어
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
 
@@ -71,7 +73,7 @@ with col2:
         ["English 🇺🇸", "한국어 🇰🇷"],
         horizontal=True,
         label_visibility="collapsed",
-        index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
+        index=0 if st.session_state["lang"] == "English 🇺🇸" else 1,
     )
 
 st.session_state["lang"] = lang_choice
@@ -97,7 +99,7 @@ if language == "English 🇺🇸":
 With Premium Friend Mode, you get:
 
 • 50 extended conversations you can use anytime 💬  
-• Faster replies and no daily free-limit anxiety ⚡  
+• Less worry about daily free limits — just chat when you want ⚡  
 • Support the creator so this AI friend can keep growing 💙  
 
 """,
@@ -111,7 +113,7 @@ With Premium Friend Mode, you get:
 else:
     TEXT = {
         "title": "💙 외롭거나 심심할 때 수다 떠는 AI 친구",
-        "subtitle": "심리상담사가 아니라, 그냥 내 편이 되어 수다 떨고 상황극해주는 따뜻한 AI 친구예요.",
+        "subtitle": "심리상담사가 아니라, 그냥 내 편이 되어 수다 떨고 농담하고 상황극해주는 따뜻한 AI 친구예요.",
         "free": "🌱 무료 친구 모드",
         "paid": "💎 프리미엄 친구 모드",
         "input": "지금 뭐 하고 싶어요? 수다, 농담, 상황극 뭐든 좋아요 💭",
@@ -147,20 +149,20 @@ html, body, [class*="css"] {
   font-size: 18px;
 }
 
-/* 메인 컨테이너를 살짝 좁게 + 가운데 정렬 */
+/* 메인 컨테이너 가운데 정렬 */
 .block-container {
   max-width: 900px;
   padding-top: 2rem;
   padding-bottom: 4rem;
 }
 
-/* 부드러운 그라디언트 배경 */
+/* 배경 */
 body {
   background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #000 100%);
   color: #e5e7eb;
 }
 
-/* 타이틀 섹션 */
+/* 히어로 카드 */
 .hero-card {
   padding: 18px 22px;
   border-radius: 22px;
@@ -194,7 +196,7 @@ body {
   opacity: 0.9;
 }
 
-/* 유저/봇 말풍선 */
+/* 말풍선 */
 .user-bubble {
   background:#f97316;
   color:#fff;
@@ -262,13 +264,13 @@ section[data-testid="stSidebar"] {
   opacity:0.9;
 }
 
-/* 버튼 텍스트 살짝 키우기 */
+/* 버튼 텍스트 */
 button[kind="primary"] {
   font-size:17px !important;
 }
 </style>
 """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # ================= Hero Section =================
@@ -280,7 +282,7 @@ st.markdown(
   <div class="hero-subtitle">{TEXT["subtitle"]}</div>
 </div>
 """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # ================= Firestore Defaults / User State =================
@@ -288,7 +290,7 @@ defaults = {
     "is_paid": False,
     "usage_count": 0,
     "remaining_paid_uses": 0,
-    "last_reset": datetime.utcnow().isoformat()
+    "last_reset": datetime.utcnow().isoformat(),
 }
 
 user_ref = db.collection("users").document(USER_ID)
@@ -296,20 +298,56 @@ snap = user_ref.get()
 
 if snap.exists:
     data = snap.to_dict() or {}
-    # 세션에 기본값과 DB 값 합쳐서 로드
     st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
 else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
 def persist_user(fields: dict):
-    """Firestore + session_state 동시 업데이트"""
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= AI Response Function =================
+# ================= Chat State (Memory) =================
+if "messages" not in st.session_state:
+    # OpenAI로 보낼 형태: [{"role":"user"/"assistant","content": "..."}]
+    st.session_state["messages"] = []
+
+if "last_idle_nudge" not in st.session_state:
+    st.session_state["last_idle_nudge"] = 0.0
+
+# ================= Helper: Greeting & Idle Nudge =================
+def get_greeting(lang: str) -> str:
+    if lang == "English 🇺🇸":
+        choices = [
+            "Hey, I’m your little AI friend 💙\n\nYou can talk to me when you’re bored, lonely, or just feel like rambling. What do you feel like doing first — silly jokes, roleplay, or just free talking?",
+            "I’m here and fully charged 🔋✨\n\nWe can do nonsense chat, deep-but-soft talk, or even a weird roleplay. What’s your mood right now?",
+        ]
+    else:
+        choices = [
+            "안녕, 나는 천천히 수다 떨어주는 AI 친구예요 💙\n\n심심하거나 외로울 때, 그냥 아무 말이나 털어놓고 싶을 때 편하게 이야기 걸어주세요. 오늘은 수다, 농담, 상황극 중에 뭐가 끌리세요?",
+            "저 여기 quietly 켜져 있었어요 😌✨\n\n지금 머릿속에 떠오르는 생각 아무거나 괜찮으니까 한 줄만 적어볼래요? 거기서부터 같이 이어가볼게요.",
+        ]
+    return random.choice(choices)
+
+def get_idle_nudge(lang: str) -> str:
+    if lang == "English 🇺🇸":
+        choices = [
+            "I’m sensing ‘stare at the screen’ mode… 👀\n\nIf you’d like, I can start a silly roleplay or ask you a weird question. Which sounds more fun?",
+            "Since it’s quiet, I’ll pop in first 🙋‍♂️\n\nWhat’s one small thing that was at least a tiny bit okay today?",
+            "Boredom detected… 😂\n\nWanna hear a tiny joke, or should we start a “what if” imagination game?",
+        ]
+    else:
+        choices = [
+            "혹시 화면만 멍―하게 보고 계신가요? 👀\n\n그럼 제가 먼저 말 걸어볼게요. 지금 당장 떠오르는 사소한 고민이나 생각 한 가지만 말해줄래요?",
+            "조용해서 제가 먼저 툭 나타났어요 🙋‍♀️\n\n오늘 하루 중 ‘그나마 괜찮았다’ 싶은 순간이 딱 하나 있다면 뭐였을까요?",
+            "심심 모드 감지… 😂\n\n가벼운 농담 하나 해드릴까요, 아니면 상황극을 바로 시작해볼까요?",
+        ]
+    return random.choice(choices)
+
+# ================= AI Response Function (With Memory) =================
 def stream_reply(user_input: str):
     try:
+        # 시스템 프롬프트: 친구 모드 + 이전 메시지 참고
         if language == "English 🇺🇸":
             system_prompt = """
 You are a playful, warm AI friend and companion.
@@ -319,20 +357,22 @@ but to be a kind, chatty friend who:
 - Jokes around with the user,
 - Does lighthearted roleplay and imagination games,
 - Listens when they feel lonely or bored,
-- Answers in a soft, encouraging tone.
+- Remembers the context of this session and can refer back to earlier topics.
 
 Guidelines:
 1. Reply in 5–9 sentences.
 2. Use casual, friendly language with emojis sometimes (but not too many).
-3. Offer to continue the conversation with a short follow-up question at the end,
+3. When it makes sense, lightly refer to things the user mentioned earlier
+   in THIS session (e.g., “You said earlier that…”).
+4. Offer to continue the conversation with a short follow-up question at the end,
    like “What do you feel like doing next?” or “Wanna try a silly roleplay?”
-4. You can suggest fun ideas: roleplay, ‘what if’ imagination, small games, etc.
-5. Do NOT give medical, legal, or financial advice.
-6. If the user talks about self-harm or suicide, gently encourage them to seek
+5. You can suggest fun ideas: roleplay, ‘what if’ imagination, small games, etc.
+6. Do NOT give medical, legal, or financial advice.
+7. If the user talks about self-harm or suicide, gently encourage them to seek
    immediate help from real people or local hotlines, and clearly say
    you are only an AI friend and not a professional.
 
-Your overall vibe:
+Overall vibe:
 - cozy, safe, playful, slightly goofy but very caring.
             """.strip()
         else:
@@ -343,35 +383,36 @@ Your overall vibe:
 - 너는 심리상담사나 의사가 아니에요.
 - 진단이나 약, 치료를 말하는 대신,
   그냥 친한 친구처럼 수다 떨고, 농담하고, 상황극 놀이를 함께해주는 역할이에요.
+- 같은 세션 안에서 이용자가 전에 했던 말을 적당히 기억하고,
+  필요할 때 “아까 ~라고 말씀해주셨잖아요”처럼 자연스럽게 다시 언급할 수 있어요.
 
 답변 방식:
 1. 항상 5~9문장 안에서 대답해요.
 2. 말투는 따뜻하고 친근한 존댓말이고, 모든 문장은 ‘요’로 끝나요.
 3. 가끔 이모지를 사용해요 (예: 😊, 💙, 🌷, 😂 정도), 너무 많이는 쓰지 말아요.
 4. 사용자가 원하면 상황극, 롤플레이, 상상 놀이를 재미있게 이어가줘요.
-   예: “제가 ○○ 역할을 해볼까요?” 같은 식으로 제안할 수 있어요.
 5. 답변 마지막에는 항상 짧은 꼬리 질문을 붙여서
    대화를 이어갈 수 있게 도와줘요.
-   예: “그럼 지금은 어떤 얘기를 더 나누고 싶으세요?”,
-       “우리 상황극 하나 만들어볼까요?” 처럼요.
 6. 의학, 정신과 진단, 약 복용, 법률, 투자 조언은 절대 하지 말아요.
 7. 만약 사용자가 자해나 자살을 암시하는 말을 하면,
    아주 부드럽게 지금은 전문 상담 기관이나 가까운 사람에게
    바로 도움을 요청하는 게 중요하다고 이야기해 주세요.
    그리고 너는 AI 친구일 뿐, 전문가는 아니라는 점도 솔직하게 말해줘요.
-
-전체적인 분위기:
-- “너는 혼자가 아니에요”라는 느낌을 주는
-  포근하고 편안한 친구처럼 이야기해줘요.
             """.strip()
 
-        # OpenAI 스트리밍 응답
+        # 직전 대화 히스토리 일부만 잘라서 사용 (토큰 절약)
+        history = st.session_state.get("messages", [])
+        recent_history = history[-10:]  # 최근 10개만 사용
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for m in recent_history:
+            if m["role"] in ("user", "assistant"):
+                messages.append({"role": m["role"], "content": m["content"]})
+        messages.append({"role": "user", "content": user_input})
+
         stream = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ],
+            messages=messages,
             temperature=0.9,
             max_tokens=700,
             stream=True,
@@ -386,18 +427,20 @@ Your overall vibe:
                 full_text += delta.content
                 placeholder.markdown(
                     f"<div class='bot-bubble'>{full_text} 💫</div>",
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
                 time.sleep(0.03)
 
-        # 대화 로그 저장
-        db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": full_text.strip(),
-            "lang": language,
-            "created_at": datetime.utcnow().isoformat()
-        })
+        # DB 로그 저장
+        db.collection("chats").add(
+            {
+                "uid": USER_ID,
+                "input": user_input,
+                "reply": full_text.strip(),
+                "lang": language,
+                "created_at": datetime.utcnow().isoformat(),
+            }
+        )
 
         return full_text.strip()
 
@@ -439,26 +482,23 @@ def render_payment_and_feedback():
       </p>
     </div>
     """,
-        height=320
+        height=320,
     )
 
-    # 관리자 비밀번호로 유료권 수동 활성화
     st.subheader("🔑 관리자 비밀번호 입력 (Creator Only)")
     pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
 
     if pw:
         if pw.strip() in ADMIN_KEYS:
-            persist_user({
-                "is_paid": True,
-                "remaining_paid_uses": BASIC_LIMIT
-            })
-            st.success("✅ 인증 성공! 프리미엄 친구 모드 50회 이용권이 활성화되었습니다.")
+            persist_user({"is_paid": True, "remaining_paid_uses": BASIC_LIMIT})
+            st.success(
+                "✅ 인증 성공! 프리미엄 친구 모드 50회 이용권이 활성화되었습니다."
+            )
         else:
             st.error("❌ 비밀번호가 올바르지 않습니다.")
 
     st.markdown("---")
 
-    # 서비스 피드백
     st.subheader(TEXT["feedback_title"])
     fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
 
@@ -466,28 +506,70 @@ def render_payment_and_feedback():
         if not fb.strip():
             st.warning(TEXT["feedback_empty"])
         else:
-            db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                "uid": USER_ID,
-                "feedback": fb,
-                "lang": language,
-                "created_at": datetime.utcnow().isoformat()
-            })
+            db.collection("feedbacks").document(str(uuid.uuid4())).set(
+                {
+                    "uid": USER_ID,
+                    "feedback": fb,
+                    "lang": language,
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+            )
             st.success(TEXT["feedback_sent"])
 
 # ================= Chat Main Page =================
 def render_chat_page():
+    # 7초 유휴 감지용 JS: 아무 입력/클릭 없으면 idle=1 쿼리로 새로고침
+    components.html(
+        f"""
+    <script>
+    (function() {{
+        let timer;
+        function resetTimer() {{
+            clearTimeout(timer);
+            timer = setTimeout(function() {{
+                const url = new URL(window.location.href);
+                url.searchParams.set('uid', "{USER_ID}");
+                url.searchParams.set('idle', '1');
+                window.location.href = url.toString();
+            }}, 7000);
+        }}
+        window.addEventListener('load', resetTimer);
+        window.addEventListener('click', resetTimer);
+        window.addEventListener('keydown', resetTimer);
+    }})();
+    </script>
+    """,
+        height=0,
+    )
+
     # 무료 카운트 회복 체크 (4시간마다)
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
 
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
-        persist_user({
-            "usage_count": 0,
-            "last_reset": now.isoformat()
-        })
+        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
         st.info(TEXT["reset"])
 
-    # 상태 텍스트 (무료 or 유료 / 남은 횟수)
+    # 첫 진입 시 AI가 먼저 인사
+    if not st.session_state["messages"]:
+        greeting = get_greeting(language)
+        st.session_state["messages"].append(
+            {"role": "assistant", "content": greeting}
+        )
+    else:
+        # idle=1 이고, 최근 30초 이내에 농담을 안 보냈다면 유머/환기 멘트 추가
+        now_ts = time.time()
+        if (
+            IDLE_FLAG == "1"
+            and now_ts - st.session_state.get("last_idle_nudge", 0) > 30
+        ):
+            nudge = get_idle_nudge(language)
+            st.session_state["messages"].append(
+                {"role": "assistant", "content": nudge}
+            )
+            st.session_state["last_idle_nudge"] = now_ts
+
+    # 상태 표시
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
         plan = TEXT["paid"]
@@ -503,10 +585,23 @@ def render_chat_page():
   <span>· {TEXT["status_left"]} {left}회</span>
 </div>
 """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
-    # 무료 한도 초과 시 결제 안내 화면으로 전환
+    # 지금까지의 대화 모두 렌더
+    for msg in st.session_state["messages"]:
+        if msg["role"] == "user":
+            st.markdown(
+                f"<div class='user-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"<div class='bot-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True,
+            )
+
+    # 무료 한도 초과 시 결제 안내로
     usage = st.session_state["usage_count"]
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
@@ -518,24 +613,32 @@ def render_chat_page():
     if not user_input:
         return
 
-    # 유저 말풍선 표시
+    # 유저 메시지 저장 + 표시
+    st.session_state["messages"].append({"role": "user", "content": user_input})
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
-    # AI 답변 스트리밍
+    # AI 답변
     reply = stream_reply(user_input)
 
-    # 사용량 차감 / 기록
     if reply:
+        st.session_state["messages"].append(
+            {"role": "assistant", "content": reply}
+        )
         if st.session_state.get("is_paid"):
-            persist_user({
-                "remaining_paid_uses": max(
-                    0,
-                    st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
-                )
-            })
+            persist_user(
+                {
+                    "remaining_paid_uses": max(
+                        0,
+                        st.session_state.get(
+                            "remaining_paid_uses", BASIC_LIMIT
+                        )
+                        - 1,
+                    )
+                }
+            )
         else:
             persist_user({"usage_count": usage + 1})
 
@@ -548,7 +651,7 @@ st.sidebar.markdown(
 가볍게 수다 떨고, 농담하고, 상황극도 해봐요.
 </div>
 """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 if st.session_state.get("show_payment"):
@@ -565,4 +668,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
