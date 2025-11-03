@@ -1,6 +1,9 @@
 # ==========================================
-# 💙 EOERWAY AI Friend v3.1
-# 외롭거나 심심할 때 수다 떠는 AI 친구 (+기억 + 7초 유머)
+# 💙 EOERWAY AI Friend v3.2
+# 외롭거나 심심할 때 수다 떠는 AI 친구
+# - 7초 유휴 시 먼저 말 걸기
+# - 세션 기억
+# - 상황에 따라 답변 속도 다르게
 # ==========================================
 
 import os, uuid, json, time, random
@@ -20,7 +23,7 @@ st.set_page_config(
 )
 
 # ================= Constants / Config =================
-APP_VERSION = "v3.1-friend"
+APP_VERSION = "v3.2-friend"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7          # 무료 수다 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 대화 횟수
@@ -54,13 +57,9 @@ db = firestore.client()
 # ================= Query Params / UID / Idle Flag =================
 params = st.query_params
 uid = params.get("uid", [str(uuid.uuid4())])[0]
-idle_flag = params.get("idle", ["0"])[0]  # 7초 유휴 감지용 플래그
-
-# uid만 다시 세팅해서 idle 파라미터는 한 번 쓰고 제거
-st.query_params = {"uid": uid}
-
+idle_flag = params.get("idle", ["0"])[0]  # 7초 유휴 감지용
 USER_ID = uid
-IDLE_FLAG = idle_flag  # 전역처럼 쓰기 위해 변수에 보관
+IDLE_FLAG = idle_flag
 
 # ================= Language State =================
 if "lang" not in st.session_state:
@@ -109,6 +108,7 @@ With Premium Friend Mode, you get:
         "status_left": "chats left",
         "status_label": "Current Plan",
         "hero_badge": "BETA · Early Access",
+        "count_suffix": "",
     }
 else:
     TEXT = {
@@ -139,30 +139,25 @@ else:
         "status_left": "남은 수다",
         "status_label": "현재 이용중",
         "hero_badge": "BETA · 얼리 액세스",
+        "count_suffix": "회",
     }
 
-# ================= Global Styles (Prettier UI) =================
+# ================= Global Styles =================
 st.markdown(
     """
 <style>
 html, body, [class*="css"] {
   font-size: 18px;
 }
-
-/* 메인 컨테이너 가운데 정렬 */
 .block-container {
   max-width: 900px;
   padding-top: 2rem;
   padding-bottom: 4rem;
 }
-
-/* 배경 */
 body {
   background: radial-gradient(circle at top, #1f2937 0, #020617 55%, #000 100%);
   color: #e5e7eb;
 }
-
-/* 히어로 카드 */
 .hero-card {
   padding: 18px 22px;
   border-radius: 22px;
@@ -171,7 +166,6 @@ body {
   box-shadow: 0 18px 40px rgba(15,23,42,.8);
   margin-bottom: 18px;
 }
-
 .hero-badge {
   display:inline-block;
   padding:4px 10px;
@@ -184,19 +178,15 @@ body {
   color:#7dd3fc;
   margin-bottom:6px;
 }
-
 .hero-title {
   font-size: 30px;
   font-weight: 700;
   margin-bottom: 4px;
 }
-
 .hero-subtitle {
   font-size: 16px;
   opacity: 0.9;
 }
-
-/* 말풍선 */
 .user-bubble {
   background:#f97316;
   color:#fff;
@@ -207,10 +197,9 @@ body {
   box-shadow:0 0 14px rgba(249,115,22,0.5);
   font-size:17px;
 }
-
 .bot-bubble {
   font-size:20px;
-  line-height:1.85;
+  line-height:1.9;
   border-radius:18px;
   padding:16px 20px;
   margin:10px 0;
@@ -222,12 +211,10 @@ body {
   word-break:break-word;
   white-space:pre-wrap;
 }
-
 @keyframes neon {
   from { box-shadow:0 0 10px rgba(234,179,8,.5); }
   to   { box-shadow:0 0 26px rgba(250,204,21,.95); }
 }
-
 .status {
   font-size:14px;
   padding:8px 14px;
@@ -239,32 +226,25 @@ body {
   background:rgba(15,23,42,.8);
   border:1px solid rgba(148,163,184,.5);
 }
-
 .status-pill-label {
   font-size:13px;
   text-transform:uppercase;
   letter-spacing:.12em;
   opacity:.8;
 }
-
-/* 사이드바 */
 section[data-testid="stSidebar"] {
   background:linear-gradient(160deg,#020617,#020617 40%,#111827 100%);
   border-right:1px solid rgba(31,41,55,.9);
 }
-
 .sidebar-title {
   font-size:18px;
   font-weight:600;
   margin-bottom:6px;
 }
-
 .sidebar-desc {
   font-size:13px;
   opacity:0.9;
 }
-
-/* 버튼 텍스트 */
 button[kind="primary"] {
   font-size:17px !important;
 }
@@ -309,13 +289,12 @@ def persist_user(fields: dict):
 
 # ================= Chat State (Memory) =================
 if "messages" not in st.session_state:
-    # OpenAI로 보낼 형태: [{"role":"user"/"assistant","content": "..."}]
     st.session_state["messages"] = []
 
 if "last_idle_nudge" not in st.session_state:
     st.session_state["last_idle_nudge"] = 0.0
 
-# ================= Helper: Greeting & Idle Nudge =================
+# ================= Greeting & Idle Nudge =================
 def get_greeting(lang: str) -> str:
     if lang == "English 🇺🇸":
         choices = [
@@ -344,10 +323,26 @@ def get_idle_nudge(lang: str) -> str:
         ]
     return random.choice(choices)
 
-# ================= AI Response Function (With Memory) =================
+# ================= Typing Speed Depending on Situation =================
+def get_typing_delay(user_input: str) -> float:
+    text_lower = user_input.lower()
+    # 힘든/무거운 단어 → 천천히
+    slow_ko = ["죽고싶", "자살", "우울", "불안", "무기력", "힘들", "포기", "눈물", "괴롭"]
+    slow_en = ["suicide", "kill myself", "die", "depressed", "depression",
+               "anxious", "anxiety", "panic", "hopeless", "worthless"]
+    # 가벼운/장난 → 빠르게
+    fast_ko = ["심심", "농담", "웃긴", "웃겨", "재밌", "게임", "상황극"]
+    fast_en = ["bored", "joke", "funny", "lol", "haha", "game", "roleplay", "rp"]
+
+    if any(k in user_input for k in slow_ko) or any(k in text_lower for k in slow_en):
+        return 0.06  # 조금 더 느리게
+    if any(k in user_input for k in fast_ko) or any(k in text_lower for k in fast_en):
+        return 0.015  # 좀 더 빠르게
+    return 0.03  # 기본 속도
+
+# ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
-        # 시스템 프롬프트: 친구 모드 + 이전 메시지 참고
         if language == "English 🇺🇸":
             system_prompt = """
 You are a playful, warm AI friend and companion.
@@ -360,7 +355,7 @@ but to be a kind, chatty friend who:
 - Remembers the context of this session and can refer back to earlier topics.
 
 Guidelines:
-1. Reply in 5–9 sentences.
+1. Reply in 7–11 sentences (a bit longer, like a cozy paragraph).
 2. Use casual, friendly language with emojis sometimes (but not too many).
 3. When it makes sense, lightly refer to things the user mentioned earlier
    in THIS session (e.g., “You said earlier that…”).
@@ -387,7 +382,7 @@ Overall vibe:
   필요할 때 “아까 ~라고 말씀해주셨잖아요”처럼 자연스럽게 다시 언급할 수 있어요.
 
 답변 방식:
-1. 항상 5~9문장 안에서 대답해요.
+1. 항상 7~11문장 안에서 대답해요. (두 세 줄 정도 더 길게, 이야기하듯이)
 2. 말투는 따뜻하고 친근한 존댓말이고, 모든 문장은 ‘요’로 끝나요.
 3. 가끔 이모지를 사용해요 (예: 😊, 💙, 🌷, 😂 정도), 너무 많이는 쓰지 말아요.
 4. 사용자가 원하면 상황극, 롤플레이, 상상 놀이를 재미있게 이어가줘요.
@@ -400,9 +395,8 @@ Overall vibe:
    그리고 너는 AI 친구일 뿐, 전문가는 아니라는 점도 솔직하게 말해줘요.
             """.strip()
 
-        # 직전 대화 히스토리 일부만 잘라서 사용 (토큰 절약)
         history = st.session_state.get("messages", [])
-        recent_history = history[-10:]  # 최근 10개만 사용
+        recent_history = history[-10:]
 
         messages = [{"role": "system", "content": system_prompt}]
         for m in recent_history:
@@ -410,11 +404,13 @@ Overall vibe:
                 messages.append({"role": m["role"], "content": m["content"]})
         messages.append({"role": "user", "content": user_input})
 
+        typing_delay = get_typing_delay(user_input)
+
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
             temperature=0.9,
-            max_tokens=700,
+            max_tokens=900,
             stream=True,
         )
 
@@ -429,9 +425,8 @@ Overall vibe:
                     f"<div class='bot-bubble'>{full_text} 💫</div>",
                     unsafe_allow_html=True,
                 )
-                time.sleep(0.03)
+                time.sleep(typing_delay)
 
-        # DB 로그 저장
         db.collection("chats").add(
             {
                 "uid": USER_ID,
@@ -518,7 +513,7 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
-    # 7초 유휴 감지용 JS: 아무 입력/클릭 없으면 idle=1 쿼리로 새로고침
+    # 7초 유휴 감지: 아무 입력 없으면 idle=1로 새로고침
     components.html(
         f"""
     <script>
@@ -542,7 +537,7 @@ def render_chat_page():
         height=0,
     )
 
-    # 무료 카운트 회복 체크 (4시간마다)
+    # 무료 카운트 회복 체크
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
 
@@ -557,12 +552,9 @@ def render_chat_page():
             {"role": "assistant", "content": greeting}
         )
     else:
-        # idle=1 이고, 최근 30초 이내에 농담을 안 보냈다면 유머/환기 멘트 추가
+        # idle=1 이면, 7초 이후 먼저 말 걸기
         now_ts = time.time()
-        if (
-            IDLE_FLAG == "1"
-            and now_ts - st.session_state.get("last_idle_nudge", 0) > 30
-        ):
+        if IDLE_FLAG == "1" and now_ts - st.session_state.get("last_idle_nudge", 0) > 5:
             nudge = get_idle_nudge(language)
             st.session_state["messages"].append(
                 {"role": "assistant", "content": nudge}
@@ -582,13 +574,13 @@ def render_chat_page():
 <div class="status">
   <span class="status-pill-label">{TEXT["status_label"]}</span>
   <span>{plan}</span>
-  <span>· {TEXT["status_left"]} {left}회</span>
+  <span>· {TEXT["status_left"]} {left}{TEXT["count_suffix"]}</span>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    # 지금까지의 대화 모두 렌더
+    # 지금까지의 대화 렌더
     for msg in st.session_state["messages"]:
         if msg["role"] == "user":
             st.markdown(
