@@ -162,8 +162,7 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-
-   # ================= Visitor Counter (Admin 제외) =================
+# ================= Visitor Counter (Admin 제외) =================
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_ref = db.collection("stats").document("total")
@@ -196,17 +195,26 @@ if "visit_logged" not in st.session_state:
 
 total_visits, daily_visits = get_visit_counts()
 
-# ✅ 작게 오른쪽 위로 이동된 표시
+# ✅ 상단 고정 스타일 방문자 수 표시
 st.markdown(
     f"""
-    <div style="text-align:right; margin-top:-25px; margin-bottom:10px;">
-        <span style="font-size:14px; opacity:0.7;">
-        🌍 {total_visits:,}명&nbsp;&nbsp;☀️ {daily_visits:,}명
-        </span>
+    <div style="
+        position:relative;
+        top:-20px;
+        text-align:right;
+        padding:6px 12px;
+        background:rgba(255,255,255,0.05);
+        border-bottom:1px solid rgba(255,255,255,0.08);
+        border-radius:0 0 12px 12px;
+        font-size:17px;
+        color:rgba(255,255,255,0.85);
+    ">
+        🌍 <b>{total_visits:,}명</b> &nbsp;|&nbsp; ☀️ <b>{daily_visits:,}명</b>
     </div>
     """,
     unsafe_allow_html=True
 )
+
 
 
 # ================= Payment / Feedback Panel =================
