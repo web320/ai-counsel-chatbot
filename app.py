@@ -65,6 +65,7 @@ with col2:
         label_visibility="collapsed",
         index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
     )
+
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
@@ -145,8 +146,10 @@ defaults = {
     "remaining_paid_uses": 0,
     "last_reset": datetime.utcnow().isoformat()
 }
+
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
+
 if snap.exists:
     data = snap.to_dict() or {}
     st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
@@ -155,12 +158,12 @@ else:
     st.session_state.update(defaults)
 
 def persist_user(fields: dict):
+    """Firestore + session_state 동시 업데이트"""
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Visitor Counter =================
+# ================= Visitor Counter (Admin 제외) =================
 def update_visit_stats():
-    """방문자 수 Firestore 카운터 업데이트"""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
@@ -176,7 +179,6 @@ def update_visit_stats():
         daily_ref.set({"count": 1})
 
 def get_visit_counts():
-    """현재 총 방문자 수와 하루 방문자 수 가져오기"""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_doc = db.collection("stats").document("total").get()
     daily_doc = db.collection("stats").document(today).get()
@@ -184,7 +186,6 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
-# 🔹 관리자(너)는 카운트 제외, 일반 방문자만 집계
 ADMIN_UIDS = ["4321", "admin", "owner"]
 
 if "visit_logged" not in st.session_state:
@@ -192,13 +193,12 @@ if "visit_logged" not in st.session_state:
         update_visit_stats()
     st.session_state["visit_logged"] = True
 
-# 🔹 방문자 통계 표시
 total_visits, daily_visits = get_visit_counts()
 st.markdown(
     f"""
-    <div style="padding:14px;margin-bottom:14px;border-radius:12px;
+    <div style="padding:12px;margin-bottom:12px;border-radius:12px;
                 background:rgba(255,255,255,.07);
-                color:#fff;font-size:18px;line-height:1.6;">
+                color:#fff;font-size:17px;line-height:1.6;">
         🌍 <b>Total Visitors (excluding admin):</b> {total_visits:,}명<br>
         ☀️ <b>Today's Visitors:</b> {daily_visits:,}명
     </div>
@@ -206,5 +206,146 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ================= (이 아래 기존 stream_reply, render_chat_page 등 그대로 유지) =================
-# ... 기존 코드 붙여넣기 ...
+# ================= AI Response Function =================
+def stream_reply(user_input: str):
+    try:
+        if language == "English 🇺🇸":
+            system_prompt = (
+                "You are a warm and empathetic professional counselor. "
+                "Comfort the user’s heart with gentle, moving words in 6–9 sentences. "
+                "Focus on safety, self-kindness, immediate emotional relief, and do not give medical or medication advice."
+            )
+        else:
+            system_prompt = """(생략 - 기존 한국어 상담 프롬프트 그대로 유지)"""
+
+        stream = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
+            temperature=0.9,
+            max_tokens=700,
+            stream=True,
+        )
+
+        placeholder = st.empty()
+        full_text = ""
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, "content") and delta.content:
+                full_text += delta.content
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.03)
+
+        db.collection("chats").add({
+            "uid": USER_ID,
+            "input": user_input,
+            "reply": full_text.strip(),
+            "lang": language,
+            "created_at": datetime.utcnow().isoformat()
+        })
+
+        return full_text.strip()
+
+    except Exception as e:
+        st.error(f"{TEXT['reply_error']}: {e}")
+        return None
+
+# ================= Payment / Feedback Panel =================
+def render_payment_and_feedback():
+    st.markdown("---")
+    st.subheader(TEXT["payment_title"])
+
+    components.html(
+        f"""
+    <div style="text-align:center">
+      <a href="{PAYPAL_URL}" target="_blank">
+        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;cursor:pointer;">
+          💳 PayPal ($3)
+        </button>
+      </a>
+      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
+      After payment, please send a screenshot to  
+      <b style="color:#FFD966;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌
+      </p>
+    </div>
+    """,
+        height=300
+    )
+
+    st.subheader("🔑 관리자 비밀번호 입력")
+    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
+
+    if pw:
+        if pw.strip() in ADMIN_KEYS:
+            persist_user({
+                "is_paid": True,
+                "remaining_paid_uses": BASIC_LIMIT
+            })
+            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
+        else:
+            st.error("❌ 비밀번호가 올바르지 않습니다.")
+
+# ================= Chat Main Page =================
+def render_chat_page():
+    if st.session_state.get("is_paid"):
+        left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
+        plan = TEXT["paid"]
+    else:
+        left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
+        plan = TEXT["free"]
+
+    st.markdown(
+        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
+        unsafe_allow_html=True
+    )
+
+    now = datetime.utcnow()
+    last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
+    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
+        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
+        st.info(TEXT["reset"])
+
+    usage = st.session_state["usage_count"]
+    if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
+        st.warning(TEXT["usedup"])
+        st.session_state["show_payment"] = True
+        st.rerun()
+
+    user_input = st.chat_input(TEXT["input"])
+    if not user_input:
+        return
+
+    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
+    reply = stream_reply(user_input)
+
+    if reply:
+        if st.session_state.get("is_paid"):
+            persist_user({
+                "remaining_paid_uses": max(0, st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1)
+            })
+        else:
+            persist_user({"usage_count": usage + 1})
+
+# ================= Sidebar =================
+st.sidebar.header("📜 History / 대화 기록")
+
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
+
+# ================= Main Render =================
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
+
