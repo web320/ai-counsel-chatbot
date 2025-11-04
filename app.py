@@ -313,31 +313,6 @@ def stream_reply(user_input: str):
 
 # ================= Payment / Feedback Panel =================
 def render_payment_and_feedback():
-    # 🔹 여기서만 방문자 수 표시 (결제 페이지 전용, 맨 위 + 작게)
-    total_visits, daily_visits = get_visit_counts()
-    st.markdown(
-        f"""
-        <div style="
-            position:fixed;
-            top:0;
-            left:0;
-            width:100%;
-            padding:6px 10px;
-            font-size:14px;
-            font-weight:500;
-            text-align:center;
-            background:rgba(0,0,0,0.45);
-            color:rgba(255,255,255,0.9);
-            z-index:9999;
-            backdrop-filter:blur(6px);
-        ">
-            🌍 Total <b>{total_visits:,}명</b> &nbsp;|&nbsp; ☀️ <b>{daily_visits:,}명</b>
-        </div>
-        <div style="height:32px;"></div>
-        """,
-        unsafe_allow_html=True
-    )
-
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
@@ -457,18 +432,7 @@ def render_chat_page():
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
-if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
-        st.session_state["show_payment"] = False
-        st.rerun()
-else:
-    if st.sidebar.button(TEXT["chat_button"]):
-        st.session_state["show_payment"] = True
-        st.rerun()
-# ================= Sidebar =================
-st.sidebar.header("📜 History / 대화 기록")
-
-# ➕ 여기 추가 (방문자 수 사이드바 카드)
+# 방문자 수 사이드바 카드
 total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
@@ -488,6 +452,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
+# 결제 / 채팅 화면 전환 버튼
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
