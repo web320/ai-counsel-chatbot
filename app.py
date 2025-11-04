@@ -164,12 +164,16 @@ def update_visit_stats():
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
-    if total_ref.get().exists:
+    # 총 방문자 수 증가
+    total_doc = total_ref.get()
+    if total_doc.exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
-    if daily_ref.get().exists:
+    # 하루 방문자 수 증가
+    daily_doc = daily_ref.get()
+    if daily_doc.exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
         daily_ref.set({"count": 1})
@@ -182,21 +186,28 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
+# 🔹 모든 사용자(너 포함) 방문 시 1회 증가
+# 세션마다 최초 1회만 카운트되도록 설정
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
 
+# 🔹 방문자 수 가져오기
 total_visits, daily_visits = get_visit_counts()
+
+# 🔹 방문자 통계창 항상 표시 (관리자 포함)
 st.markdown(
     f"""
-    <div style="padding:10px;margin-bottom:10px;border-radius:10px;
-                background:rgba(255,255,255,.07);color:#fff;font-size:17px;">
-        🌍 <b>Total Visitors:</b> {total_visits:,}명  
+    <div style="padding:14px;margin-bottom:14px;border-radius:12px;
+                background:rgba(255,255,255,.07);
+                color:#fff;font-size:18px;line-height:1.6;">
+        🌍 <b>Total Visitors:</b> {total_visits:,}명<br>
         ☀️ <b>Today's Visitors:</b> {daily_visits:,}명
     </div>
     """,
     unsafe_allow_html=True
 )
+
 
 # ================= AI / Chat / Payment Functions =================
 # (기존 코드 전부 동일하게 아래 유지)
