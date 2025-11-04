@@ -87,8 +87,6 @@ if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
 
-total_visits, daily_visits = get_visit_counts()
-
 # ================= Language State =================
 # 첫 접속 기본 언어는 영어
 if "lang" not in st.session_state:
@@ -147,53 +145,57 @@ else:
         "status_left": "남은",
     }
 
-# ✅ 제목 바로 위, 가로로 긴 영역에 방문자 표시
-st.markdown(
-    f"""
-    <div style="
-        margin-top: 10px;
-        margin-bottom: 5px;
-        padding: 10px 16px;
-        border-radius: 12px;
-        background: rgba(255,255,255,0.05);
-        font-size: 18px;
-        font-weight: 600;
-        color: rgba(255,255,255,0.9);
-        text-align: center;
-    ">
-        🌍 Total <b>{total_visits:,}명</b> &nbsp;|&nbsp; ☀️ Today <b>{daily_visits:,}명</b>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
 st.title(TEXT["title"])
 
 # ================= CSS (Chat Bubble Style) =================
-# ✅ 더 작게 + 페이지 맨 위 고정
 st.markdown(
-    f"""
-    <div style="
-        position:fixed;
-        top:0;
-        left:0;
-        width:100%;
-        padding:6px 10px;
-        font-size:14px;
-        font-weight:500;
-        text-align:center;
-        background:rgba(0,0,0,0.45);
-        color:rgba(255,255,255,0.9);
-        z-index:9999;
-        backdrop-filter:blur(6px);
-    ">
-        🌍 Total <b>{total_visits:,}명</b> &nbsp;|&nbsp; ☀️ Today <b>{daily_visits:,}명</b>
-    </div>
-    <div style="height:32px;"></div>
-    """,
+    """
+<style>
+html, body, [class*="css"] { font-size: 18px; }
+
+.user-bubble {
+  background:#b91c1c;
+  color:#fff;
+  border-radius:14px;
+  padding:10px 18px;
+  margin:8px 0;
+  display:inline-block;
+  box-shadow:0 0 10px rgba(255,0,0,0.3);
+}
+
+.bot-bubble {
+  font-size:21px;
+  line-height:1.8;
+  border-radius:16px;
+  padding:16px 20px;
+  margin:10px 0;
+  background:rgba(15,15,30,.85);
+  color:#fff;
+  border:2px solid transparent;
+  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
+  box-shadow:0 0 12px #ffaa00;
+  animation:neon 1.6s ease-in-out infinite alternate;
+  word-break:break-word;
+  white-space:pre-wrap;
+}
+
+@keyframes neon {
+  from { box-shadow:0 0 8px #ffaa00; }
+  to   { box-shadow:0 0 22px #ffcc33; }
+}
+
+.status {
+  font-size:15px;
+  padding:8px 12px;
+  border-radius:10px;
+  display:inline-block;
+  margin-bottom:8px;
+  background:rgba(255,255,255,.06);
+}
+</style>
+""",
     unsafe_allow_html=True
 )
-
 
 # ================= Firestore Defaults / User State =================
 defaults = {
@@ -311,6 +313,31 @@ def stream_reply(user_input: str):
 
 # ================= Payment / Feedback Panel =================
 def render_payment_and_feedback():
+    # 🔹 여기서만 방문자 수 표시 (결제 페이지 전용, 맨 위 + 작게)
+    total_visits, daily_visits = get_visit_counts()
+    st.markdown(
+        f"""
+        <div style="
+            position:fixed;
+            top:0;
+            left:0;
+            width:100%;
+            padding:6px 10px;
+            font-size:14px;
+            font-weight:500;
+            text-align:center;
+            background:rgba(0,0,0,0.45);
+            color:rgba(255,255,255,0.9);
+            z-index:9999;
+            backdrop-filter:blur(6px);
+        ">
+            🌍 Total <b>{total_visits:,}명</b> &nbsp;|&nbsp; ☀️ <b>{daily_visits:,}명</b>
+        </div>
+        <div style="height:32px;"></div>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
@@ -367,7 +394,6 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat()
             })
             st.success(TEXT["feedback_sent"])
-
 
 # ================= Chat Main Page =================
 def render_chat_page():
@@ -445,5 +471,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
