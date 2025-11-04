@@ -170,54 +170,30 @@ st.markdown(
 st.title(TEXT["title"])
 
 # ================= CSS (Chat Bubble Style) =================
+# ✅ 더 작게 + 페이지 맨 위 고정
 st.markdown(
-    """
-<style>
-html, body, [class*="css"] { font-size: 18px; }
-
-.user-bubble {
-  background:#b91c1c;
-  color:#fff;
-  border-radius:14px;
-  padding:10px 18px;
-  margin:8px 0;
-  display:inline-block;
-  box-shadow:0 0 10px rgba(255,0,0,0.3);
-}
-
-.bot-bubble {
-  font-size:21px;
-  line-height:1.8;
-  border-radius:16px;
-  padding:16px 20px;
-  margin:10px 0;
-  background:rgba(15,15,30,.85);
-  color:#fff;
-  border:2px solid transparent;
-  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
-  box-shadow:0 0 12px #ffaa00;
-  animation:neon 1.6s ease-in-out infinite alternate;
-  word-break:break-word;
-  white-space:pre-wrap;
-}
-
-@keyframes neon {
-  from { box-shadow:0 0 8px #ffaa00; }
-  to   { box-shadow:0 0 22px #ffcc33; }
-}
-
-.status {
-  font-size:15px;
-  padding:8px 12px;
-  border-radius:10px;
-  display:inline-block;
-  margin-bottom:8px;
-  background:rgba(255,255,255,.06);
-}
-</style>
-""",
+    f"""
+    <div style="
+        position:fixed;
+        top:0;
+        left:0;
+        width:100%;
+        padding:6px 10px;
+        font-size:14px;
+        font-weight:500;
+        text-align:center;
+        background:rgba(0,0,0,0.45);
+        color:rgba(255,255,255,0.9);
+        z-index:9999;
+        backdrop-filter:blur(6px);
+    ">
+        🌍 Total <b>{total_visits:,}명</b> &nbsp;|&nbsp; ☀️ Today <b>{daily_visits:,}명</b>
+    </div>
+    <div style="height:32px;"></div>
+    """,
     unsafe_allow_html=True
 )
+
 
 # ================= Firestore Defaults / User State =================
 defaults = {
