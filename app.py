@@ -162,7 +162,8 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Visitor Counter (Admin 제외) =================
+
+   # ================= Visitor Counter (Admin 제외) =================
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_ref = db.collection("stats").document("total")
@@ -194,66 +195,19 @@ if "visit_logged" not in st.session_state:
     st.session_state["visit_logged"] = True
 
 total_visits, daily_visits = get_visit_counts()
+
+# ✅ 작게 오른쪽 위로 이동된 표시
 st.markdown(
     f"""
-    <div style="padding:12px;margin-bottom:12px;border-radius:12px;
-                background:rgba(255,255,255,.07);
-                color:#fff;font-size:17px;line-height:1.6;">
-        🌍 <b>Total Visitors (excluding admin):</b> {total_visits:,}명<br>
-        ☀️ <b>Today's Visitors:</b> {daily_visits:,}명
+    <div style="text-align:right; margin-top:-25px; margin-bottom:10px;">
+        <span style="font-size:14px; opacity:0.7;">
+        🌍 {total_visits:,}명&nbsp;&nbsp;☀️ {daily_visits:,}명
+        </span>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ================= AI Response Function =================
-def stream_reply(user_input: str):
-    try:
-        if language == "English 🇺🇸":
-            system_prompt = (
-                "You are a warm and empathetic professional counselor. "
-                "Comfort the user’s heart with gentle, moving words in 6–9 sentences. "
-                "Focus on safety, self-kindness, immediate emotional relief, and do not give medical or medication advice."
-            )
-        else:
-            system_prompt = """(생략 - 기존 한국어 상담 프롬프트 그대로 유지)"""
-
-        stream = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ],
-            temperature=0.9,
-            max_tokens=700,
-            stream=True,
-        )
-
-        placeholder = st.empty()
-        full_text = ""
-        for chunk in stream:
-            delta = chunk.choices[0].delta
-            if hasattr(delta, "content") and delta.content:
-                full_text += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True
-                )
-                time.sleep(0.03)
-
-        db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": full_text.strip(),
-            "lang": language,
-            "created_at": datetime.utcnow().isoformat()
-        })
-
-        return full_text.strip()
-
-    except Exception as e:
-        st.error(f"{TEXT['reply_error']}: {e}")
-        return None
 
 # ================= Payment / Feedback Panel =================
 def render_payment_and_feedback():
