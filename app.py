@@ -35,6 +35,65 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+# ================= Visitor Counter (Admin 제외) =================
+def update_visit_stats():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    total_ref = db.collection("stats").document("total")
+    daily_ref = db.collection("stats").document(today)
+
+    if total_ref.get().exists:
+        total_ref.update({"count": firestore.Increment(1)})
+    else:
+        total_ref.set({"count": 1})
+
+    if daily_ref.get().exists:
+        daily_ref.update({"count": firestore.Increment(1)})
+    else:
+        daily_ref.set({"count": 1})
+
+def get_visit_counts():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    total_doc = db.collection("stats").document("total").get()
+    daily_doc = db.collection("stats").document(today).get()
+    total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
+    daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
+    return total, daily
+
+ADMIN_UIDS = ["4321", "admin", "owner"]
+
+if "visit_logged" not in st.session_state:
+    if uid not in ADMIN_UIDS:
+        update_visit_stats()
+    st.session_state["visit_logged"] = True
+
+total_visits, daily_visits = get_visit_counts()
+
+# ✅ 페이지 맨 위 고정 헤더
+st.markdown(
+    f"""
+    <div style="
+        position:fixed;
+        top:0;
+        left:0;
+        width:100%;
+        text-align:center;
+        background:rgba(0,0,0,0.55);
+        padding:12px 0;
+        font-size:18px;
+        font-weight:600;
+        color:#fff;
+        z-index:9999;
+        backdrop-filter:blur(8px);
+        border-bottom:1px solid rgba(255,255,255,0.2);
+    ">
+        🌍 Total <b>{total_visits:,}명</b> &nbsp;&nbsp;|&nbsp;&nbsp; ☀️ Today <b>{daily_visits:,}명</b>
+    </div>
+    <br><br><br>
+    """,
+    unsafe_allow_html=True
+)
+
+
 # ================= Firebase =================
 def _firebase_config():
     raw = st.secrets.get("firebase")
