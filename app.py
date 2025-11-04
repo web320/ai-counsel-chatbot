@@ -195,6 +195,24 @@ if "visit_logged" not in st.session_state:
 
 total_visits, daily_visits = get_visit_counts()
 
+# ✅ 제목 위쪽 중앙에 표시
+st.markdown(
+    f"""
+    <div style="
+        text-align:center;
+        margin-top:-25px;
+        margin-bottom:-5px;
+        font-size:18px;
+        font-weight:600;
+        color:rgba(255,255,255,0.85);
+    ">
+        🌍 Total {total_visits:,}명 &nbsp;&nbsp; ☀️ Today {daily_visits:,}명
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
 # ✅ 상단 고정 스타일 방문자 수 표시
 st.markdown(
     f"""
