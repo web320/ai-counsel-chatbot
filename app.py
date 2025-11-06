@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (modified)
+# 💙 EOERWAY AI Therapy v2.8 (final)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -44,15 +44,11 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Query Params / UID =================
-# 🔹 언어 바꿀 때마다 uid가 바뀌지 않도록 안정적으로 처리
-qp = st.query_params
-uid = qp.get("uid", None)
-if uid is None:
-    uid = str(uuid.uuid4())
-    # 기존 쿼리파라미터 유지하면서 uid만 추가
-    st.query_params = {**qp, "uid": uid}
-USER_ID = uid
+# ================= UID (per browser session) =================
+# 브라우저(탭)마다 USER_ID 생성, URL 파라미터 사용 X
+if "USER_ID" not in st.session_state:
+    st.session_state["USER_ID"] = str(uuid.uuid4())
+USER_ID = st.session_state["USER_ID"]
 
 # ================= Visitor Counter (유저당 1회만 카운트) =================
 def update_visit_stats():
@@ -391,16 +387,16 @@ st.sidebar.header("📜 History / 대화 기록")
 
 total_visits, daily_visits = get_visit_counts()
 
-# 🔹 언어에 따라 방문자수 문구도 다르게
+# 언어에 따라 방문자수 문구
 if language == "English 🇺🇸":
     sidebar_html = f"""
-        🌍 Total visitors: {total_visits:,}
-        ☀️ Today: {daily_visits:,}
+        🌍 <b>Total visitors: {total_visits:,}</b><br>
+        ☀️ <b>Today: {daily_visits:,}</b>
     """
 else:
     sidebar_html = f"""
-        🌍 총 방문자 {total_visits:,}명
-        ☀️ 오늘 {daily_visits:,}명
+        🌍 <b>총 방문자 {total_visits:,}명</b><br>
+        ☀️ <b>오늘 {daily_visits:,}명</b>
     """
 
 st.sidebar.markdown(
