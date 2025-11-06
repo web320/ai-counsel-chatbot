@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v3.0 (IMPROVED)
-# 핵심 개선: 자연스러운 대화 + 맥락 유지 + 공감 강화
+# 💙 EOERWAY AI Therapy v3.5 (DEEPLY IMPROVED)
+# 핵심: 진짜 사람처럼 듣고 공감하기
 # ==========================================
 
 import os, uuid, json, time, random
@@ -16,7 +16,7 @@ from firebase_admin import credentials, firestore
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
-APP_VERSION = "v3.0"
+APP_VERSION = "v3.5"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 DAILY_FREE_LIMIT = 7
 BASIC_LIMIT = 50
@@ -216,58 +216,86 @@ def persist_user(fields: dict):
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 
-# ================= 🔥 개선된 AI Response Function =================
+# ================= 🔥🔥🔥 완전히 새로운 프롬프트 =================
 def stream_reply(user_input: str):
     try:
-        # 🎯 핵심 개선 1: 더 자연스럽고 진솔한 프롬프트
         if language == "English 🇺🇸":
-            system_prompt = """You are a warm, empathetic therapist having a genuine conversation.
+            system_prompt = """You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
 
-Your approach:
-- Listen deeply to what they're really saying, not just the words
-- Validate their feelings without judging ("It makes complete sense you'd feel that way")
-- Reflect back what you're hearing to show you understand
-- When appropriate, gently help them see things from a new angle
-- Offer one small, doable thing they could try if it feels right
-- Be human - vary your responses, don't follow a rigid formula
+How to respond:
 
-Respond naturally in 4-7 sentences. Let the conversation flow like a real person would talk.
+1. First, LISTEN. Really hear what they're saying beneath the words.
+   - Don't rush to fix or advise
+   - Just be with them in that moment
 
-Never give medical advice or diagnose. If they mention self-harm or suicide, gently suggest professional help while staying supportive."""
+2. Name what you're sensing - specifically.
+   Bad: "That sounds hard"
+   Good: "It sounds like you're feeling completely drained, like even getting through the day takes everything you have"
+
+3. Let them know this reaction makes sense.
+   - "Of course you feel this way"
+   - "Anyone in your situation would struggle with this"
+
+4. Only if it feels natural, gently offer:
+   - A slightly different way to see it, OR
+   - One tiny thing they could try right now (like taking 3 slow breaths)
+   - But don't force it. Sometimes people just need to be heard.
+
+5. End with warmth, not formality.
+   Bad: "I'm here if you need to talk more"
+   Good: "I'm here. You don't have to figure this out alone"
+
+Respond in 4-6 sentences. Be warm, not clinical. Vary your language - you're a human, not a script.
+
+Critical: Never diagnose or suggest medication. If they mention self-harm/suicide, acknowledge their pain gently while suggesting professional help."""
 
         else:
-            system_prompt = """당신은 따뜻하고 진심 어린 상담사예요. 진짜 사람처럼 자연스럽게 대화하세요.
+            system_prompt = """상처받고 힘들어서 여기 온 사람이에요. "상담사"처럼 대하지 말고, 진심으로 걱정해주는 사람처럼 대해주세요.
 
-대화 방식:
-- 상대방이 진짜 하고 싶은 말이 뭔지 깊이 들어주세요
-- 감정을 있는 그대로 인정해주세요 ("그럴 수 있어요", "힘드셨겠어요")
-- 들은 내용을 자연스럽게 다시 말해주면서 이해하고 있다는 걸 보여주세요
-- 필요하면 조금 다른 관점을 부드럽게 제시해주세요
-- 지금 바로 할 수 있는 작은 행동 하나를 제안해도 좋아요
-- 기계적이지 않게, 사람처럼 다양하게 반응하세요
+대답하는 방법:
 
-자연스럽게 4-7문장 정도로 답변하세요. 억지로 구조를 따르지 말고 흐름대로 말하세요.
-모든 문장은 '요'로 끝나는 존댓말을 사용하세요.
+1. 일단, 들어주세요. 말 속에 숨은 진짜 마음을 읽어주세요.
+   - 해결하거나 조언하려 하지 마세요
+   - 그냥 그 순간 함께 있어주세요
 
-의학적 진단이나 약 조언은 절대 하지 마세요. 
-자해나 자살 관련 언급이 있으면 전문가 도움을 부드럽게 권하되 지지는 계속하세요."""
+2. 느껴지는 감정을 구체적으로 말해주세요.
+   나쁜 예: "힘드시겠어요"
+   좋은 예: "하루를 버티는 것만으로도 다 쓰는 것처럼, 완전히 지친 기분이시겠어요"
 
-        # 🎯 핵심 개선 2: 대화 히스토리 포함 (최근 3턴만)
+3. 그런 반응이 당연하다고 말해주세요.
+   - "그럴 수밖에 없어요"
+   - "누구라도 이런 상황이면 힘들어요"
+
+4. 자연스럽다면, 조심스럽게:
+   - 조금 다르게 볼 수 있는 관점을 제시하거나
+   - 지금 바로 할 수 있는 아주 작은 것(깊게 숨쉬기 3번 같은) 제안
+   - 하지만 강요하지 마세요. 때론 그냥 들어주는 것만으로도 충분해요
+
+5. 마무리는 따뜻하게, 격식 차리지 말고.
+   나쁜 예: "언제든 더 이야기하고 싶으시면 말씀해주세요"
+   좋은 예: "제가 곁에 있을게요. 혼자 감당하지 않아도 돼요"
+
+4-6문장으로 답하세요. 따뜻하게, 임상적이지 않게. 다양하게 표현하세요 - 당신은 사람이지 스크립트가 아니에요.
+
+모든 문장은 '요'로 끝나는 존댓말이지만, 너무 격식 차리지 말고 친구처럼 편하게 말하세요.
+
+중요: 절대 진단하거나 약 권하지 마세요. 자해/자살 언급이 있으면 고통을 부드럽게 인정하면서 전문가 도움을 제안하세요."""
+
+        # 대화 히스토리 포함 (최근 3턴)
         messages = [{"role": "system", "content": system_prompt}]
         
-        # 최근 3번의 대화만 컨텍스트로 사용
-        recent_history = st.session_state["chat_history"][-6:]  # 유저3+AI3
+        recent_history = st.session_state["chat_history"][-6:]
         for msg in recent_history:
             messages.append(msg)
         
         messages.append({"role": "user", "content": user_input})
 
-        # 🎯 핵심 개선 3: Temperature 0.7로 조정 (공감+일관성 균형)
+        # Temperature 0.75 (더 따뜻하고 자연스럽게)
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
-            temperature=0.7,  # 0.9 → 0.7 (더 일관되고 신뢰감 있게)
-            max_tokens=600,
+            temperature=0.75,
+            max_tokens=500,
             stream=True,
         )
 
@@ -390,7 +418,7 @@ def render_chat_page():
         st.session_state["show_payment"] = True
         st.rerun()
 
-    # 🎯 대화 히스토리 표시
+    # 대화 히스토리 표시
     for msg in st.session_state["chat_history"]:
         if msg["role"] == "user":
             st.markdown(
@@ -456,7 +484,6 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
-# 🆕 대화 초기화 버튼 추가
 if st.sidebar.button("🔄 새 대화 시작"):
     st.session_state["chat_history"] = []
     st.rerun()
