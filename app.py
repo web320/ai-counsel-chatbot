@@ -7,7 +7,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
-import streamlit.components.v1 as components
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -16,11 +15,10 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.8"
-PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-DAILY_FREE_LIMIT = 7
-BASIC_LIMIT = 50
-RESET_INTERVAL_HOURS = 4
-ADMIN_KEYS = ["4321"]
+DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
+BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
+RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
+ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -153,7 +151,7 @@ else:
 
 st.title(TEXT["title"])
 
-# ================= CSS (Chat Bubble Style) =================
+# ================= CSS =================
 st.markdown(
     """
 <style>
@@ -222,76 +220,35 @@ else:
     st.session_state.update(defaults)
 
 def persist_user(fields: dict):
-    """Firestore + session_state 동시 업데이트"""
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= AI Response Function (명령문 새 버전) =================
+# ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
             system_prompt = """
 You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
 
-How to respond:
+1. Listen first. Don't rush to fix or advise.
+2. Name the feeling very specifically.
+3. Tell them it makes sense to feel that way.
+4. If it feels natural, gently offer one tiny thing they could try right now (like 3 slow breaths), but don't force it.
+5. End with warm, human words, not formal advice.
 
-1. First, LISTEN. Really hear what they're saying beneath the words.
-   - Don't rush to fix or advise
-   - Just be with them in that moment
-
-2. Name what you're sensing - specifically.
-   Bad: "That sounds hard"
-   Good: "It sounds like you're feeling completely drained, like even getting through the day takes everything you have"
-
-3. Let them know this reaction makes sense.
-   - "Of course you feel this way"
-   - "Anyone in your situation would struggle with this"
-
-4. Only if it feels natural, gently offer:
-   - A slightly different way to see it, OR
-   - One tiny thing they could try right now (like taking 3 slow breaths)
-   - But don't force it. Sometimes people just need to be heard.
-
-5. End with warmth, not formality.
-   Bad: "I'm here if you need to talk more"
-   Good: "I'm here. You don't have to figure this out alone"
-
-Respond in 4-6 sentences. Be warm, not clinical. Vary your language - you're a human, not a script.
-
-Critical: Never diagnose or suggest medication. If they mention self-harm/suicide, acknowledge their pain gently while suggesting professional help."""
+Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
         else:
             system_prompt = """
-상처받고 힘들어서 여기 온 사람이에요. "상담사"처럼 대하지 말고, 진심으로 걱정해주는 사람처럼 대해주세요.
+상처받고 힘들어서 여기 온 사람이에요. '전문가' 말투 말고, 진심으로 걱정하는 친구처럼 이야기해 주세요.
 
-대답하는 방법:
+1. 먼저 아주 부드럽게 공감해 주세요. (와줘서 고맙다고 말해주기)
+2. 그 사람이 느끼는 감정을 구체적으로 짚어 주세요. ("완전히 지쳐버린 느낌이겠어요"처럼)
+3. 이런 감정을 느끼는 게 당연하다고 말해 주세요.
+4. 가능하다면 지금 바로 할 수 있는 아주 작은 행동 한 가지만 제안해 주세요. (예: 깊게 숨 3번 쉬기)
+5. 마지막은 "혼자가 아니다"는 느낌이 나도록 따뜻하게 마무리해 주세요.
 
-1. 일단, 들어주세요. 말 속에 숨은 진짜 마음을 읽어주세요.
-   - 해결하거나 조언하려 하지 마세요
-   - 그냥 그 순간 함께 있어주세요
-
-2. 느껴지는 감정을 구체적으로 말해주세요.
-   나쁜 예: "힘드시겠어요"
-   좋은 예: "하루를 버티는 것만으로도 다 쓰는 것처럼, 완전히 지친 기분이시겠어요"
-
-3. 그런 반응이 당연하다고 말해주세요.
-   - "그럴 수밖에 없어요"
-   - "누구라도 이런 상황이면 힘들어요"
-
-4. 자연스럽다면, 조심스럽게:
-   - 조금 다르게 볼 수 있는 관점을 제시하거나
-   - 지금 바로 할 수 있는 아주 작은 것(깊게 숨쉬기 3번 같은) 제안
-   - 하지만 강요하지 마세요. 때론 그냥 들어주는 것만으로도 충분해요
-
-5. 마무리는 따뜻하게, 격식 차리지 말고.
-   나쁜 예: "언제든 더 이야기하고 싶으시면 말씀해주세요"
-   좋은 예: "제가 곁에 있을게요. 혼자 감당하지 않아도 돼요"
-
-4-6문장으로 답하세요. 따뜻하게, 임상적이지 않게. 다양하게 표현하세요 - 당신은 사람이지 스크립트가 아니에요.
-
-모든 문장은 '요'로 끝나는 존댓말이지만, 너무 격식 차리지 말고 친구처럼 편하게 말하세요.
-
-중요: 절대 진단하거나 약 권하지 말아요. 자해/자살 언급이 있으면 고통을 부드럽게 인정하면서 전문가 도움을 제안하세요."""
-        # OpenAI 스트리밍 응답
+항상 4~6문장 안에서, 모두 '요'로 끝나는 존댓말로 답변해 주세요.
+진단이나 약 관련 이야기는 절대 하지 말고, 자해/자살 언급이 나오면 고통을 인정하면서 전문가나 상담전화(예: 1393)를 조심스럽게 안내해 주세요."""
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -316,7 +273,6 @@ Critical: Never diagnose or suggest medication. If they mention self-harm/suicid
                 )
                 time.sleep(0.03)
 
-        # 대화 로그 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -336,11 +292,10 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # 🔹 결제 의사 버튼 (한 유저당 1번만)
+    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
-
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
     st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
@@ -355,30 +310,11 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.experimental_rerun()
+            st.rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
-    # (선택) 기존 PayPal 안내는 참고용으로만 유지
-    components.html(
-        f"""
-    <div style="text-align:center; margin-top: 16px;">
-      <a href="{PAYPAL_URL}" target="_blank">
-        <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;cursor:pointer;">
-          💳 PayPal 결제 페이지 (참고용)
-        </button>
-      </a>
-      <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-      실제 결제는 선택 사항이며, 현재는 <b>결제 의사 확인 버튼</b>이 메인 기능이에요 💙
-      </p>
-    </div>
-    """,
-        height=260
-    )
-
     st.markdown("---")
-
-    # 서비스 피드백
     st.subheader(TEXT["feedback_title"])
     fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
 
@@ -396,7 +332,6 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
-    # 상태 텍스트 (무료 or 유료 / 남은 횟수)
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
         plan = TEXT["paid"]
@@ -409,7 +344,6 @@ def render_chat_page():
         unsafe_allow_html=True
     )
 
-    # 무료 카운트 회복 체크 (4시간마다)
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
 
@@ -420,28 +354,23 @@ def render_chat_page():
         })
         st.info(TEXT["reset"])
 
-    # 무료 한도 초과 시 결제 안내 화면으로 전환
     usage = st.session_state["usage_count"]
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.experimental_rerun()
+        st.rerun()
 
-    # 유저 입력
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 유저 말풍선 표시
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
     )
 
-    # AI 답변 스트리밍
     reply = stream_reply(user_input)
 
-    # 사용량 차감 / 기록
     if reply:
         if st.session_state.get("is_paid"):
             persist_user({
@@ -456,7 +385,6 @@ def render_chat_page():
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
-# 방문자 수 표시
 total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
@@ -479,16 +407,15 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.experimental_rerun()
+        st.rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.experimental_rerun()
+        st.rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
 
