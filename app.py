@@ -15,9 +15,9 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.8"
-DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
+DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
+RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
 ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
@@ -255,7 +255,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input},
             ],
-            temperature=0.9,
+            temperature=0.7,
             max_tokens=700,
             stream=True,
         )
