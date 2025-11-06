@@ -154,23 +154,49 @@ def render_payment():
             st.success("💖 피드백이 저장되었습니다. 감사합니다!")
 
 # ================= SIDEBAR =================
-total_visits, daily_visits = get_visit_counts()
-click_total = len(list(db.collection("purchase_intent").stream()))
+# ================= Sidebar =================
+st.sidebar.header("📜 History / 대화 기록")
 
+# ✅ 방문자 수 가져오기
+def get_visit_counts():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    total_doc = db.collection("stats").document("total").get()
+    daily_doc = db.collection("stats").document(today).get()
+    total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
+    daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
+    return total, daily
+
+total_visits, daily_visits = get_visit_counts()
+
+# ✅ 사이드바 표시 (결제의사 제거)
 st.sidebar.markdown(
     f"""
-    <div style="margin-top:12px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);
-    font-size:13px;color:rgba(255,255,255,0.85);">
-    🌍 <b>Total {total_visits:,}명</b><br>☀️ <b>Today {daily_visits:,}명</b><br>
-    💳 <b>결제의사 {click_total:,}명</b>
+    <div style="
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
     </div>
-    """, unsafe_allow_html=True
+    """,
+    unsafe_allow_html=True
 )
 
-if st.sidebar.button("💬 상담하기"):
-    st.session_state["show_payment"] = False
-if st.sidebar.button("💳 결제 / 피드백 보기"):
-    st.session_state["show_payment"] = True
+# 기존 버튼 유지
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
+
 
 # ================= MAIN =================
 if st.session_state.get("show_payment"):
