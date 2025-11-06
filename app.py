@@ -44,15 +44,13 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Query Params / USER_ID (유저 고유 ID) =================
-# URL에 ?uid=... 가 있으면 그걸 쓰고, 없으면 새로 만들어서 붙임
-qp = st.query_params
-uid = qp.get("uid", None)
-if uid is None:
-    uid = str(uuid.uuid4())
-    # 기존 쿼리파라미터 유지 + uid 추가
-    st.query_params = {**qp, "uid": uid}
-USER_ID = uid
+# ================= USER_ID (per browser session) =================
+# URL에 안 붙이고, 브라우저 세션마다 내부적으로만 고유 ID 생성
+if "USER_ID" not in st.session_state:
+    st.session_state["USER_ID"] = str(uuid.uuid4())
+
+USER_ID = st.session_state["USER_ID"]
+
 
 # ================= Visitor Counter (유저당 1번만 카운트) =================
 def update_visit_stats():
