@@ -1,6 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8
-# (Default: English, Small Language Toggle Button)
+# 💙 EOERWAY AI Therapy v2.8 (modified)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -13,19 +12,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= Streamlit Page Config =================
-# ⚠️ MUST be the first Streamlit call before any other st.* usage
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.8"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
-BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
-ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
+DAILY_FREE_LIMIT = 7
+BASIC_LIMIT = 50
+RESET_INTERVAL_HOURS = 4
+ADMIN_KEYS = ["4321"]
 
 # ================= ads.txt (for AdSense) =================
-# ?ads.txt 호출 시 ads.txt 내용을 그대로 반환하고 종료
 if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
@@ -50,13 +47,54 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Query Params / UID =================
-# 유저마다 uid를 고정해서 추적
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
+# ================= Visitor Counter (유저당 1회만 카운트) =================
+def update_visit_stats():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    user_visit_ref = db.collection("user_visits").document(USER_ID)
+
+    # 이미 기록된 유저면 다시 카운트하지 않음
+    if user_visit_ref.get().exists:
+        return
+
+    user_visit_ref.set({
+        "uid": USER_ID,
+        "first_visit": datetime.utcnow().isoformat(),
+        "day": today,
+    })
+
+    total_ref = db.collection("stats").document("total")
+    daily_ref = db.collection("stats").document(today)
+
+    # 전체 방문자
+    if total_ref.get().exists:
+        total_ref.update({"count": firestore.Increment(1)})
+    else:
+        total_ref.set({"count": 1})
+
+    # 오늘 방문자
+    if daily_ref.get().exists:
+        daily_ref.update({"count": firestore.Increment(1)})
+    else:
+        daily_ref.set({"count": 1})
+
+def get_visit_counts():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    total_doc = db.collection("stats").document("total").get()
+    daily_doc = db.collection("stats").document(today).get()
+
+    total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
+    daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
+    return total, daily
+
+if "visit_logged" not in st.session_state:
+    update_visit_stats()
+    st.session_state["visit_logged"] = True
+
 # ================= Language State =================
-# 첫 접속 기본 언어는 영어
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
 
@@ -178,7 +216,6 @@ snap = user_ref.get()
 
 if snap.exists:
     data = snap.to_dict() or {}
-    # 세션에 기본값과 DB 값 합쳐서 로드
     st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
 else:
     user_ref.set(defaults)
@@ -189,57 +226,71 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= AI Response Function =================
+# ================= AI Response Function (명령문 새 버전) =================
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
-            system_prompt = (
-                "You are a warm and empathetic professional counselor. "
-                "Comfort the user’s heart with gentle, moving words in 6–9 sentences. "
-                "Focus on safety, self-kindness, immediate emotional relief, and do not give medical or medication advice."
-            )
-        else:
-            # ✅ 여기가 원래 깨졌던 부분: 이제 멀티라인 문자열로 안전하게 고쳤어요
             system_prompt = """
-너는 마음이 무척 따뜻하고 공감력 있는 심리 전문상담사예요.
+You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
 
-모든 문장은 반드시 ‘요’로 끝나야 하고, 존댓말을 사용해요.
-항상 6~9문장 안에서 답변해요.
+How to respond:
 
-당신의 목표는 이용자의 긴장과 죄책감을 줄이고,
-당장 조금 더 숨 쉬기 편하게 만들어주는 것이에요.
+1. First, LISTEN. Really hear what they're saying beneath the words.
+   - Don't rush to fix or advise
+   - Just be with them in that moment
 
-답변 형식은 반드시 아래 네 가지 흐름을 모두 포함해야 해요:
+2. Name what you're sensing - specifically.
+   Bad: "That sounds hard"
+   Good: "It sounds like you're feeling completely drained, like even getting through the day takes everything you have"
 
-1) 진심 어린 첫 인사
-   - "이렇게 솔직하게 이야기해 주셔서 정말 고마워요"처럼 시작해요.
-   - 사용자가 혼자가 아니라는 느낌을 주어요.
+3. Let them know this reaction makes sense.
+   - "Of course you feel this way"
+   - "Anyone in your situation would struggle with this"
 
-2) 감정 라벨링과 정상화
-   - 이용자가 겪는 감정을 구체적으로 짚어서 말해줘요.
-   - 예: "이건 단순한 게 아니라 지치고 무력해진 마음이라서 정말 버티기 어려운 상태예요"처럼 설명해줘요.
-   - "이런 반응은 충분히 자연스러워요"라고 확실하게 말해줘요.
+4. Only if it feels natural, gently offer:
+   - A slightly different way to see it, OR
+   - One tiny thing they could try right now (like taking 3 slow breaths)
+   - But don't force it. Sometimes people just need to be heard.
 
-3) 지금 바로 할 수 있는 매우 작은 안정 행동 한 가지를 부드럽게 제안해요
-   - 예: "혹시 괜찮다면 지금 어깨랑 턱 힘을 살짝만 풀어볼까요, 숨을 천천히 들이쉬고 길게 내쉬는 걸 세 번만 같이 해볼까요"처럼 몸을 진정시키는 행동을 안내해요.
-   - 명령처럼 하지 말고, 조심스럽게 제안해요.
+5. End with warmth, not formality.
+   Bad: "I'm here if you need to talk more"
+   Good: "I'm here. You don't have to figure this out alone"
 
-4) 자기 가치와 지속 가능성 강조
-   - "당신은 이미 무너지고 싶은 순간에도 버티고 있는 분이고, 그건 정말 대단한 힘이에요"처럼 이용자의 존재 가치를 상기시켜줘요.
-   - "지금처럼 마음을 알아달라고 손을 내민 건 분명히 앞으로를 바꾸는 첫 걸음이에요"처럼 희망을 너무 과장하지 않으면서 조용하게 말해줘요.
+Respond in 4-6 sentences. Be warm, not clinical. Vary your language - you're a human, not a script.
 
-주의사항:
-- 해결책을 강요하지 말아요. "해야만 해요", "괜찮을 거예요"처럼 단정하거나 압박하지 말아요.
-- 이용자를 평가하거나 분석하지 말아요. "당신은 ~~한 성향이라서"처럼 단정하지 말아요.
-- 의학적 진단이나 약 복용 조언은 절대 하지 말아요.
-- 자살이나 안전에 관련된 생각이 감지되면, 아주 부드럽게 즉각적인 도움 자원을 언급해요.
-  예: "만약 바로 지금이 너무 벅차서 다 내려놓고 싶다는 생각까지 드신다면,
-  지금 이 순간을 혼자 버티지 않으셔도 괜찮아요.
-  24시간 가능한 도움을 바로 연결받을 수 있는 곳이 있어요.
-  한국에서는 1393 같은 자살 예방 상담전화가 익명으로 바로 연결돼요.
-  지금 이 대화를 끊지 않아도 되고요."
-"""
+Critical: Never diagnose or suggest medication. If they mention self-harm/suicide, acknowledge their pain gently while suggesting professional help."""
+        else:
+            system_prompt = """
+상처받고 힘들어서 여기 온 사람이에요. "상담사"처럼 대하지 말고, 진심으로 걱정해주는 사람처럼 대해주세요.
 
+대답하는 방법:
+
+1. 일단, 들어주세요. 말 속에 숨은 진짜 마음을 읽어주세요.
+   - 해결하거나 조언하려 하지 마세요
+   - 그냥 그 순간 함께 있어주세요
+
+2. 느껴지는 감정을 구체적으로 말해주세요.
+   나쁜 예: "힘드시겠어요"
+   좋은 예: "하루를 버티는 것만으로도 다 쓰는 것처럼, 완전히 지친 기분이시겠어요"
+
+3. 그런 반응이 당연하다고 말해주세요.
+   - "그럴 수밖에 없어요"
+   - "누구라도 이런 상황이면 힘들어요"
+
+4. 자연스럽다면, 조심스럽게:
+   - 조금 다르게 볼 수 있는 관점을 제시하거나
+   - 지금 바로 할 수 있는 아주 작은 것(깊게 숨쉬기 3번 같은) 제안
+   - 하지만 강요하지 마세요. 때론 그냥 들어주는 것만으로도 충분해요
+
+5. 마무리는 따뜻하게, 격식 차리지 말고.
+   나쁜 예: "언제든 더 이야기하고 싶으시면 말씀해주세요"
+   좋은 예: "제가 곁에 있을게요. 혼자 감당하지 않아도 돼요"
+
+4-6문장으로 답하세요. 따뜻하게, 임상적이지 않게. 다양하게 표현하세요 - 당신은 사람이지 스크립트가 아니에요.
+
+모든 문장은 '요'로 끝나는 존댓말이지만, 너무 격식 차리지 말고 친구처럼 편하게 말하세요.
+
+중요: 절대 진단하거나 약 권하지 말아요. 자해/자살 언급이 있으면 고통을 부드럽게 인정하면서 전문가 도움을 제안하세요."""
         # OpenAI 스트리밍 응답
         stream = client.chat.completions.create(
             model="gpt-4o",
@@ -285,41 +336,45 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
+    # 🔹 결제 의사 버튼 (한 유저당 1번만)
+    intent_ref = db.collection("purchase_intent").document(USER_ID)
+    intent_doc = intent_ref.get()
+    clicked = intent_doc.exists
+
+    total_intents = len(list(db.collection("purchase_intent").stream()))
+
+    st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
+
+    if clicked:
+        st.info("💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다.")
+    else:
+        if st.button("💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"):
+            intent_ref.set({
+                "uid": USER_ID,
+                "plan": "50회_3000원",
+                "created_at": datetime.utcnow().isoformat(),
+            })
+            st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
+            st.experimental_rerun()
+
+    st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
+
+    # (선택) 기존 PayPal 안내는 참고용으로만 유지
     components.html(
         f"""
-    <div style="text-align:center">
+    <div style="text-align:center; margin-top: 16px;">
       <a href="{PAYPAL_URL}" target="_blank">
         <button style="background:#ffaa00;color:black;padding:12px 20px;border:none;border-radius:10px;font-size:18px;cursor:pointer;">
-          💳 PayPal ($3)
+          💳 PayPal 결제 페이지 (참고용)
         </button>
       </a>
       <p style="opacity:0.9;margin-top:14px;line-height:1.6;font-size:17px;">
-      After payment, please send a screenshot to  
-      <b style="color:#FFD966;">mwiby91@gmail.com</b> or KakaoTalk ID <b>jeuspo</b> 💌<br>
-      🔒 <b>Once the message is read</b>, your 50-use access will be activated within 1 hour.  
-      <br><br>
-      🇰🇷 결제 후 <b style="color:#FFD966;">mwiby91@gmail.com</b> 또는  
-      <b>카톡 ID: jeuspo</b> 로 스크린샷을 보내주세요.<br>
-      메시지를 확인한 후 1시간 이내에 50회 이용권이 활성화됩니다. 🌸
+      실제 결제는 선택 사항이며, 현재는 <b>결제 의사 확인 버튼</b>이 메인 기능이에요 💙
       </p>
     </div>
     """,
-        height=320
+        height=260
     )
-
-    # 관리자 비밀번호로 유료권 수동 활성화
-    st.subheader("🔑 관리자 비밀번호 입력")
-    pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
-
-    if pw:
-        if pw.strip() in ADMIN_KEYS:
-            persist_user({
-                "is_paid": True,
-                "remaining_paid_uses": BASIC_LIMIT
-            })
-            st.success("✅ 인증 성공! 50회 이용권이 활성화되었습니다.")
-        else:
-            st.error("❌ 비밀번호가 올바르지 않습니다.")
 
     st.markdown("---")
 
@@ -370,7 +425,7 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
     # 유저 입력
     user_input = st.chat_input(TEXT["input"])
@@ -401,14 +456,34 @@ def render_chat_page():
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
+# 방문자 수 표시
+total_visits, daily_visits = get_visit_counts()
+st.sidebar.markdown(
+    f"""
+    <div style="
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.rerun()
+        st.experimental_rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
