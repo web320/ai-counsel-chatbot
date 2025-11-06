@@ -394,13 +394,13 @@ total_visits, daily_visits = get_visit_counts()
 # 🔹 언어에 따라 방문자수 문구도 다르게
 if language == "English 🇺🇸":
     sidebar_html = f"""
-        🌍 <b>Total visitors: {total_visits:,}</b><br>
-        ☀️ <b>Today: {daily_visits:,}</b>
+        🌍 Total visitors: {total_visits:,}
+        ☀️ Today: {daily_visits:,}
     """
 else:
     sidebar_html = f"""
-        🌍 <b>총 방문자 {total_visits:,}명</b><br>
-        ☀️ <b>오늘 {daily_visits:,}명</b>
+        🌍 총 방문자 {total_visits:,}명
+        ☀️ 오늘 {daily_visits:,}명
     """
 
 st.sidebar.markdown(
