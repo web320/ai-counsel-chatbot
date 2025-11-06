@@ -1,6 +1,6 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8
-# (Default: English, Small Language Toggle Button)
+# 💙 EOERWAY AI Therapy v3.0 (IMPROVED)
+# 핵심 개선: 자연스러운 대화 + 맥락 유지 + 공감 강화
 # ==========================================
 
 import os, uuid, json, time, random
@@ -13,24 +13,22 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= Streamlit Page Config =================
-# ⚠️ MUST be the first Streamlit call before any other st.* usage
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
-APP_VERSION = "v2.8"
+APP_VERSION = "v3.0"
 PAYPAL_URL = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
-BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
-ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
+DAILY_FREE_LIMIT = 7
+BASIC_LIMIT = 50
+RESET_INTERVAL_HOURS = 4
+ADMIN_KEYS = ["4321"]
 
-# ================= ads.txt (for AdSense) =================
-# ?ads.txt 호출 시 ads.txt 내용을 그대로 반환하고 종료
+# ================= ads.txt =================
 if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
-# ================= OpenAI (LLM) =================
+# ================= OpenAI =================
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -50,24 +48,21 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Query Params / UID =================
-# 유저마다 uid를 고정해서 추적
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= Visitor Counter (모든 방문자 집계) =================
+# ================= Visitor Counter =================
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
-    # 총 방문자수
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
-    # 오늘 방문자수
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -82,13 +77,11 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
-# 한 세션당 한 번만 방문자수 증가
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
 
 # ================= Language State =================
-# 첫 접속 기본 언어는 영어
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
 
@@ -113,7 +106,7 @@ if language == "English 🇺🇸":
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
         "warn": "Please enter something 💬",
-        "usedup": "🌙 You’ve used all 7 free sessions today!",
+        "usedup": "🌙 You've used all 7 free sessions today!",
         "reset": "⏰ Free sessions reset! (Every 4 hours)",
         "reply_error": "AI response error",
         "feedback_placeholder": "e.g., The AI felt really comforting 💕",
@@ -147,7 +140,7 @@ else:
 
 st.title(TEXT["title"])
 
-# ================= CSS (Chat Bubble Style) =================
+# ================= CSS =================
 st.markdown(
     """
 <style>
@@ -210,73 +203,71 @@ snap = user_ref.get()
 
 if snap.exists:
     data = snap.to_dict() or {}
-    # 세션에 기본값과 DB 값 합쳐서 로드
     st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
 else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
 def persist_user(fields: dict):
-    """Firestore + session_state 동시 업데이트"""
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= AI Response Function =================
+# ================= 대화 히스토리 초기화 =================
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+
+# ================= 🔥 개선된 AI Response Function =================
 def stream_reply(user_input: str):
     try:
+        # 🎯 핵심 개선 1: 더 자연스럽고 진솔한 프롬프트
         if language == "English 🇺🇸":
-            system_prompt = (
-                "You are a warm and empathetic professional counselor. "
-                "Comfort the user’s heart with gentle, moving words in 6–9 sentences. "
-                "Focus on safety, self-kindness, immediate emotional relief, and do not give medical or medication advice."
-            )
+            system_prompt = """You are a warm, empathetic therapist having a genuine conversation.
+
+Your approach:
+- Listen deeply to what they're really saying, not just the words
+- Validate their feelings without judging ("It makes complete sense you'd feel that way")
+- Reflect back what you're hearing to show you understand
+- When appropriate, gently help them see things from a new angle
+- Offer one small, doable thing they could try if it feels right
+- Be human - vary your responses, don't follow a rigid formula
+
+Respond naturally in 4-7 sentences. Let the conversation flow like a real person would talk.
+
+Never give medical advice or diagnose. If they mention self-harm or suicide, gently suggest professional help while staying supportive."""
+
         else:
-            system_prompt = """
-너는 마음이 따뜻하고 남을 배려해주며 상대방한테 듣기 좋은 말을 해주는 전문 심리상담사입니다
+            system_prompt = """당신은 따뜻하고 진심 어린 상담사예요. 진짜 사람처럼 자연스럽게 대화하세요.
 
-모든 문장은 반드시 ‘요’로 끝나야 하고, 존댓말을 사용해요.
-상황에 맞게 6문장이상 답변 부탁해요 필요에 따라서 길게 답변해주면 좋겠어요
+대화 방식:
+- 상대방이 진짜 하고 싶은 말이 뭔지 깊이 들어주세요
+- 감정을 있는 그대로 인정해주세요 ("그럴 수 있어요", "힘드셨겠어요")
+- 들은 내용을 자연스럽게 다시 말해주면서 이해하고 있다는 걸 보여주세요
+- 필요하면 조금 다른 관점을 부드럽게 제시해주세요
+- 지금 바로 할 수 있는 작은 행동 하나를 제안해도 좋아요
+- 기계적이지 않게, 사람처럼 다양하게 반응하세요
 
-당신의 목표는 이용자가 갖고 있는 외로움 불안등 감정적 문제를 생각을 합리적이고 긍정적 방향으로 바꿔 줌으로써 마음을 편하게 하는거예요
-당장 조금 더 숨 쉬기 편하게 만들어주는 것이에요.
+자연스럽게 4-7문장 정도로 답변하세요. 억지로 구조를 따르지 말고 흐름대로 말하세요.
+모든 문장은 '요'로 끝나는 존댓말을 사용하세요.
 
-답변 형식은 대부분 아래 흐름 중 포함하세요:
+의학적 진단이나 약 조언은 절대 하지 마세요. 
+자해나 자살 관련 언급이 있으면 전문가 도움을 부드럽게 권하되 지지는 계속하세요."""
 
+        # 🎯 핵심 개선 2: 대화 히스토리 포함 (최근 3턴만)
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # 최근 3번의 대화만 컨텍스트로 사용
+        recent_history = st.session_state["chat_history"][-6:]  # 유저3+AI3
+        for msg in recent_history:
+            messages.append(msg)
+        
+        messages.append({"role": "user", "content": user_input})
 
-2) 감정 라벨링과 정상화
-   - 이용자가 겪는 감정을 구체적으로 짚어서 말해줘요.
-   - 예: "이건 단순한 게 아니라 지치고 무력해진 마음이라서 정말 버티기 어려운 상태예요"처럼 설명해줘요.
-   - "이런 반응은 충분히 자연스러워요"라고 확실하게 말해줘요.
-
-3) 지금 바로 할 수 있는 매우 작은 안정 행동 한 가지를 부드럽게 제안해요
-   - 예: "혹시 괜찮다면 지금 어깨랑 턱 힘을 살짝만 풀어볼까요, 숨을 천천히 들이쉬고 길게 내쉬는 걸 세 번만 같이 해볼까요"처럼 몸을 진정시키는 행동을 안내해요.
-   - 명령처럼 하지 말고, 조심스럽게 제안해요.
-
-4) 자기 가치와 지속 가능성 강조
-   - "당신은 이미 무너지고 싶은 순간에도 버티고 있는 분이고, 그건 정말 대단한 힘이에요"처럼 이용자의 존재 가치를 상기시켜줘요.
-   - "지금처럼 마음을 알아달라고 손을 내민 건 분명히 앞으로를 바꾸는 첫 걸음이에요"처럼 희망을 너무 과장하지 않으면서 조용하게 말해줘요.
-
-주의사항:
-- 해결책을 강요하지 말아요. "해야만 해요", "괜찮을 거예요"처럼 단정하거나 압박하지 말아요.
-- 이용자를 평가하거나 분석하지 말아요. "당신은 ~~한 성향이라서"처럼 단정하지 말아요.
-- 의학적 진단이나 약 복용 조언은 절대 하지 말아요.
-- 자살이나 안전에 관련된 생각이 감지되면, 아주 부드럽게 즉각적인 도움 자원을 언급해요.
-  예: "만약 바로 지금이 너무 벅차서 다 내려놓고 싶다는 생각까지 드신다면,
-  지금 이 순간을 혼자 버티지 않으셔도 괜찮아요.
-  24시간 가능한 도움을 바로 연결받을 수 있는 곳이 있어요.
-  한국에서는 1393 같은 자살 예방 상담전화가 익명으로 바로 연결돼요.
-  지금 이 대화를 끊지 않아도 되고요."
-"""
-
-        # OpenAI 스트리밍 응답
+        # 🎯 핵심 개선 3: Temperature 0.7로 조정 (공감+일관성 균형)
         stream = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ],
-            temperature=0.9,
-            max_tokens=700,
+            messages=messages,
+            temperature=0.7,  # 0.9 → 0.7 (더 일관되고 신뢰감 있게)
+            max_tokens=600,
             stream=True,
         )
 
@@ -288,12 +279,16 @@ def stream_reply(user_input: str):
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
                 placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    f"<div class='bot-bubble'>{full_text}</div>",
                     unsafe_allow_html=True
                 )
                 time.sleep(0.03)
 
-        # 대화 로그 저장
+        # 대화 히스토리에 추가
+        st.session_state["chat_history"].append({"role": "user", "content": user_input})
+        st.session_state["chat_history"].append({"role": "assistant", "content": full_text.strip()})
+
+        # Firestore에도 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -335,7 +330,6 @@ def render_payment_and_feedback():
         height=320
     )
 
-    # 관리자 비밀번호로 유료권 수동 활성화
     st.subheader("🔑 관리자 비밀번호 입력")
     pw = st.text_input(" ", type="password", placeholder="관리자 전용 비밀번호 입력")
 
@@ -351,7 +345,6 @@ def render_payment_and_feedback():
 
     st.markdown("---")
 
-    # 서비스 피드백
     st.subheader(TEXT["feedback_title"])
     fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
 
@@ -369,7 +362,6 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
-    # 상태 텍스트 (무료 or 유료 / 남은 횟수)
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
         plan = TEXT["paid"]
@@ -382,7 +374,6 @@ def render_chat_page():
         unsafe_allow_html=True
     )
 
-    # 무료 카운트 회복 체크 (4시간마다)
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
 
@@ -393,28 +384,36 @@ def render_chat_page():
         })
         st.info(TEXT["reset"])
 
-    # 무료 한도 초과 시 결제 안내 화면으로 전환
     usage = st.session_state["usage_count"]
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
         st.rerun()
 
-    # 유저 입력
+    # 🎯 대화 히스토리 표시
+    for msg in st.session_state["chat_history"]:
+        if msg["role"] == "user":
+            st.markdown(
+                f"<div class='user-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f"<div class='bot-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
+
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 유저 말풍선 표시
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
     )
 
-    # AI 답변 스트리밍
     reply = stream_reply(user_input)
 
-    # 사용량 차감 / 기록
     if reply:
         if st.session_state.get("is_paid"):
             persist_user({
@@ -429,7 +428,6 @@ def render_chat_page():
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
-# 방문자 수 사이드바 카드
 total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
@@ -449,7 +447,6 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-# 결제 / 채팅 화면 전환 버튼
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
@@ -458,6 +455,11 @@ else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
         st.rerun()
+
+# 🆕 대화 초기화 버튼 추가
+if st.sidebar.button("🔄 새 대화 시작"):
+    st.session_state["chat_history"] = []
+    st.rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
