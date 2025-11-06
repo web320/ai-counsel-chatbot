@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (final)
+# 💙 EOERWAY AI Therapy v2.8 (unique visitors)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -44,37 +44,42 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= UID (per browser session) =================
-# 브라우저(탭)마다 USER_ID 생성, URL 파라미터 사용 X
-if "USER_ID" not in st.session_state:
-    st.session_state["USER_ID"] = str(uuid.uuid4())
-USER_ID = st.session_state["USER_ID"]
+# ================= Query Params / USER_ID (유저 고유 ID) =================
+# URL에 ?uid=... 가 있으면 그걸 쓰고, 없으면 새로 만들어서 붙임
+qp = st.query_params
+uid = qp.get("uid", None)
+if uid is None:
+    uid = str(uuid.uuid4())
+    # 기존 쿼리파라미터 유지 + uid 추가
+    st.query_params = {**qp, "uid": uid}
+USER_ID = uid
 
-# ================= Visitor Counter (유저당 1회만 카운트) =================
+# ================= Visitor Counter (유저당 1번만 카운트) =================
 def update_visit_stats():
+    """USER_ID 기준으로 한 번만 총/오늘 방문자수 +1."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # 이 USER_ID가 이미 카운트 되었는지 체크
     user_visit_ref = db.collection("user_visits").document(USER_ID)
-
-    # 이미 기록된 유저면 다시 카운트하지 않음
     if user_visit_ref.get().exists:
-        return
+        return  # 이미 센 유저면 더 이상 증가 X
 
+    # 처음 보는 USER_ID면 기록
     user_visit_ref.set({
         "uid": USER_ID,
         "first_visit": datetime.utcnow().isoformat(),
         "day": today,
     })
 
+    # 전체 방문자수 / 오늘 방문자수 증가
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
-    # 전체 방문자
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
-    # 오늘 방문자
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -89,9 +94,8 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
-if "visit_logged" not in st.session_state:
-    update_visit_stats()
-    st.session_state["visit_logged"] = True
+# 페이지가 로드될 때마다 시도하지만, 같은 USER_ID면 1번만 증가
+update_visit_stats()
 
 # ================= Language State =================
 if "lang" not in st.session_state:
@@ -387,34 +391,17 @@ st.sidebar.header("📜 History / 대화 기록")
 
 total_visits, daily_visits = get_visit_counts()
 
-# 언어에 따라 방문자수 문구
+# 깔끔한 마크다운으로만 표시
 if language == "English 🇺🇸":
-    sidebar_html = f"""
-        🌍 <b>Total visitors: {total_visits:,}</b><br>
-        ☀️ <b>Today: {daily_visits:,}</b>
-    """
+    st.sidebar.markdown(
+        f"🌍 **Total visitors:** {total_visits:,}\n\n"
+        f"☀️ **Today:** {daily_visits:,}"
+    )
 else:
-    sidebar_html = f"""
-        🌍 <b>총 방문자 {total_visits:,}명</b><br>
-        ☀️ <b>오늘 {daily_visits:,}명</b>
-    """
-
-st.sidebar.markdown(
-    f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        {sidebar_html}
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    st.sidebar.markdown(
+        f"🌍 **총 방문자:** {total_visits:,}명\n\n"
+        f"☀️ **오늘:** {daily_visits:,}명"
+    )
 
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
