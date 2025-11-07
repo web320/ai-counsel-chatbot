@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (modified)
+# 💙 EOERWAY AI Therapy v2.8 (modified with bot filtering & visit count)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -9,6 +9,7 @@ from openai import OpenAI
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
+import streamlit.components.v1 as components
 
 # ================= Streamlit Page Config =================
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
@@ -49,8 +50,39 @@ uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= Visitor Counter (유저당 1회만 카운트) =================
+# ================= User-Agent 받아오기 (봇 필터링용) =================
+if "user_agent" not in st.session_state:
+    components.html(
+        """
+        <script>
+            const ua = navigator.userAgent;
+            const params = new URLSearchParams(window.location.search);
+            params.set("ua", ua);
+            const newUrl = window.location.pathname + "?" + params.toString();
+            window.history.replaceState({}, "", newUrl);
+        </script>
+        """,
+        height=0,
+    )
+    ua_query = st.query_params.get("ua", ["unknown"])
+    st.session_state["user_agent"] = ua_query[0] if isinstance(ua_query, list) else ua_query
+user_agent = st.session_state["user_agent"]
+
+def is_bot_visitor():
+    """User-Agent로 봇 방문 판단"""
+    bot_keywords = [
+        "bot", "crawl", "spider", "slurp", "curl", "python-requests",
+        "httpclient", "bingpreview", "monitoring", "wget", "uptime", "axios"
+    ]
+    ua = user_agent.lower()
+    return any(k in ua for k in bot_keywords)
+
+# ================= Visitor Counter (봇 제외 + 유저당 1회 카운트) =================
 def update_visit_stats():
+    if is_bot_visitor():
+        print(f"[봇 방문 제외됨] UA: {user_agent}")
+        return
+
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
 
@@ -62,6 +94,7 @@ def update_visit_stats():
         "uid": USER_ID,
         "first_visit": datetime.utcnow().isoformat(),
         "day": today,
+        "user_agent": user_agent,
     })
 
     total_ref = db.collection("stats").document("total")
@@ -310,7 +343,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.rerun()
+            st.experimental_rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -358,7 +391,7 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
@@ -407,17 +440,14 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.rerun()
+        st.experimental_rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
-
