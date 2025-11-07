@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9 (fixed unique visitors)
+# 💙 EOERWAY AI Therapy v2.9 (fixed unique visitors - no external lib)
 # ==========================================
 
 import os, uuid, json, time, random, hashlib
@@ -9,7 +9,6 @@ from openai import OpenAI
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-from streamlit_js_eval import streamlit_js_eval, get_cookie, set_cookie
 
 # ================= Streamlit Page Config =================
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
@@ -45,35 +44,36 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= USER_ID (브라우저 쿠키 기반) =================
-# 쿠키에서 USER_ID 가져오기 (없으면 새로 생성)
-def get_or_create_user_id():
-    """브라우저 쿠키에 저장된 고유 USER_ID를 가져오거나 생성"""
+# ================= USER_ID (브라우저 fingerprint 기반) =================
+def get_browser_fingerprint():
+    """
+    브라우저 고유 식별자 생성 (세션 기반)
+    - Streamlit 세션 ID 활용
+    - 같은 브라우저 탭은 같은 ID 유지
+    """
+    # Streamlit의 내부 세션 ID 활용
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        ctx = get_script_run_ctx()
+        if ctx and hasattr(ctx, 'session_id'):
+            return ctx.session_id
+    except:
+        pass
     
-    # 1. 먼저 쿠키에서 시도
-    cookie_user_id = get_cookie("therapy_user_id")
+    # fallback: session_state에 저장된 ID 사용
+    if "browser_fingerprint" not in st.session_state:
+        st.session_state["browser_fingerprint"] = str(uuid.uuid4())
     
-    if cookie_user_id and cookie_user_id != "null":
-        return cookie_user_id
-    
-    # 2. 쿠키에 없으면 새로 생성
-    new_id = str(uuid.uuid4())
-    
-    # 3. 쿠키에 저장 (1년 유효)
-    set_cookie("therapy_user_id", new_id, max_age=365*24*60*60)
-    
-    return new_id
+    return st.session_state["browser_fingerprint"]
 
-# session_state에 저장
+# USER_ID 생성 (브라우저 세션마다 고유)
 if "USER_ID" not in st.session_state:
-    st.session_state["USER_ID"] = get_or_create_user_id()
+    fingerprint = get_browser_fingerprint()
+    # 해시를 통해 일관된 USER_ID 생성
+    hashed = hashlib.sha256(fingerprint.encode()).hexdigest()[:16]
+    st.session_state["USER_ID"] = f"user_{hashed}"
 
 USER_ID = st.session_state["USER_ID"]
-
-# USER_ID가 여전히 None이면 임시 ID 생성 (fallback)
-if not USER_ID or USER_ID == "null":
-    USER_ID = str(uuid.uuid4())
-    st.session_state["USER_ID"] = USER_ID
 
 
 # ================= Visitor Counter (유저당 1번만 카운트) =================
@@ -83,38 +83,50 @@ def update_visit_stats():
 
     # 이 USER_ID가 이미 카운트 되었는지 체크
     user_visit_ref = db.collection("user_visits").document(USER_ID)
-    if user_visit_ref.get().exists:
-        return  # 이미 센 유저면 더 이상 증가 X
+    
+    try:
+        user_doc = user_visit_ref.get()
+        if user_doc.exists:
+            return  # 이미 센 유저면 더 이상 증가 X
+    except:
+        pass
 
     # 처음 보는 USER_ID면 기록
-    user_visit_ref.set({
-        "uid": USER_ID,
-        "first_visit": datetime.utcnow().isoformat(),
-        "day": today,
-    })
+    try:
+        user_visit_ref.set({
+            "uid": USER_ID,
+            "first_visit": datetime.utcnow().isoformat(),
+            "day": today,
+        })
 
-    # 전체 방문자수 / 오늘 방문자수 증가
-    total_ref = db.collection("stats").document("total")
-    daily_ref = db.collection("stats").document(today)
+        # 전체 방문자수 / 오늘 방문자수 증가
+        total_ref = db.collection("stats").document("total")
+        daily_ref = db.collection("stats").document(today)
 
-    if total_ref.get().exists:
-        total_ref.update({"count": firestore.Increment(1)})
-    else:
-        total_ref.set({"count": 1})
+        if total_ref.get().exists:
+            total_ref.update({"count": firestore.Increment(1)})
+        else:
+            total_ref.set({"count": 1})
 
-    if daily_ref.get().exists:
-        daily_ref.update({"count": firestore.Increment(1)})
-    else:
-        daily_ref.set({"count": 1})
+        if daily_ref.get().exists:
+            daily_ref.update({"count": firestore.Increment(1)})
+        else:
+            daily_ref.set({"count": 1})
+    except Exception as e:
+        # 에러 발생시 조용히 무시 (방문자 카운트 실패해도 앱은 계속 실행)
+        pass
 
 def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    total_doc = db.collection("stats").document("total").get()
-    daily_doc = db.collection("stats").document(today).get()
+    try:
+        total_doc = db.collection("stats").document("total").get()
+        daily_doc = db.collection("stats").document(today).get()
 
-    total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
-    daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
-    return total, daily
+        total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
+        daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
+        return total, daily
+    except:
+        return 0, 0
 
 # 페이지가 로드될 때마다 시도하지만, 같은 USER_ID면 1번만 증가
 update_visit_stats()
