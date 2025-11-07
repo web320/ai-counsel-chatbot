@@ -1,20 +1,21 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (unique visitors)
+# 💙 EOERWAY AI Therapy v2.9 (fixed unique visitors)
 # ==========================================
 
-import os, uuid, json, time, random
+import os, uuid, json, time, random, hashlib
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
+from streamlit_js_eval import streamlit_js_eval, get_cookie, set_cookie
 
 # ================= Streamlit Page Config =================
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
-APP_VERSION = "v2.8"
+APP_VERSION = "v2.9"
 DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
 BASIC_LIMIT = 50               # 유료 결제 후 제공되는 상담 횟수
 RESET_INTERVAL_HOURS = 6       # 무료 상담 회복 주기
@@ -44,12 +45,35 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= USER_ID (per browser session) =================
-# URL에 안 붙이고, 브라우저 세션마다 내부적으로만 고유 ID 생성
+# ================= USER_ID (브라우저 쿠키 기반) =================
+# 쿠키에서 USER_ID 가져오기 (없으면 새로 생성)
+def get_or_create_user_id():
+    """브라우저 쿠키에 저장된 고유 USER_ID를 가져오거나 생성"""
+    
+    # 1. 먼저 쿠키에서 시도
+    cookie_user_id = get_cookie("therapy_user_id")
+    
+    if cookie_user_id and cookie_user_id != "null":
+        return cookie_user_id
+    
+    # 2. 쿠키에 없으면 새로 생성
+    new_id = str(uuid.uuid4())
+    
+    # 3. 쿠키에 저장 (1년 유효)
+    set_cookie("therapy_user_id", new_id, max_age=365*24*60*60)
+    
+    return new_id
+
+# session_state에 저장
 if "USER_ID" not in st.session_state:
-    st.session_state["USER_ID"] = str(uuid.uuid4())
+    st.session_state["USER_ID"] = get_or_create_user_id()
 
 USER_ID = st.session_state["USER_ID"]
+
+# USER_ID가 여전히 None이면 임시 ID 생성 (fallback)
+if not USER_ID or USER_ID == "null":
+    USER_ID = str(uuid.uuid4())
+    st.session_state["USER_ID"] = USER_ID
 
 
 # ================= Visitor Counter (유저당 1번만 카운트) =================
@@ -120,7 +144,7 @@ if language == "English 🇺🇸":
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
         "warn": "Please enter something 💬",
-        "usedup": f"🌙 You’ve used all {DAILY_FREE_LIMIT} free sessions for now!",
+        "usedup": f"🌙 You've used all {DAILY_FREE_LIMIT} free sessions for now!",
         "reset": f"⏰ Free sessions reset every {RESET_INTERVAL_HOURS} hours.",
         "reply_error": "AI response error",
         "feedback_placeholder": "e.g., The AI felt really comforting 💕",
