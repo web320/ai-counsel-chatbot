@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (modified)
+# 💙 EOERWAY AI Therapy v3.0 — Chat History + Payment Guide Update
 # ==========================================
 
 import os, uuid, json, time, random
@@ -14,11 +14,11 @@ from firebase_admin import credentials, firestore
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
-APP_VERSION = "v2.8"
-DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
-BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
-ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
+APP_VERSION = "v3.0"
+DAILY_FREE_LIMIT = 15
+BASIC_LIMIT = 50
+RESET_INTERVAL_HOURS = 6
+ADMIN_KEYS = ["4321"]
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -49,15 +49,13 @@ uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= Visitor Counter (유저당 1회만 카운트) =================
+# ================= Visitor Counter =================
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
 
-    # 이미 기록된 유저면 다시 카운트하지 않음
     if user_visit_ref.get().exists:
         return
-
     user_visit_ref.set({
         "uid": USER_ID,
         "first_visit": datetime.utcnow().isoformat(),
@@ -67,13 +65,11 @@ def update_visit_stats():
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
-    # 전체 방문자
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
-    # 오늘 방문자
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -83,7 +79,6 @@ def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_doc = db.collection("stats").document("total").get()
     daily_doc = db.collection("stats").document(today).get()
-
     total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
@@ -92,7 +87,7 @@ if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
 
-# ================= Language State =================
+# ================= Language =================
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
 
@@ -109,7 +104,7 @@ with col2:
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
-# ================= Text by Language =================
+# ================= Text =================
 if language == "English 🇺🇸":
     TEXT = {
         "title": "❤️ A Warm AI Friend You Can Lean On",
@@ -117,8 +112,8 @@ if language == "English 🇺🇸":
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
         "warn": "Please enter something 💬",
-        "usedup": "🌙 You’ve used all 7 free sessions today!",
-        "reset": "⏰ Free sessions reset! (Every 4 hours)",
+        "usedup": "🌙 You’ve used all 15 free sessions today!",
+        "reset": "⏰ Free sessions reset every 6 hours!",
         "reply_error": "AI response error",
         "feedback_placeholder": "e.g., The AI felt really comforting 💕",
         "feedback_sent": "💖 Feedback saved safely. Thank you!",
@@ -128,6 +123,7 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
+        "payment_desc": "✨ 50 sessions for just $3 — your support helps us keep growing 💕"
     }
 else:
     TEXT = {
@@ -136,8 +132,8 @@ else:
         "paid": "💎 유료 이용중",
         "input": "지금 어떤 기분이예요?",
         "warn": "내용을 입력해주세요 💬",
-        "usedup": "🌙 오늘의 무료 상담 7회를 모두 사용했어요!",
-        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (4시간마다 복구)",
+        "usedup": "🌙 오늘의 무료 상담 15회를 모두 사용했어요!",
+        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (6시간마다 복구)",
         "reply_error": "AI 응답 오류",
         "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
         "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
@@ -147,16 +143,15 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
+        "payment_desc": "✨ 50회 이용권 3,000원 — 여러분의 응원이 큰 힘이 됩니다 💕"
     }
 
 st.title(TEXT["title"])
 
 # ================= CSS =================
-st.markdown(
-    """
+st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; }
-
 .user-bubble {
   background:#b91c1c;
   color:#fff;
@@ -166,7 +161,6 @@ html, body, [class*="css"] { font-size: 18px; }
   display:inline-block;
   box-shadow:0 0 10px rgba(255,0,0,0.3);
 }
-
 .bot-bubble {
   font-size:21px;
   line-height:1.8;
@@ -182,12 +176,10 @@ html, body, [class*="css"] { font-size: 18px; }
   word-break:break-word;
   white-space:pre-wrap;
 }
-
 @keyframes neon {
   from { box-shadow:0 0 8px #ffaa00; }
   to   { box-shadow:0 0 22px #ffcc33; }
 }
-
 .status {
   font-size:15px;
   padding:8px 12px;
@@ -197,11 +189,9 @@ html, body, [class*="css"] { font-size: 18px; }
   background:rgba(255,255,255,.06);
 }
 </style>
-""",
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
-# ================= Firestore Defaults / User State =================
+# ================= User Defaults =================
 defaults = {
     "is_paid": False,
     "usage_count": 0,
@@ -223,32 +213,30 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= AI Response Function =================
+# ================= AI Response =================
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
             system_prompt = """
-You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
-
-1. Listen first. Don't rush to fix or advise.
-2. Name the feeling very specifically.
-3. Tell them it makes sense to feel that way.
-4. If it feels natural, gently offer one tiny thing they could try right now (like 3 slow breaths), but don't force it.
-5. End with warm, human words, not formal advice.
-
-Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
+You’re talking to someone who came here because they’re hurting.
+Be a kind, real person — not a therapist.
+1. Listen first.
+2. Name their feeling specifically.
+3. Say it makes sense.
+4. If natural, suggest one tiny helpful action (like 3 deep breaths).
+5. End warmly, not formally.
+4–6 gentle sentences, never clinical.
+If they mention self-harm, respond with compassion and gently recommend professional help."""
         else:
             system_prompt = """
-상처받고 힘들어서 여기 온 사람이에요. '전문가' 말투 말고, 진심으로 걱정하는 친구처럼 이야기해 주세요.
+상처받고 힘들어서 여기 온 사람이에요. 친구처럼 따뜻하게 이야기해 주세요.
+1. 먼저 공감해 주세요.
+2. 구체적으로 감정을 짚어 주세요.
+3. 이런 감정이 당연하다고 말해 주세요.
+4. 가능하면 지금 바로 할 수 있는 아주 작은 행동 한 가지를 제안해 주세요.
+5. 마지막은 "혼자가 아니다"는 느낌으로 마무리해 주세요.
+4~6문장, 모두 요로 끝나게, 존댓말로. 진단이나 약 관련 이야기는 금지. 자살 언급시 1393 권유."""
 
-1. 먼저 아주 부드럽게 공감해 주세요. (와줘서 고맙다고 말해주기)
-2. 그 사람이 느끼는 감정을 구체적으로 짚어 주세요. ("완전히 지쳐버린 느낌이겠어요"처럼)
-3. 이런 감정을 느끼는 게 당연하다고 말해 주세요.
-4. 가능하다면 지금 바로 할 수 있는 아주 작은 행동 한 가지만 제안해 주세요. (예: 깊게 숨 3번 쉬기)
-5. 마지막은 "혼자가 아니다"는 느낌이 나도록 따뜻하게 마무리해 주세요.
-
-항상 4~6문장 안에서, 모두 '요'로 끝나는 존댓말로 답변해 주세요.
-진단이나 약 관련 이야기는 절대 하지 말고, 자해/자살 언급이 나오면 고통을 인정하면서 전문가나 상담전화(예: 1393)를 조심스럽게 안내해 주세요."""
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -260,17 +248,13 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
             stream=True,
         )
 
-        placeholder = st.empty()
+        bot_placeholder = st.empty()
         full_text = ""
-
         for chunk in stream:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True
-                )
+                bot_placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
                 time.sleep(0.03)
 
         db.collection("chats").add({
@@ -280,38 +264,37 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
             "lang": language,
             "created_at": datetime.utcnow().isoformat()
         })
-
         return full_text.strip()
-
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-# ================= Payment / Feedback Panel =================
+# ================= Payment / Feedback =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
+    st.markdown(TEXT["payment_desc"])
 
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
-    st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
+    st.markdown("#### 💎 50 uses / 3,000원 ($3 USD)")
 
     if clicked:
-        st.info("💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다.")
+        st.info("💙 You’ve already shown interest. Thank you for your support!")
     else:
-        if st.button("💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"):
+        if st.button("💳 I’m interested in purchasing / 결제 의사 있습니다"):
             intent_ref.set({
                 "uid": USER_ID,
                 "plan": "50회_3000원",
                 "created_at": datetime.utcnow().isoformat(),
             })
-            st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
+            st.success("You’ll be notified first when payment opens 💖")
             st.rerun()
 
-    st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
+    st.caption(f"So far, {total_intents} users have shown interest 💕")
 
     st.markdown("---")
     st.subheader(TEXT["feedback_title"])
@@ -329,7 +312,7 @@ def render_payment_and_feedback():
             })
             st.success(TEXT["feedback_sent"])
 
-# ================= Chat Main Page =================
+# ================= Chat Page =================
 def render_chat_page():
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
@@ -338,19 +321,12 @@ def render_chat_page():
         left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
         plan = TEXT["free"]
 
-    st.markdown(
-        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>", unsafe_allow_html=True)
 
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
-
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
-        persist_user({
-            "usage_count": 0,
-            "last_reset": now.isoformat()
-        })
+        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
         st.info(TEXT["reset"])
 
     usage = st.session_state["usage_count"]
@@ -359,60 +335,39 @@ def render_chat_page():
         st.session_state["show_payment"] = True
         st.rerun()
 
-    # 대화 내역 초기화 (없으면 생성)
+    # 대화 기록 유지 및 표시
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
 
-    # 입력창
+    chat_container = st.container()
+    for chat in st.session_state["chat_history"]:
+        if chat["role"] == "user":
+            chat_container.markdown(f"<div class='user-bubble'>{chat['content']}</div>", unsafe_allow_html=True)
+        else:
+            chat_container.markdown(f"<div class='bot-bubble'>{chat['content']}</div>", unsafe_allow_html=True)
+
     user_input = st.chat_input(TEXT["input"])
     if user_input:
-        # 사용자 메시지 저장
         st.session_state.chat_history.append({"role": "user", "content": user_input})
+        chat_container.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
 
-        # AI 응답 받기
         reply = stream_reply(user_input)
         if reply:
             st.session_state.chat_history.append({"role": "bot", "content": reply})
 
-        # 사용 횟수 관리
         if st.session_state.get("is_paid"):
-            persist_user({
-                "remaining_paid_uses": max(
-                    0,
-                    st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
-                )
-            })
+            persist_user({"remaining_paid_uses": max(0, st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1)})
         else:
             persist_user({"usage_count": usage + 1})
 
-    # 대화 기록 화면 출력
-    for chat in st.session_state.chat_history:
-        if chat["role"] == "user":
-            st.markdown(f"<div class='user-bubble'>{chat['content']}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='bot-bubble'>{chat['content']}</div>", unsafe_allow_html=True)
-
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
-
 total_visits, daily_visits = get_visit_counts()
-st.sidebar.markdown(
-    f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        🌍 <b>Total {total_visits:,}명</b><br>
-        ☀️ <b>Today {daily_visits:,}명</b>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.sidebar.markdown(f"""
+<div style="margin-top:12px; padding:8px 10px; border-radius:10px; background:rgba(255,255,255,0.03); font-size:13px; color:rgba(255,255,255,0.85);">
+🌍 <b>Total {total_visits:,}</b><br>☀️ <b>Today {daily_visits:,}</b>
+</div>
+""", unsafe_allow_html=True)
 
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
