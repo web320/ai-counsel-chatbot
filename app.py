@@ -46,7 +46,7 @@ db = firestore.client()
 
 # ================= Query Params / UID =================
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.query_params = {"uid": uid}
+st.experimental_set_query_params(uid=uid)
 USER_ID = uid
 
 # ================= Visitor Counter (유저당 1회만 카운트) =================
@@ -223,9 +223,28 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= AI Response Function =================
+# ================= 사용자별 대화 저장 함수 =================
+def save_chat(user_id, role, content):
+    db.collection("users").document(user_id).collection("chats").add({
+        "role": role,
+        "content": content,
+        "created_at": datetime.utcnow().isoformat()
+    })
+
+# ================= 조용한 기억용 최근 대화 불러오기 =================
+def get_recent_chats(user_id, limit=5):
+    chats_ref = db.collection("users").document(user_id).collection("chats") \
+                    .order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
+    docs = chats_ref.stream()
+    chats = [doc.to_dict() for doc in docs]
+    chats.reverse()
+    return chats
+
+# ================= AI Response Function (조용한 기억 포함) =================
 def stream_reply(user_input: str):
     try:
+        recent_chats = get_recent_chats(USER_ID)
+
         if language == "English 🇺🇸":
             system_prompt = """
 You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
@@ -249,12 +268,16 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
 
 항상 4~6문장 안에서, 모두 '요'로 끝나는 존댓말로 답변해 주세요.
 진단이나 약 관련 이야기는 절대 하지 말고, 자해/자살 언급이 나오면 고통을 인정하면서 전문가나 상담전화(예: 1393)를 조심스럽게 안내해 주세요."""
+
+        context_messages = [{"role": "assistant" if c["role"] == "assistant" else "user", "content": c["content"]} for c in recent_chats]
+
+        messages = [{"role": "system", "content": system_prompt}] + context_messages + [{"role": "user", "content": user_input}]
+
+        save_chat(USER_ID, "user", user_input)
+
         stream = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ],
+            messages=messages,
             temperature=0.7,
             max_tokens=700,
             stream=True,
@@ -273,13 +296,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
                 )
                 time.sleep(0.03)
 
-        db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": full_text.strip(),
-            "lang": language,
-            "created_at": datetime.utcnow().isoformat()
-        })
+        save_chat(USER_ID, "assistant", full_text.strip())
 
         return full_text.strip()
 
@@ -292,7 +309,6 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -310,7 +326,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.rerun()
+            st.experimental_rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -358,7 +374,17 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
+
+    # 대화 기록 최대 20개 불러오기 및 화면에 표시
+    chat_docs = db.collection("users").document(USER_ID).collection("chats") \
+                    .order_by("created_at").limit(20).stream()
+    for doc in chat_docs:
+        d = doc.to_dict()
+        if d["role"] == "user":
+            st.markdown(f"<div class='user-bubble'>{d['content']}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='bot-bubble'>{d['content']}</div>", unsafe_allow_html=True)
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
@@ -407,16 +433,14 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.rerun()
+        st.experimental_rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
