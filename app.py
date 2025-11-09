@@ -18,7 +18,7 @@ APP_VERSION = "v2.8"
 DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
 RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
-ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
+ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -128,6 +128,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
+        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
+        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
     }
 else:
     TEXT = {
@@ -147,6 +150,9 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
+        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
+        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
     }
 
 st.title(TEXT["title"])
@@ -273,6 +279,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
                 )
                 time.sleep(0.03)
 
+        # 대화 기록 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -315,20 +322,41 @@ def render_payment_and_feedback():
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
     st.markdown("---")
-    st.subheader(TEXT["feedback_title"])
-    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
+    col1, col2 = st.columns([3, 2])
 
-    if st.button("📩 Submit / 보내기"):
-        if not fb.strip():
-            st.warning(TEXT["feedback_empty"])
-        else:
-            db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                "uid": USER_ID,
-                "feedback": fb,
-                "lang": language,
-                "created_at": datetime.utcnow().isoformat()
-            })
-            st.success(TEXT["feedback_sent"])
+    with col1:
+        st.subheader(TEXT["feedback_title"])
+        fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
+
+        if st.button("📩 Submit / 보내기"):
+            if not fb.strip():
+                st.warning(TEXT["feedback_empty"])
+            else:
+                db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                    "uid": USER_ID,
+                    "feedback": fb,
+                    "lang": language,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                st.success(TEXT["feedback_sent"])
+
+    with col2:
+        admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
+
+        if admin_input:
+            if admin_input in ADMIN_KEYS:
+                if not st.session_state.get("admin_unlocked"):
+                    new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
+                    persist_user({
+                        "is_paid": True,
+                        "remaining_paid_uses": new_remaining
+                    })
+                    st.session_state["admin_unlocked"] = True
+                    st.success(TEXT["admin_success"])
+                else:
+                    st.info(TEXT["admin_already"])
+            else:
+                st.error(TEXT["admin_wrong"])
 
 # ================= Chat Main Page =================
 def render_chat_page():
@@ -418,5 +446,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
