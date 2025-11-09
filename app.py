@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (modified)
+# 💙 EOERWAY AI Therapy v2.8 (modified with admin add 50 uses)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -16,9 +16,9 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 # ================= Constants / Config =================
 APP_VERSION = "v2.8"
 DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
-BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
-ADMIN_KEYS = ["4321"]         # 관리자(본인) 인증용 비밀번호
+BASIC_LIMIT = 50               # 유료 결제 후 제공되는 상담 횟수
+RESET_INTERVAL_HOURS = 6       # 무료 상담 회복 주기
+ADMIN_KEYS = ["4321"]          # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -128,6 +128,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
+        "admin_success": "✅ Admin authenticated! 50 uses have been added.",
+        "admin_already": "Admin mode is already active.",
+        "admin_wrong": "❌ Incorrect admin password."
     }
 else:
     TEXT = {
@@ -147,6 +150,9 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
+        "admin_success": "✅ 관리자 인증 성공! 이용권 50회가 추가되었습니다.",
+        "admin_already": "이미 관리자 모드가 활성화되어 있습니다.",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다."
     }
 
 st.title(TEXT["title"])
@@ -223,6 +229,25 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
+# ================= 관리자 비밀번호 입력 및 50회 추가 기능 =================
+with st.sidebar.expander("🔑 관리자 모드 (비밀)"):
+    admin_input = st.text_input("관리자 비밀번호 입력", type="password", key="admin_pw")
+
+    if admin_input:
+        if admin_input in ADMIN_KEYS:
+            if not st.session_state.get("admin_unlocked"):
+                new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
+                persist_user({
+                    "is_paid": True,
+                    "remaining_paid_uses": new_remaining
+                })
+                st.session_state["admin_unlocked"] = True
+                st.success(TEXT["admin_success"])
+            else:
+                st.info(TEXT["admin_already"])
+        else:
+            st.error(TEXT["admin_wrong"])
+
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
@@ -292,7 +317,6 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -418,5 +442,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
