@@ -241,7 +241,7 @@ def render_payment_and_feedback():
     clicked = intent_doc.exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
-    st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
+       st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
 
     if clicked:
         st.info("💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다.")
@@ -257,7 +257,9 @@ def render_payment_and_feedback():
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
-    # 관리자 비밀번호 입력창 (결제 의사 버튼 바로 아래)
+    st.markdown("---")  # 선 먼저 넣고
+
+    # 그 아래에 관리자 비번 입력창 배치
     admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
 
     if admin_input:
@@ -275,7 +277,8 @@ def render_payment_and_feedback():
         else:
             st.error(TEXT["admin_wrong"])
 
-    st.markdown("---")
+    st.markdown("---")  # 피드백 구분 선
+
     st.subheader(TEXT["feedback_title"])
     fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
 
