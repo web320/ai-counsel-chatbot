@@ -18,7 +18,7 @@ APP_VERSION = "v2.8"
 DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
 BASIC_LIMIT = 50               # 유료 결제 후 제공되는 상담 횟수
 RESET_INTERVAL_HOURS = 6       # 무료 상담 회복 주기
-ADMIN_KEYS = ["4321"]          # 관리자(본인) 인증용 비밀번호
+ADMIN_KEYS = ["2356"]          # 관리자(본인) 인증용 비밀번호 (변경됨)
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -229,9 +229,36 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= 관리자 비밀번호 입력 및 50회 추가 기능 =================
-with st.sidebar.expander("🔑 관리자 모드 (비밀)"):
-    admin_input = st.text_input("관리자 비밀번호 입력", type="password", key="admin_pw")
+# ... (생략: 위 코드는 동일하니 그대로 두고, 아래 부분만 수정)
+
+# ================= Payment / Feedback Panel =================
+def render_payment_and_feedback():
+    st.markdown("---")
+    st.subheader(TEXT["payment_title"])
+
+    intent_ref = db.collection("purchase_intent").document(USER_ID)
+    intent_doc = intent_ref.get()
+    clicked = intent_doc.exists
+    total_intents = len(list(db.collection("purchase_intent").stream()))
+
+    st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
+
+    if clicked:
+        st.info("💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다.")
+    else:
+        if st.button("💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"):
+            intent_ref.set({
+                "uid": USER_ID,
+                "plan": "50회_3000원",
+                "created_at": datetime.utcnow().isoformat(),
+            })
+            st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
+            st.rerun()
+
+    st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
+
+    # 관리자 비밀번호 입력창 (결제 의사 버튼 바로 아래)
+    admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
 
     if admin_input:
         if admin_input in ADMIN_KEYS:
@@ -247,6 +274,22 @@ with st.sidebar.expander("🔑 관리자 모드 (비밀)"):
                 st.info(TEXT["admin_already"])
         else:
             st.error(TEXT["admin_wrong"])
+
+    st.markdown("---")
+    st.subheader(TEXT["feedback_title"])
+    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
+
+    if st.button("📩 Submit / 보내기"):
+        if not fb.strip():
+            st.warning(TEXT["feedback_empty"])
+        else:
+            db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                "uid": USER_ID,
+                "feedback": fb,
+                "lang": language,
+                "created_at": datetime.utcnow().isoformat()
+            })
+            st.success(TEXT["feedback_sent"])
 
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
@@ -311,48 +354,6 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
-
-# ================= Payment / Feedback Panel =================
-def render_payment_and_feedback():
-    st.markdown("---")
-    st.subheader(TEXT["payment_title"])
-
-    intent_ref = db.collection("purchase_intent").document(USER_ID)
-    intent_doc = intent_ref.get()
-    clicked = intent_doc.exists
-    total_intents = len(list(db.collection("purchase_intent").stream()))
-
-    st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
-
-    if clicked:
-        st.info("💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다.")
-    else:
-        if st.button("💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"):
-            intent_ref.set({
-                "uid": USER_ID,
-                "plan": "50회_3000원",
-                "created_at": datetime.utcnow().isoformat(),
-            })
-            st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.rerun()
-
-    st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
-
-    st.markdown("---")
-    st.subheader(TEXT["feedback_title"])
-    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-
-    if st.button("📩 Submit / 보내기"):
-        if not fb.strip():
-            st.warning(TEXT["feedback_empty"])
-        else:
-            db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                "uid": USER_ID,
-                "feedback": fb,
-                "lang": language,
-                "created_at": datetime.utcnow().isoformat()
-            })
-            st.success(TEXT["feedback_sent"])
 
 # ================= Chat Main Page =================
 def render_chat_page():
@@ -442,3 +443,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
