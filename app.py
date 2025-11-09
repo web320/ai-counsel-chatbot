@@ -182,6 +182,8 @@ AI: “그런 생각이 들면 정말 마음이 시릴 것 같아요.
 지금 이 순간만큼은 제가 당신 이야기를 듣고 있어요 💙”
 """
 
+# ... (이전 코드 그대로 유지)
+
 # ================= AI 응답 생성 함수 =================
 def stream_reply(user_input: str):
     try:
@@ -204,19 +206,27 @@ def stream_reply(user_input: str):
                 placeholder.markdown(f"<div class='bot-bubble'>{full_text}</div>", unsafe_allow_html=True)
                 time.sleep(0.03)
 
-        # Firestore에 대화 저장
+        # Firestore에 대화 저장 (created_at을 datetime 객체로 저장)
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
             "reply": full_text.strip(),
             "lang": language,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow()
         })
 
         return full_text.strip()
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
+
+# ================= 메인 채팅 입력 =================
+user_input = st.chat_input(TEXT["input"])
+if user_input:
+    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
+    reply = stream_reply(user_input)
+    if reply:
+        st.markdown(f"<div class='bot-bubble'>{reply}</div>", unsafe_allow_html=True)
 
 # ================= 대화 기록 불러오기 및 출력 =================
 def render_chat_history():
@@ -259,8 +269,3 @@ if st.sidebar.button(TEXT["refresh"]):
 
 render_chat_history()
 
-# ================= 메인 채팅 입력 =================
-user_input = st.chat_input(TEXT["input"])
-if user_input:
-    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
-    stream_reply(user_input)
