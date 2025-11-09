@@ -13,7 +13,7 @@ if language == "English 🇺🇸":
     st.markdown(
         f"""
         The system is currently undergoing maintenance.  
-        Please come back after approximately 2 hours, at **{unlock_str}**.  
+        Please come back after approximately 4 hours, at **{unlock_str}**.  
 
         We apologize for the inconvenience.  
         We'll be back soon with a better experience 💙
@@ -25,7 +25,7 @@ else:
     st.markdown(
         f"""
         현재 시스템 점검 중입니다.  
-        약 2시간 후인 **{unlock_str}** 에 다시 찾아와 주세요.  
+        약 4시간 후인 **{unlock_str}** 에 다시 찾아와 주세요.  
 
         불편을 드려 정말 죄송합니다.  
         곧 더 좋은 모습으로 찾아뵐게요 💙
