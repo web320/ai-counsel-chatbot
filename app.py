@@ -46,7 +46,7 @@ db = firestore.client()
 
 # ================= Query Params / UID =================
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.experimental_set_query_params(uid=uid)
+st.query_params = {"uid": uid}
 USER_ID = uid
 
 # ================= Visitor Counter (유저당 1회만 카운트) =================
@@ -223,28 +223,9 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= 사용자별 대화 저장 함수 =================
-def save_chat(user_id, role, content):
-    db.collection("users").document(user_id).collection("chats").add({
-        "role": role,
-        "content": content,
-        "created_at": datetime.utcnow().isoformat()
-    })
-
-# ================= 조용한 기억용 최근 대화 불러오기 =================
-def get_recent_chats(user_id, limit=5):
-    chats_ref = db.collection("users").document(user_id).collection("chats") \
-                    .order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
-    docs = chats_ref.stream()
-    chats = [doc.to_dict() for doc in docs]
-    chats.reverse()
-    return chats
-
-# ================= AI Response Function (조용한 기억 포함) =================
+# ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
-        recent_chats = get_recent_chats(USER_ID)
-
         if language == "English 🇺🇸":
             system_prompt = """
 You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
@@ -258,32 +239,22 @@ You're talking to someone who came here because they're hurting. Not as a "thera
 Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
         else:
             system_prompt = """
-상처받고 힘들어서 여기 온 사람이에요. '전문가' 말투 말고, 진심으로 걱정하는 마음이 따뜻한 상담사처럼 대화해주세요.
+상처받고 힘들어서 여기 온 사람이에요. '전문가' 말투 말고, 진심으로 걱정하는 친구처럼 이야기해 주세요.
 
-1. 먼저 아주 부드럽게 공감해 주세요.
+1. 먼저 아주 부드럽게 공감해 주세요. (와줘서 고맙다고 말해주기)
 2. 그 사람이 느끼는 감정을 구체적으로 짚어 주세요. ("완전히 지쳐버린 느낌이겠어요"처럼)
 3. 이런 감정을 느끼는 게 당연하다고 말해 주세요.
-4. 가능하다면 지금 바로 할 수 있는 아주 작은 행동 한 가지만 제안해 주세요. (예: 깊게 숨 3번 쉬기 예시일뿐 남발하지 마세요)
+4. 가능하다면 지금 바로 할 수 있는 아주 작은 행동 한 가지만 제안해 주세요. (예: 깊게 숨 3번 쉬기)
 5. 마지막은 "혼자가 아니다"는 느낌이 나도록 따뜻하게 마무리해 주세요.
 
-평균 5문장이상 필요시 더 길게 답변 부탁해, 모두 '요'로 끝나는 존댓말로 답변해 주세요.
-진단이나 약 관련 이야기는 절대 하지 말고, 자해/자살 언급이 나오면 고통을 인정하면서 전문가나 상담전화(예: 1393)를 조심스럽게 안내해 주세요.
-예시 1) 사용자:안녕 , 답변: 안녕하세요 반가워요 요즘 어떠신가요?? 제가 도와드릴 수 있으면 좋겠어요
-예시 2) 사용자 : 우울해, 답변: 많이 우울하시군요 혹시 무엇때문에 우울한지 알 수 있을까요??, 만약 사용자가 돈때문에 우울하다 라고 하면 이걸 개발한 개발자도 돈때문에 많이 우울
-했지만 그런 막막하고 답답한 시간도 결국 돈을 벌기위한 토양분이 되었다고 말해주고 싶다네요 그리고 돈버는 비법은 스마트폰에 있는 사진 어도비 스톡에 제출하기 네이버 블로그 작성해서 거기에 쿠팡파트너스 링크 달기 등이 있답니다 
-시간이 조금은 걸릴 수 있지만 투자한 만큼 수익도 나올 수 있으니 도전해보시는 게 좋을 것 같아요 만약 투자나 사업을 하신다면 처음엔 초보자이시니 실력을 쌓아간다는 접근 법으로 향해가면 좋을 것 같아요
-
-"""
-
-        context_messages = [{"role": "assistant" if c["role"] == "assistant" else "user", "content": c["content"]} for c in recent_chats]
-
-        messages = [{"role": "system", "content": system_prompt}] + context_messages + [{"role": "user", "content": user_input}]
-
-        save_chat(USER_ID, "user", user_input)
-
+항상 4~6문장 안에서, 모두 '요'로 끝나는 존댓말로 답변해 주세요.
+진단이나 약 관련 이야기는 절대 하지 말고, 자해/자살 언급이 나오면 고통을 인정하면서 전문가나 상담전화(예: 1393)를 조심스럽게 안내해 주세요."""
         stream = client.chat.completions.create(
             model="gpt-4o",
-            messages=messages,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
             temperature=0.7,
             max_tokens=700,
             stream=True,
@@ -302,7 +273,13 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
                 )
                 time.sleep(0.03)
 
-        save_chat(USER_ID, "assistant", full_text.strip())
+        db.collection("chats").add({
+            "uid": USER_ID,
+            "input": user_input,
+            "reply": full_text.strip(),
+            "lang": language,
+            "created_at": datetime.utcnow().isoformat()
+        })
 
         return full_text.strip()
 
@@ -315,6 +292,7 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
+    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -332,7 +310,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.experimental_rerun()
+            st.rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -380,17 +358,7 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.experimental_rerun()
-
-    # 대화 기록 최대 20개 불러오기 및 화면에 표시
-    chat_docs = db.collection("users").document(USER_ID).collection("chats") \
-                    .order_by("created_at").limit(20).stream()
-    for doc in chat_docs:
-        d = doc.to_dict()
-        if d["role"] == "user":
-            st.markdown(f"<div class='user-bubble'>{d['content']}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='bot-bubble'>{d['content']}</div>", unsafe_allow_html=True)
+        st.rerun()
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
@@ -439,14 +407,16 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.experimental_rerun()
+        st.rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.experimental_rerun()
+        st.rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
+
