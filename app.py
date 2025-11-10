@@ -1,8 +1,8 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 with Chat History
+# 💙 EOERWAY AI Therapy v2.8 (modified)
 # ==========================================
 
-import os, uuid, json, time
+import os, uuid, json, time, random
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -18,7 +18,7 @@ APP_VERSION = "v2.8"
 DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
 RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
-ADMIN_KEYS = ["2356"]         # 관리자 인증 비밀번호
+ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -49,23 +49,28 @@ uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= Visitor Counter =================
+# ================= Visitor Counter (유저당 1회만 카운트) =================
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
+
     if user_visit_ref.get().exists:
         return
+
     user_visit_ref.set({
         "uid": USER_ID,
         "first_visit": datetime.utcnow().isoformat(),
         "day": today,
     })
+
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
+
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
+
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -75,6 +80,7 @@ def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_doc = db.collection("stats").document("total").get()
     daily_doc = db.collection("stats").document(today).get()
+
     total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
@@ -96,6 +102,7 @@ with col2:
         label_visibility="collapsed",
         index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
     )
+
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
@@ -118,9 +125,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode enabled, 50 free uses added!",
-        "admin_already": "✅ Admin already unlocked.",
-        "admin_wrong": "❌ Wrong admin password.",
+        "admin_success": "🔓 Admin mode activated! 50 free uses added.",
+        "admin_already": "✅ Admin mode already active.",
+        "admin_wrong": "❌ Incorrect admin password.",
     }
 else:
     TEXT = {
@@ -219,10 +226,6 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Initialize chat history =================
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
-
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
@@ -280,14 +283,28 @@ AI 심리상담 챗봇 역할 지침
             stream=True,
         )
 
+        if "chat_history" not in st.session_state:
+            st.session_state["chat_history"] = []
+
         full_text = ""
+        placeholder = st.empty()
+
         for chunk in stream:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
-                # 실시간 출력은 st.chat_message 쪽에서 처리해서 여기서는 그냥 모아서 리턴
+                # 실시간 스트림 출력
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    unsafe_allow_html=True,
+                )
+                time.sleep(0.03)
 
-        # Firestore 채팅 기록 저장
+        # 대화 기록에 저장 (유저입력, AI답변)
+        st.session_state["chat_history"].append(("user", user_input))
+        st.session_state["chat_history"].append(("bot", full_text.strip()))
+
+        # Firestore에 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -367,6 +384,12 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
+    # 대화 기록이 있다면 미리 보여주기
+    if "chat_history" in st.session_state:
+        for speaker, message in st.session_state["chat_history"]:
+            css_class = "user-bubble" if speaker == "user" else "bot-bubble"
+            st.markdown(f"<div class='{css_class}'>{message}</div>", unsafe_allow_html=True)
+
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
         plan = TEXT["paid"]
@@ -395,38 +418,19 @@ def render_chat_page():
         st.session_state["show_payment"] = True
         st.experimental_rerun()
 
-    # --- 대화 내역 화면에 출력 ---
-    for chat in st.session_state["chat_history"]:
-        if chat["role"] == "user":
-            with st.chat_message("user"):
-                st.markdown(chat["content"])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(chat["content"])
-
-    # --- 새 입력 받기 ---
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # --- 유저 메시지 기록 추가 ---
-    st.session_state["chat_history"].append({"role": "user", "content": user_input})
+    # 유저 메시지 즉시 표시
+    st.markdown(
+        f"<div class='user-bubble'>{user_input}</div>",
+        unsafe_allow_html=True
+    )
 
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    reply = stream_reply(user_input)
 
-    # --- AI 답변 생성 ---
-    with st.chat_message("assistant"):
-        reply = stream_reply(user_input)
-        if reply:
-            st.markdown(reply)
-        else:
-            st.markdown(TEXT["reply_error"])
-
-    # --- AI 메시지 기록 추가 ---
     if reply:
-        st.session_state["chat_history"].append({"role": "assistant", "content": reply})
-
         if st.session_state.get("is_paid"):
             persist_user({
                 "remaining_paid_uses": max(
@@ -437,38 +441,17 @@ def render_chat_page():
         else:
             persist_user({"usage_count": usage + 1})
 
-    st.experimental_rerun()
-
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
 total_visits, daily_visits = get_visit_counts()
-st.sidebar.markdown(
-    f"""
+
+# 방문자 수 문구 - 언어에 맞게 띄우기
+if language == "English 🇺🇸":
+    visit_text = f"""
     <div style="
         margin-top: 12px;
         margin-bottom: 16px;
         padding: 8px 10px;
         border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        🌍 <b>Total {total_visits}</b> visitors<br>
-        📅 <b>Today {daily_visits}</b> visitors
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-if st.session_state.get("show_payment"):
-    st.sidebar.header(TEXT["payment_title"])
-    render_payment_and_feedback()
-else:
-    st.sidebar.button(TEXT["chat_button"], on_click=lambda: st.session_state.update({"show_payment": True}))
-
-# ================= Main =================
-if st.session_state.get("show_payment"):
-    render_payment_and_feedback()
-else:
-    render_chat_page()
+        background
