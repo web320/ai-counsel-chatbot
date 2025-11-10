@@ -441,12 +441,13 @@ def render_chat_page():
         else:
             persist_user({"usage_count": usage + 1})
 
+# ... (중략) ...
+
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
 total_visits, daily_visits = get_visit_counts()
 
-# 방문자 수 문구 - 언어에 맞게 띄우기
 if language == "English 🇺🇸":
     visit_text = f"""
     <div style="
@@ -480,14 +481,28 @@ else:
 
 st.sidebar.markdown(visit_text, unsafe_allow_html=True)
 
-if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
-        st.session_state["show_payment"] = False
-        st.experimental_rerun()
+
+# 버튼 클릭 시 상태 변경 및 안전한 rerun 처리
+def to_chat():
+    st.session_state["show_payment"] = False
+
+def to_payment():
+    st.session_state["show_payment"] = True
+
+
+if st.session_state.get("show_payment", False):
+    if st.sidebar.button(TEXT["chat_return"], on_click=to_chat):
+        # rerun은 on_click 함수가 호출 후 자동 실행됨 (안정적)
+        pass
 else:
-    if st.sidebar.button(TEXT["chat_button"]):
-        st.session_state["show_payment"] = True
-        st.experimental_rerun()
+    if st.sidebar.button(TEXT["chat_button"], on_click=to_payment):
+        pass
+
+# ================= Main Render =================
+if st.session_state.get("show_payment", False):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
