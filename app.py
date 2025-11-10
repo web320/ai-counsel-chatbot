@@ -135,9 +135,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
-        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
-        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
+        "admin_success": "🔓 Admin mode activated: 50 free uses added!",
+        "admin_already": "✅ Admin already unlocked.",
+        "admin_wrong": "❌ Wrong admin password.",
     }
 else:
     TEXT = {
@@ -461,5 +461,8 @@ st.sidebar.markdown(
 
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
-        st.session_state["show_payment"] =
-
+        st.session_state["show_payment"] = False
+        safe_rerun()
+    render_payment_and_feedback()
+else:
+    render_chat_page()
