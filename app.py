@@ -180,10 +180,7 @@ html, body, [class*="css"] { font-size: 18px; }
   margin:8px 0;
   display:inline-block;
   box-shadow:0 0 10px rgba(255,0,0,0.3);
-  max-width: 70%;
   word-wrap: break-word;
-  float: right;
-  clear: both;
 }
 
 .bot-bubble {
@@ -200,9 +197,6 @@ html, body, [class*="css"] { font-size: 18px; }
   animation:neon 1.6s ease-in-out infinite alternate;
   word-break:break-word;
   white-space:pre-wrap;
-  max-width: 85%;
-  float: left;
-  clear: both;
 }
 
 @keyframes neon {
@@ -457,17 +451,10 @@ def render_chat_page():
         left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
         plan = TEXT["free"]
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown(
-            f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
-            unsafe_allow_html=True
-        )
-    with col2:
-        if st.button(TEXT["clear_history"]):
-            clear_chat_history()
-            st.success(TEXT["history_cleared"])
-            st.rerun()
+    st.markdown(
+        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
+        unsafe_allow_html=True
+    )
 
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
@@ -486,21 +473,17 @@ def render_chat_page():
         st.rerun()
 
     # 채팅 기록 표시
-    st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
-    
     for msg in st.session_state.get("chat_history", []):
         if msg["role"] == "user":
             st.markdown(
-                f"<div class='message-row'><div class='user-bubble'>{msg['content']}</div></div>",
+                f"<div class='user-bubble'>{msg['content']}</div>",
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                f"<div class='message-row'><div class='bot-bubble'>{msg['content']}</div></div>",
+                f"<div class='bot-bubble'>{msg['content']}</div>",
                 unsafe_allow_html=True
             )
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # 사용자 입력
     user_input = st.chat_input(TEXT["input"])
