@@ -52,7 +52,7 @@ db = firestore.client()
 
 # ================= Query Params / UID =================
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.experimental_set_query_params(uid=uid)
+st.query_params = {"uid": uid}
 USER_ID = uid
 
 # ================= Visitor Counter =================
@@ -374,6 +374,7 @@ def render_payment_and_feedback():
             get_intent_count.clear()
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
             st.experimental_rerun()
+            return
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -445,6 +446,7 @@ def render_chat_page():
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
         st.experimental_rerun()
+        return  # 꼭 return 해 주세요!
 
     # 기존 대화 표시 (네온 효과 + 이모지 적용)
     for msg in st.session_state.messages:
@@ -470,58 +472,31 @@ def render_chat_page():
         st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.utcnow().isoformat()})
         save_message("user", prompt)
 
-        # AI 응답 스트리밍 (네온 효과 + 💫)
-        placeholder = st.empty()
-        response = ""
-        
+        # AI 응답 스트리밍 표시
+        assistant_response = ""
+        message_placeholder = st.empty()
+
         for chunk in get_ai_response(prompt):
-            response += chunk
-            placeholder.markdown(
-                f"<div class='bot-bubble'>{response} 💫</div>",
+            assistant_response += chunk
+            message_placeholder.markdown(
+                f"<div class='bot-bubble'>{assistant_response} 💫</div>",
                 unsafe_allow_html=True
             )
         
-        st.session_state.messages.append({"role": "assistant", "content": response, "timestamp": datetime.utcnow().isoformat()})
-        save_message("assistant", response)
-        
-        # 사용 횟수 증가 (원자적)
+        st.session_state.messages.append({"role": "assistant", "content": assistant_response, "timestamp": datetime.utcnow().isoformat()})
+        save_message("assistant", assistant_response)
+
         increment_usage()
-        st.experimental_rerun()
 
-# ================= Sidebar =================
-st.sidebar.header("📜 History / 대화 기록")
+    # 결제 및 피드백 패널 토글
+    if st.session_state.get("show_payment"):
+        render_payment_and_feedback()
+    else:
+        if st.button(TEXT["chat_button"]):
+            st.session_state["show_payment"] = True
+            st.experimental_rerun()
+            return  # 꼭 return 해 주세요!
 
-total_visits, daily_visits = get_visit_counts()
-st.sidebar.markdown(
-    f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        🌍 <b>Total {total_visits:,}명</b><br>
-        ☀️ <b>Today {daily_visits:,}명</b>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
-        st.session_state["show_payment"] = False
-        st.experimental_rerun()
-else:
-    if st.sidebar.button(TEXT["chat_button"]):
-        st.session_state["show_payment"] = True
-        st.experimental_rerun()
-
-# ================= Main Render =================
-if st.session_state.get("show_payment"):
-    render_payment_and_feedback()
-else:
+# ================= Main =================
+if __name__ == "__main__":
     render_chat_page()
-
