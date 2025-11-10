@@ -52,7 +52,7 @@ db = firestore.client()
 
 # ================= Query Params / UID =================
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.query_params = {"uid": uid}
+st.experimental_set_query_params(uid=uid)
 USER_ID = uid
 
 # ================= Visitor Counter =================
@@ -373,7 +373,7 @@ def render_payment_and_feedback():
             })
             get_intent_count.clear()
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.rerun()
+            st.experimental_rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -444,7 +444,7 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
     # 기존 대화 표시 (네온 효과 + 이모지 적용)
     for msg in st.session_state.messages:
@@ -486,7 +486,7 @@ def render_chat_page():
         
         # 사용 횟수 증가 (원자적)
         increment_usage()
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -513,14 +513,15 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.rerun()
+        st.experimental_rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
