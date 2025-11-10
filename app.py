@@ -112,7 +112,6 @@ with col2:
 
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
-
 # ================= Text by Language =================
 if language == "English 🇺🇸":
     TEXT = {
@@ -252,7 +251,6 @@ def save_message(role: str, content: str):
     
     # 캐시 무효화
     load_recent_messages.clear()
-
 # ================= Initialize Chat History =================
 if "messages" not in st.session_state:
     st.session_state.messages = load_recent_messages(USER_ID)
@@ -476,3 +474,51 @@ def render_chat_page():
         
         for chunk in get_ai_response(prompt):
             response += chunk
+            placeholder.markdown(
+                f"<div class='bot-bubble'>{response} 💫</div>",
+                unsafe_allow_html=True
+            )
+        
+        st.session_state.messages.append({"role": "assistant", "content": response, "timestamp": datetime.utcnow().isoformat()})
+        save_message("assistant", response)
+        
+        # 사용 횟수 증가 (원자적)
+        increment_usage()
+        st.experimental_rerun()
+
+# ================= Sidebar =================
+st.sidebar.header("📜 History / 대화 기록")
+
+total_visits, daily_visits = get_visit_counts()
+st.sidebar.markdown(
+    f"""
+    <div style="
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.experimental_rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.experimental_rerun()
+
+# ================= Main Render =================
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
