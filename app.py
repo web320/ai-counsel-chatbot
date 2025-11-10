@@ -454,4 +454,43 @@ if language == "English 🇺🇸":
         margin-bottom: 16px;
         padding: 8px 10px;
         border-radius: 10px;
-        background
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,} users</b><br>
+        ☀️ <b>Today {daily_visits:,} users</b>
+    </div>
+    """
+else:
+    visit_text = f"""
+    <div style="
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>총 {total_visits:,}명</b><br>
+        ☀️ <b>오늘 {daily_visits:,}명</b>
+    </div>
+    """
+
+st.sidebar.markdown(visit_text, unsafe_allow_html=True)
+
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.experimental_rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.experimental_rerun()
+
+# ================= Main Render =================
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
