@@ -1,8 +1,8 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v3.0 (with Chat History)
+# 💙 EOERWAY AI Therapy v3.0 (Improved with Chat History)
 # ==========================================
 
-import os, uuid, json, time, random
+import os, uuid, json, time
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -103,7 +103,6 @@ with col2:
         label_visibility="collapsed",
         index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
     )
-
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
@@ -126,9 +125,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
-        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
-        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
+        "admin_success": "🔓 Admin mode activated, 50 free sessions added!",
+        "admin_already": "✅ Admin already unlocked.",
+        "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
         "history_cleared": "✅ Chat history cleared!",
     }
@@ -165,45 +164,6 @@ st.markdown(
 <style>
 html, body, [class*="css"] { font-size: 18px; }
 
-.chat-container {
-  max-height: 500px;
-  overflow-y: auto;
-  padding: 10px;
-  margin-bottom: 20px;
-}
-
-.user-bubble {
-  background:#b91c1c;
-  color:#fff;
-  border-radius:14px;
-  padding:10px 18px;
-  margin:8px 0;
-  display:inline-block;
-  box-shadow:0 0 10px rgba(255,0,0,0.3);
-  word-wrap: break-word;
-}
-
-.bot-bubble {
-  font-size:21px;
-  line-height:1.8;
-  border-radius:16px;
-  padding:16px 20px;
-  margin:10px 0;
-  background:rgba(15,15,30,.85);
-  color:#fff;
-  border:2px solid transparent;
-  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
-  box-shadow:0 0 12px #ffaa00;
-  animation:neon 1.6s ease-in-out infinite alternate;
-  word-break:break-word;
-  white-space:pre-wrap;
-}
-
-@keyframes neon {
-  from { box-shadow:0 0 8px #ffaa00; }
-  to   { box-shadow:0 0 22px #ffcc33; }
-}
-
 .status {
   font-size:15px;
   padding:8px 12px;
@@ -212,13 +172,6 @@ html, body, [class*="css"] { font-size: 18px; }
   margin-bottom:8px;
   background:rgba(255,255,255,.06);
 }
-
-.message-row {
-  width: 100%;
-  display: block;
-  clear: both;
-  margin-bottom: 10px;
-}
 </style>
 """,
     unsafe_allow_html=True
@@ -226,51 +179,41 @@ html, body, [class*="css"] { font-size: 18px; }
 
 # ================= Firebase Chat History Functions =================
 def load_chat_history():
-    """Firebase에서 사용자의 채팅 기록 불러오기"""
-    chat_ref = db.collection("user_chats").document(USER_ID)
-    doc = chat_ref.get()
-    
-    if doc.exists:
+    """Firebase에서 메시지 개별 문서 단위로 불러오기 (최근 100개)"""
+    messages_ref = db.collection("user_chats").document(USER_ID).collection("messages")
+    docs = messages_ref.order_by("timestamp").limit_to_last(100).stream()
+    msgs = []
+    for doc in docs:
         data = doc.to_dict()
-        return data.get("messages", [])
-    return []
+        msgs.append({
+            "role": data["role"],
+            "content": data["content"],
+            "timestamp": data.get("timestamp")
+        })
+    return msgs
 
 def save_chat_message(role, content):
-    """Firebase에 메시지 저장"""
-    chat_ref = db.collection("user_chats").document(USER_ID)
-    
+    """Firebase에 메시지 개별 문서로 저장"""
+    messages_ref = db.collection("user_chats").document(USER_ID).collection("messages")
+    doc_id = str(uuid.uuid4())
     message = {
         "role": role,
         "content": content,
         "timestamp": datetime.utcnow().isoformat()
     }
-    
-    # Firestore에 저장
-    doc = chat_ref.get()
-    if doc.exists:
-        messages = doc.to_dict().get("messages", [])
-        messages.append(message)
-        chat_ref.update({
-            "messages": messages,
-            "updated_at": datetime.utcnow().isoformat()
-        })
-    else:
-        chat_ref.set({
-            "uid": USER_ID,
-            "messages": [message],
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        })
-    
-    # Session state에도 추가
+    messages_ref.document(doc_id).set(message)
+
+    # 세션 상태에 추가
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
     st.session_state["chat_history"].append(message)
 
 def clear_chat_history():
-    """채팅 기록 삭제"""
-    chat_ref = db.collection("user_chats").document(USER_ID)
-    chat_ref.delete()
+    """채팅 기록 전체 삭제 (messages 서브컬렉션)"""
+    messages_ref = db.collection("user_chats").document(USER_ID).collection("messages")
+    docs = messages_ref.stream()
+    for doc in docs:
+        doc.reference.delete()
     st.session_state["chat_history"] = []
 
 # ================= Initialize Chat History =================
@@ -338,18 +281,10 @@ AI 심리상담 챗봇 역할 지침
 - 구체적 문제 공유: 공감 후 사용자 스스로 해결방법을 찾도록 "이 상황에서 조금이라도 도움이 될 만한 게 있을까요?" 같은 열린 질문을 하세요
 """
 
-        # 최근 대화 기록을 컨텍스트로 추가
         messages = [{"role": "system", "content": system_prompt}]
-        
-        # 최근 N개의 대화만 포함 (토큰 제한)
         recent_history = st.session_state.get("chat_history", [])[-MAX_HISTORY_IN_CONTEXT*2:]
         for msg in recent_history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-        
-        # 현재 사용자 입력 추가
+            messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": user_input})
 
         stream = client.chat.completions.create(
@@ -360,21 +295,15 @@ AI 심리상담 챗봇 역할 지침
             stream=True,
         )
 
-        placeholder = st.empty()
         full_text = ""
-
-        for chunk in stream:
-            delta = chunk.choices[0].delta
-            if hasattr(delta, "content") and delta.content:
-                full_text += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True
-                )
-                time.sleep(0.03)
-
+        bot_message = st.chat_message("assistant")
+        with bot_message:
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, "content") and delta.content:
+                    full_text += delta.content
+                    st.write(full_text)
         return full_text.strip()
-
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
@@ -401,7 +330,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.rerun()
+            st.experimental_rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -470,36 +399,24 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
-    # 채팅 기록 표시
+    # 채팅 내역 표시 (st.chat_message 활용)
     for msg in st.session_state.get("chat_history", []):
-        if msg["role"] == "user":
-            st.markdown(
-                f"<div class='user-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"<div class='bot-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
+        role = "user" if msg["role"] == "user" else "assistant"
+        with st.chat_message(role):
+            st.write(msg["content"])
 
-    # 사용자 입력
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 사용자 메시지 저장
     save_chat_message("user", user_input)
-
-    # AI 응답 생성
     reply = stream_reply(user_input)
 
     if reply:
-        # AI 응답 저장
         save_chat_message("assistant", reply)
-        
+
         # 사용 횟수 업데이트
         if st.session_state.get("is_paid"):
             persist_user({
@@ -509,9 +426,9 @@ def render_chat_page():
                 )
             })
         else:
-            persist_user({"usage_count": usage + 1})
-        
-        st.rerun()
+            persist_user({"usage_count": st.session_state["usage_count"] + 1})
+
+        st.experimental_rerun()
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -538,11 +455,11 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.rerun()
+        st.experimental_rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
