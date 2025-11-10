@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (modified with safe rerun)
+# 💙 EOERWAY AI Therapy v2.8 (modified)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -20,15 +20,8 @@ BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
 RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
 ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
 
-# ================= Safe rerun 함수 =================
-def safe_rerun():
-    try:
-        st.experimental_rerun()
-    except Exception:
-        pass
-
 # ================= ads.txt (for AdSense) =================
-if "ads.txt" in st.experimental_get_query_params():
+if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
@@ -52,8 +45,8 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Query Params / UID =================
-uid = st.experimental_get_query_params().get("uid", [str(uuid.uuid4())])[0]
-st.experimental_set_query_params(uid=uid)
+uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
+st.query_params = {"uid": uid}
 USER_ID = uid
 
 # ================= Visitor Counter (유저당 1회만 카운트) =================
@@ -135,9 +128,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode activated: 50 free uses added!",
-        "admin_already": "✅ Admin already unlocked.",
-        "admin_wrong": "❌ Wrong admin password.",
+        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
+        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
     }
 else:
     TEXT = {
@@ -344,7 +337,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            safe_rerun()
+            st.rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -413,7 +406,7 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        safe_rerun()
+        st.rerun()
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
@@ -462,7 +455,15 @@ st.sidebar.markdown(
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        safe_rerun()
+        st.rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
+
+# ================= Main Render =================
+if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
