@@ -2,7 +2,9 @@
 # 💙 EOERWAY AI Therapy v3.1 - Neon Style Chat UI 최종버전
 # ==========================================
 
-import os, uuid, json, time
+import os
+import uuid
+import json
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -16,13 +18,12 @@ st.set_page_config(page_title="💙 AI Therapy Neon", layout="wide")
 # ================= Constants / Config =================
 APP_VERSION = "v3.1"
 DAILY_FREE_LIMIT = 15
-BASIC_LIMIT = 50
 RESET_INTERVAL_HOURS = 6
 ADMIN_KEYS = ["2356"]
 MAX_HISTORY_IN_CONTEXT = 5  # AI에게 전달할 최근 대화 개수
 
 # ================= ads.txt (for AdSense) =================
-if "ads.txt" in st.query_params:
+if "ads.txt" in st.experimental_get_query_params():
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
     st.stop()
 
@@ -46,8 +47,8 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Query Params / UID =================
-uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.query_params = {"uid": uid}
+uid = st.experimental_get_query_params().get("uid", [str(uuid.uuid4())])[0]
+st.experimental_set_query_params(uid=uid)
 USER_ID = uid
 
 # ================= Visitor Counter =================
@@ -72,14 +73,6 @@ def update_visit_stats():
     else:
         daily_ref.set({"count": 1})
 
-def get_visit_counts():
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    total_doc = db.collection("stats").document("total").get()
-    daily_doc = db.collection("stats").document(today).get()
-    total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
-    daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
-    return total, daily
-
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
@@ -91,7 +84,7 @@ if "lang" not in st.session_state:
 col1, col2 = st.columns([5, 1])
 with col2:
     lang_choice = st.radio(
-        " ",
+        "",
         ["English 🇺🇸", "한국어 🇰🇷"],
         horizontal=True,
         label_visibility="collapsed",
@@ -104,8 +97,6 @@ language = st.session_state["lang"]
 if language == "English 🇺🇸":
     TEXT = {
         "title": "❤️ A Warm AI Friend You Can Lean On",
-        "free": "🌱 Free Trial",
-        "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
         "warn": "Please enter something 💬",
         "usedup": "🌙 You've used all 15 free sessions today!",
@@ -116,9 +107,7 @@ if language == "English 🇺🇸":
         "feedback_empty": "Please write something 💬",
         "payment_title": "💳 Payment Guide",
         "feedback_title": "💌 Service Feedback",
-        "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
-        "status_left": "remaining",
         "admin_success": "🔓 Admin mode activated, 50 free sessions added!",
         "admin_already": "✅ Admin already unlocked.",
         "admin_wrong": "❌ Wrong admin password.",
@@ -128,8 +117,6 @@ if language == "English 🇺🇸":
 else:
     TEXT = {
         "title": "❤️ 마음을 기댈 수 있는 따뜻한 AI 친구",
-        "free": "🌱 무료 체험중",
-        "paid": "💎 유료 이용중",
         "input": "지금 어떤 기분이예요?",
         "warn": "내용을 입력해주세요 💬",
         "usedup": "🌙 오늘의 무료 상담 15회를 모두 사용했어요!",
@@ -140,9 +127,7 @@ else:
         "feedback_empty": "내용을 입력해주세요 💬",
         "payment_title": "💳 결제 안내",
         "feedback_title": "💌 서비스 피드백",
-        "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
-        "status_left": "남은",
         "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
         "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
         "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
@@ -153,8 +138,7 @@ else:
 st.title(TEXT["title"])
 
 # ================= CSS - 네온 스타일 적용 =================
-st.markdown(
-    """
+st.markdown("""
 <style>
 html, body, [class*="css"] { font-size: 18px; background-color: #111; color: #fff; }
 
@@ -255,27 +239,19 @@ html, body, [class*="css"] { font-size: 18px; background-color: #111; color: #ff
   border-radius: 8px;
 }
 </style>
-""",
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
 # ================= Firebase Chat History Functions =================
 def load_chat_history():
-    """Firebase에서 메시지 개별 문서 단위로 불러오기 (최근 100개)"""
     messages_ref = db.collection("user_chats").document(USER_ID).collection("messages")
     docs = messages_ref.order_by("timestamp").limit_to_last(100).stream()
     msgs = []
     for doc in docs:
         data = doc.to_dict()
-        msgs.append({
-            "role": data["role"],
-            "content": data["content"],
-            "timestamp": data.get("timestamp")
-        })
+        msgs.append({"role": data["role"], "content": data["content"], "timestamp": data.get("timestamp")})
     return msgs
 
 def save_chat_message(role, content):
-    """Firebase에 메시지 개별 문서로 저장"""
     messages_ref = db.collection("user_chats").document(USER_ID).collection("messages")
     doc_id = str(uuid.uuid4())
     message = {
@@ -289,7 +265,6 @@ def save_chat_message(role, content):
     st.session_state["chat_history"].append(message)
 
 def clear_chat_history():
-    """채팅 기록 전체 삭제 (messages 서브컬렉션)"""
     messages_ref = db.collection("user_chats").document(USER_ID).collection("messages")
     docs = messages_ref.stream()
     for doc in docs:
@@ -313,31 +288,20 @@ snap = user_ref.get()
 
 if snap.exists:
     data = snap.to_dict() or {}
-    st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
+    for k, v in defaults.items():
+        st.session_state[k] = data.get(k, v)
 else:
     user_ref.set(defaults)
-    st.session_state.update(defaults)
+    for k, v in defaults.items():
+        st.session_state[k] = v
 
-# ================= User Data Persistence with Atomic Increment =================
+# ================= User Data Persistence =================
 def persist_user(fields: dict):
-    def update_transaction(transaction, ref, new_fields):
-        snapshot = ref.get(transaction=transaction)
-        data = snapshot.to_dict() or {}
-        updated = {}
-        for k, v in new_fields.items():
-            if isinstance(v, int) and k in ["usage_count", "remaining_paid_uses"]:
-                updated[k] = data.get(k, 0) + v
-            else:
-                updated[k] = v
-        transaction.update(ref, updated)
+    user_ref.set(fields, merge=True)
+    for k, v in fields.items():
+        st.session_state[k] = v
 
-    try:
-        db.run_transaction(lambda transaction: update_transaction(transaction, user_ref, fields))
-        st.session_state.update(fields)
-    except Exception as e:
-        st.error(f"User data update failed: {e}")
-
-# ================= AI Response Function with Context =================
+# ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
@@ -403,7 +367,7 @@ AI 심리상담 챗봇 역할 지침
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-# ================= Payment / Feedback Panel =================
+# ================= Payment & Feedback =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
@@ -456,4 +420,45 @@ def render_payment_and_feedback():
                 if not st.session_state.get("admin_unlocked"):
                     new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
                     persist_user({
-                        "is_paid
+                        "is_paid": True,
+                        "remaining_paid_uses": new_remaining
+                    })
+                    st.session_state["admin_unlocked"] = True
+                    st.success(TEXT["admin_success"])
+                else:
+                    st.info(TEXT["admin_already"])
+            else:
+                st.error(TEXT["admin_wrong"])
+
+# ================= Chat Main =================
+def render_chat_page():
+    st.markdown("---")
+    total_free_used = st.session_state.get("usage_count", 0)
+    last_reset_str = st.session_state.get("last_reset", datetime.utcnow().isoformat())
+    last_reset = datetime.fromisoformat(last_reset_str)
+    now = datetime.utcnow()
+    hours_since_reset = (now - last_reset).total_seconds() / 3600
+
+    # 6시간마다 리셋
+    if hours_since_reset >= RESET_INTERVAL_HOURS:
+        st.session_state["usage_count"] = 0
+        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
+        st.info(TEXT["reset"])
+
+    remaining_free = max(0, DAILY_FREE_LIMIT - st.session_state.get("usage_count", 0))
+    remaining_paid = st.session_state.get("remaining_paid_uses", 0)
+
+    # 입력폼
+    user_input = st.text_area(TEXT["input"], height=80)
+
+    # 상태 출력
+    status_msg = f"💬 {TEXT['status_left']}: 무료 {remaining_free}회, 유료 {remaining_paid}회"
+    st.markdown(f'<div class="status">{status_msg}</div>', unsafe_allow_html=True)
+
+    if st.button("전송"):
+        if not user_input.strip():
+            st.warning(TEXT["warn"])
+        else:
+            # 사용량 체크
+            if remaining_free <= 0 and remaining_paid <= 0:
+                st.warning(TEXT["usedup"])
