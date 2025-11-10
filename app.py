@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (modified + Chat History)
+# 💙 EOERWAY AI Therapy v2.8 (modified)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -54,6 +54,7 @@ def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
 
+    # 이미 기록된 유저면 다시 카운트하지 않음
     if user_visit_ref.get().exists:
         return
 
@@ -66,11 +67,13 @@ def update_visit_stats():
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
+    # 전체 방문자
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
+    # 오늘 방문자
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -102,6 +105,7 @@ with col2:
         label_visibility="collapsed",
         index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
     )
+
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
@@ -124,9 +128,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode activated, 50 free sessions added!",
-        "admin_already": "✅ Admin already authenticated.",
-        "admin_wrong": "❌ Wrong admin password.",
+        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
+        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
     }
 else:
     TEXT = {
@@ -225,10 +229,6 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= 대화 기록 저장용 세션 상태 초기화 =================
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
-
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
@@ -299,11 +299,7 @@ AI 심리상담 챗봇 역할 지침
                 )
                 time.sleep(0.03)
 
-        # 대화 기록에 답변 추가 (마지막 메시지 bot 내용 채우기)
-        if st.session_state.chat_history:
-            st.session_state.chat_history[-1]["bot"] = full_text.strip()
-
-        # DB 저장
+        # 대화 기록 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -318,18 +314,12 @@ AI 심리상담 챗봇 역할 지침
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-# ================= 대화 기록 출력 함수 =================
-def render_chat_history():
-    for chat in st.session_state.chat_history:
-        st.markdown(f"<div class='user-bubble'>{chat['user']}</div>", unsafe_allow_html=True)
-        if chat["bot"]:
-            st.markdown(f"<div class='bot-bubble'>{chat['bot']}</div>", unsafe_allow_html=True)
-
 # ================= Payment / Feedback Panel =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
+    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -347,6 +337,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
+            st.rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -415,27 +406,36 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        return
-
-    # 대화 기록 먼저 출력
-    render_chat_history()
+        st.rerun()
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 사용자가 입력한 메시지 기록에 추가 (bot은 아직 빈 문자열)
-    st.session_state.chat_history.append({"user": user_input, "bot": ""})
-    # 다시 실행하여 AI 응답 스트리밍 진행
-    st.experimental_rerun()
+    st.markdown(
+        f"<div class='user-bubble'>{user_input}</div>",
+        unsafe_allow_html=True
+    )
+
+    reply = stream_reply(user_input)
+
+    if reply:
+        if st.session_state.get("is_paid"):
+            persist_user({
+                "remaining_paid_uses": max(
+                    0,
+                    st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
+                )
+            })
+        else:
+            persist_user({"usage_count": usage + 1})
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
 total_visits, daily_visits = get_visit_counts()
-
-if language == "English 🇺🇸":
-    visit_text = f"""
+st.sidebar.markdown(
+    f"""
     <div style="
         margin-top: 12px;
         margin-bottom: 16px;
@@ -445,35 +445,25 @@ if language == "English 🇺🇸":
         font-size: 13px;
         color: rgba(255,255,255,0.85);
     ">
-        🌍 <b>Total {total_visits:,} users</b><br>
-        ☀️ <b>Today {daily_visits:,} users</b>
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
     </div>
-    """
+    """,
+    unsafe_allow_html=True
+)
+
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.rerun()
 else:
-    visit_text = f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        🌍 <b>총 방문자 {total_visits:,}명</b><br>
-        ☀️ <b>오늘 방문자 {daily_visits:,}명</b>
-    </div>
-    """
-st.sidebar.markdown(visit_text, unsafe_allow_html=True)
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
 
-# ================= Main Logic =================
+# ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
-    # AI 답변 스트리밍 및 기록 처리
-    # 사용자가 입력한 메시지가 있으면 마지막 메시지에 대해 응답 생성
-    if st.session_state.chat_history and st.session_state.chat_history[-1]["bot"] == "":
-        last_input = st.session_state.chat_history[-1]["user"]
-        stream_reply(last_input)
-
     render_chat_page()
+
