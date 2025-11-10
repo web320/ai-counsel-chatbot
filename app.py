@@ -256,7 +256,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
 7. 자해나 자살 같은 말이 나오면, 그 고통을 조심스럽게 인정하면서 전문가나 상담전화(예: 1393)를 안내해 주세요.
 8. 마지막 문장은 혼자가 아니라고 느낄 수 있도록 따뜻하게 마무리해 주세요.
 
-항상 상대방 마음을 따뜻하게 보듬는 진심 어린 말투로 답변해 주세요.
+항상 상대방 마음을 따뜻하게 보듬는 진심 어린 말투로 답변해 주세요."""
 
         stream = client.chat.completions.create(
             model="gpt-4o",
