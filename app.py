@@ -416,3 +416,54 @@ def render_chat_page():
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
     )
+
+    reply = stream_reply(user_input)
+
+    if reply:
+        if st.session_state.get("is_paid"):
+            persist_user({
+                "remaining_paid_uses": max(
+                    0,
+                    st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
+                )
+            })
+        else:
+            persist_user({"usage_count": usage + 1})
+
+# ================= Sidebar =================
+st.sidebar.header("📜 History / 대화 기록")
+
+total_visits, daily_visits = get_visit_counts()
+st.sidebar.markdown(
+    f"""
+    <div style="
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+if st.session_state.get("show_payment"):
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.rerun()
+else:
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
+
+# ================= Main Render =================
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
+
