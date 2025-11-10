@@ -167,6 +167,37 @@ st.markdown(
 <style>
 html, body, [class*="css"] { font-size: 18px; }
 
+.user-bubble {
+  background:#b91c1c;
+  color:#fff;
+  border-radius:14px;
+  padding:10px 18px;
+  margin:8px 0;
+  display:inline-block;
+  box-shadow:0 0 10px rgba(255,0,0,0.3);
+}
+
+.bot-bubble {
+  font-size:21px;
+  line-height:1.8;
+  border-radius:16px;
+  padding:16px 20px;
+  margin:10px 0;
+  background:rgba(15,15,30,.85);
+  color:#fff;
+  border:2px solid transparent;
+  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
+  box-shadow:0 0 12px #ffaa00;
+  animation:neon 1.6s ease-in-out infinite alternate;
+  word-break:break-word;
+  white-space:pre-wrap;
+}
+
+@keyframes neon {
+  from { box-shadow:0 0 8px #ffaa00; }
+  to   { box-shadow:0 0 22px #ffcc33; }
+}
+
 .status {
   font-size:15px;
   padding:8px 12px;
@@ -415,23 +446,40 @@ def render_chat_page():
         st.session_state["show_payment"] = True
         st.rerun()
 
-    # 기존 대화 표시 (Streamlit 네이티브 chat_message)
+    # 기존 대화 표시 (네온 효과 + 이모지 적용)
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+        if msg["role"] == "user":
+            st.markdown(
+                f"<div class='user-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f"<div class='bot-bubble'>{msg['content']} 💫</div>",
+                unsafe_allow_html=True
+            )
 
     # 사용자 입력
     if prompt := st.chat_input(TEXT["input"]):
-        # 사용자 메시지 표시
-        with st.chat_message("user"):
-            st.write(prompt)
+        # 사용자 메시지 표시 (빨간 말풍선)
+        st.markdown(
+            f"<div class='user-bubble'>{prompt}</div>",
+            unsafe_allow_html=True
+        )
         
         st.session_state.messages.append({"role": "user", "content": prompt, "timestamp": datetime.utcnow().isoformat()})
         save_message("user", prompt)
 
-        # AI 응답 (네이티브 스트리밍)
-        with st.chat_message("assistant"):
-            response = st.write_stream(get_ai_response(prompt))
+        # AI 응답 스트리밍 (네온 효과 + 💫)
+        placeholder = st.empty()
+        response = ""
+        
+        for chunk in get_ai_response(prompt):
+            response += chunk
+            placeholder.markdown(
+                f"<div class='bot-bubble'>{response} 💫</div>",
+                unsafe_allow_html=True
+            )
         
         st.session_state.messages.append({"role": "assistant", "content": response, "timestamp": datetime.utcnow().isoformat()})
         save_message("assistant", response)
