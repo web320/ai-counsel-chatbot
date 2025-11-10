@@ -318,9 +318,24 @@ else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
+# ================= User Data Persistence with Atomic Increment =================
 def persist_user(fields: dict):
-    user_ref.set(fields, merge=True)
-    st.session_state.update(fields)
+    def update_transaction(transaction, ref, new_fields):
+        snapshot = ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
+        updated = {}
+        for k, v in new_fields.items():
+            if isinstance(v, int) and k in ["usage_count", "remaining_paid_uses"]:
+                updated[k] = data.get(k, 0) + v
+            else:
+                updated[k] = v
+        transaction.update(ref, updated)
+
+    try:
+        db.run_transaction(lambda transaction: update_transaction(transaction, user_ref, fields))
+        st.session_state.update(fields)
+    except Exception as e:
+        st.error(f"User data update failed: {e}")
 
 # ================= AI Response Function with Context =================
 def stream_reply(user_input: str):
@@ -441,16 +456,4 @@ def render_payment_and_feedback():
                 if not st.session_state.get("admin_unlocked"):
                     new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
                     persist_user({
-                        "is_paid": True,
-                        "remaining_paid_uses": new_remaining
-                    })
-                    st.session_state["admin_unlocked"] = True
-                    st.success(TEXT["admin_success"])
-                else:
-                    st.info(TEXT["admin_already"])
-            else:
-                st.error(TEXT["admin_wrong"])
-
-# ================= Chat Main Page =================
-def render_chat_page():
-    if st.session_state
+                        "is_paid
