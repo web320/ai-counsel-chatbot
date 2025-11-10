@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (Chat History 지원 최종버전)
+# 💙 EOERWAY AI Therapy v2.8 (Chat History 지원 최종버전 + 새로고침시 기록 초기화)
 # ==========================================
 
 import os, uuid, json, time
@@ -221,6 +221,11 @@ def persist_user(fields: dict):
     st.session_state.update(fields)
 
 # ================= Chat History Load / 저장 =================
+
+# 새로고침 시 대화 기록 삭제(추가한 부분)
+if "chat_history" in st.session_state:
+    del st.session_state["chat_history"]
+
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 
@@ -241,8 +246,10 @@ def load_chat_history():
         })
     st.session_state["chat_history"] = list(reversed(history))
 
-if not st.session_state["chat_history"]:
-    load_chat_history()
+# 기존에는 대화 기록 불러오기 시도했으나
+# 새로고침 시 기록을 안 불러오도록 하려면 호출하지 않아도 됨.
+# 만약 기록을 불러오려면 주석 해제하고 사용하세요.
+# load_chat_history()
 
 # ================= AI Response Function =================
 def stream_reply_and_update(user_input: str):
@@ -440,41 +447,24 @@ st.sidebar.markdown(
         border-radius: 10px;
         background: rgba(255,255,255,0.03);
         font-size: 13px;
-        color: rgba(255,255,255,0.85);
+        color: rgba(255,255,255,0.4);
     ">
-        🌍 <b>Total {total_visits:,}명</b><br>
-        ☀️ <b>Today {daily_visits:,}명</b>
+        Total visitors: {total_visits} <br>
+        Today's visitors: {daily_visits}
     </div>
     """,
     unsafe_allow_html=True
 )
 
 if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
-        st.session_state["show_payment"] = False
-        st.experimental_rerun()
-    else:
-        render_payment_and_feedback()
-        st.stop()
-
+    render_payment_and_feedback()
 else:
     render_chat_page()
 
-# ================= 메인 이벤트 처리 =================
-if (
-    st.session_state.get("chat_history")
-    and st.session_state["chat_history"][-1]["bot"] == "..."
-):
+# ================= Main Loop to handle streaming responses =================
+if st.session_state.get("chat_history") and st.session_state["chat_history"][-1]["bot"] == "...":
     last_input = st.session_state["chat_history"][-1]["user"]
-    reply_text = stream_reply_and_update(last_input)
-
-    if reply_text:
-        if st.session_state.get("is_paid"):
-            persist_user({
-                "remaining_paid_uses": max(0, st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1)
-            })
-        else:
-            persist_user({"usage_count": st.session_state["usage_count"] + 1})
-
-    st.experimental_rerun()
+    reply = stream_reply_and_update(last_input)
+    if reply:
+        st.experimental_rerun()
 
