@@ -492,3 +492,103 @@ if st.session_state["show_payment"]:
     render_payment_and_feedback()
 else:
     render_chat_page()
+    # ... (기존 코드 그대로 유지)
+
+# ================= 대화 기록 저장용 세션 상태 초기화 =================
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+
+# ================= AI 응답 함수 수정 (채팅 기록에 추가) =================
+def stream_reply(user_input: str):
+    try:
+        # (기존 system_prompt 및 stream 코드 유지)
+
+        placeholder = st.empty()
+        full_text = ""
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, "content") and delta.content:
+                full_text += delta.content
+                # 현재 출력 유지 (스트리밍)
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.03)
+
+        # 대화 기록에 추가 (사용자 메시지 + AI 답변)
+        st.session_state.chat_history.append({
+            "user": user_input,
+            "bot": full_text.strip()
+        })
+
+        # DB 저장 (기존 유지)
+        db.collection("chats").add({
+            "uid": USER_ID,
+            "input": user_input,
+            "reply": full_text.strip(),
+            "lang": language,
+            "created_at": datetime.utcnow().isoformat()
+        })
+
+        return full_text.strip()
+
+    except Exception as e:
+        st.error(f"{TEXT['reply_error']}: {e}")
+        return None
+
+# ================= 대화 기록 화면에 출력 함수 =================
+def render_chat_history():
+    for chat in st.session_state.chat_history:
+        st.markdown(f"<div class='user-bubble'>{chat['user']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='bot-bubble'>{chat['bot']}</div>", unsafe_allow_html=True)
+
+# ================= Chat Main Page 수정 =================
+def render_chat_page():
+    if st.session_state.get("is_paid"):
+        left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
+        plan = TEXT["paid"]
+    else:
+        left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
+        plan = TEXT["free"]
+
+    st.markdown(
+        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
+        unsafe_allow_html=True
+    )
+
+    now = datetime.utcnow()
+    last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
+
+    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
+        persist_user({
+            "usage_count": 0,
+            "last_reset": now.isoformat()
+        })
+        st.info(TEXT["reset"])
+
+    usage = st.session_state["usage_count"]
+    if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
+        st.warning(TEXT["usedup"])
+        st.session_state["show_payment"] = True
+        return
+
+    # 기존에 보여준 대화 기록 먼저 출력
+    render_chat_history()
+
+    user_input = st.chat_input(TEXT["input"])
+    if not user_input:
+        return
+
+    # 사용자가 입력한 메시지는 바로 기록에 추가
+    st.session_state.chat_history.append({"user": user_input, "bot": ""})
+    # 화면 리렌더링 위해 rerun
+    st.experimental_rerun()
+
+# ================= Main =================
+if st.session_state["show_payment"]:
+    render_payment_and_feedback()
+else:
+    render_chat_page()
+
