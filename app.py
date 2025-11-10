@@ -54,6 +54,7 @@ def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
 
+    # 이미 기록된 유저면 다시 카운트하지 않음
     if user_visit_ref.get().exists:
         return
 
@@ -66,11 +67,13 @@ def update_visit_stats():
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
+    # 전체 방문자
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
+    # 오늘 방문자
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -125,9 +128,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode activated! 50 free uses added.",
-        "admin_already": "✅ Admin mode already active.",
-        "admin_wrong": "❌ Incorrect admin password.",
+        "admin_success": "🔓 Admin mode activated, 50 free sessions added!",
+        "admin_already": "✅ Admin already authenticated.",
+        "admin_wrong": "❌ Wrong admin password.",
     }
 else:
     TEXT = {
@@ -283,28 +286,20 @@ AI 심리상담 챗봇 역할 지침
             stream=True,
         )
 
-        if "chat_history" not in st.session_state:
-            st.session_state["chat_history"] = []
-
-        full_text = ""
         placeholder = st.empty()
+        full_text = ""
 
         for chunk in stream:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
-                # 실시간 스트림 출력
                 placeholder.markdown(
                     f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True,
+                    unsafe_allow_html=True
                 )
                 time.sleep(0.03)
 
-        # 대화 기록에 저장 (유저입력, AI답변)
-        st.session_state["chat_history"].append(("user", user_input))
-        st.session_state["chat_history"].append(("bot", full_text.strip()))
-
-        # Firestore에 저장
+        # 대화 기록 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -324,6 +319,7 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
+    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -341,7 +337,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.experimental_rerun()
+            # 재실행은 on_click 콜백 쓰기 때문에 여기선 제거
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -384,12 +380,6 @@ def render_payment_and_feedback():
 
 # ================= Chat Main Page =================
 def render_chat_page():
-    # 대화 기록이 있다면 미리 보여주기
-    if "chat_history" in st.session_state:
-        for speaker, message in st.session_state["chat_history"]:
-            css_class = "user-bubble" if speaker == "user" else "bot-bubble"
-            st.markdown(f"<div class='{css_class}'>{message}</div>", unsafe_allow_html=True)
-
     if st.session_state.get("is_paid"):
         left = st.session_state.get("remaining_paid_uses", BASIC_LIMIT)
         plan = TEXT["paid"]
@@ -416,13 +406,13 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.experimental_rerun()
+        # rerun 대신 사이드바 버튼으로 이동 유도
+        return
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 유저 메시지 즉시 표시
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
@@ -440,8 +430,6 @@ def render_chat_page():
             })
         else:
             persist_user({"usage_count": usage + 1})
-
-# ... (중략) ...
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -481,31 +469,26 @@ else:
 
 st.sidebar.markdown(visit_text, unsafe_allow_html=True)
 
-
-# 버튼 클릭 시 상태 변경 및 안전한 rerun 처리
+# 사이드바 버튼 상태 전환 콜백 함수
 def to_chat():
     st.session_state["show_payment"] = False
 
 def to_payment():
     st.session_state["show_payment"] = True
 
+# 결제/피드백 모드 표시 여부 초기값 세팅
+if "show_payment" not in st.session_state:
+    st.session_state["show_payment"] = False
 
-if st.session_state.get("show_payment", False):
+if st.session_state["show_payment"]:
     if st.sidebar.button(TEXT["chat_return"], on_click=to_chat):
-        # rerun은 on_click 함수가 호출 후 자동 실행됨 (안정적)
         pass
 else:
     if st.sidebar.button(TEXT["chat_button"], on_click=to_payment):
         pass
 
-# ================= Main Render =================
-if st.session_state.get("show_payment", False):
-    render_payment_and_feedback()
-else:
-    render_chat_page()
-
-# ================= Main Render =================
-if st.session_state.get("show_payment"):
+# ================= Main =================
+if st.session_state["show_payment"]:
     render_payment_and_feedback()
 else:
     render_chat_page()
