@@ -1,8 +1,8 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.8 (Chat History 지원 최종버전 + 새로고침시 기록 초기화)
+# 💙 EOERWAY AI Therapy v2.8 (modified)
 # ==========================================
 
-import os, uuid, json, time
+import os, uuid, json, time, random
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -19,6 +19,11 @@ DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
 BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
 RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
 ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
+
+# ================= ads.txt (for AdSense) =================
+if "ads.txt" in st.query_params:
+    st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
+    st.stop()
 
 # ================= OpenAI (LLM) =================
 load_dotenv()
@@ -41,7 +46,7 @@ db = firestore.client()
 
 # ================= Query Params / UID =================
 uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.experimental_set_query_params(uid=uid)
+st.query_params = {"uid": uid}
 USER_ID = uid
 
 # ================= Visitor Counter (유저당 1회만 카운트) =================
@@ -49,6 +54,7 @@ def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
 
+    # 이미 기록된 유저면 다시 카운트하지 않음
     if user_visit_ref.get().exists:
         return
 
@@ -61,11 +67,13 @@ def update_visit_stats():
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
+    # 전체 방문자
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
+    # 오늘 방문자
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -97,6 +105,7 @@ with col2:
         label_visibility="collapsed",
         index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
     )
+
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
@@ -119,9 +128,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode activated! 50 free uses added.",
-        "admin_already": "✅ Admin already unlocked.",
-        "admin_wrong": "❌ Wrong admin password.",
+        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
+        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
     }
 else:
     TEXT = {
@@ -220,39 +229,8 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Chat History Load / 저장 =================
-
-# 새로고침 시 대화 기록 삭제(추가한 부분)
-if "chat_history" in st.session_state:
-    del st.session_state["chat_history"]
-
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
-
-def load_chat_history():
-    chats_ref = (
-        db.collection("chats")
-        .where("uid", "==", USER_ID)
-        .order_by("created_at", direction=firestore.Query.DESCENDING)
-        .limit(20)
-    )
-    docs = chats_ref.stream()
-    history = []
-    for doc in docs:
-        data = doc.to_dict()
-        history.append({
-            "user": data.get("input", ""),
-            "bot": data.get("reply", "")
-        })
-    st.session_state["chat_history"] = list(reversed(history))
-
-# 기존에는 대화 기록 불러오기 시도했으나
-# 새로고침 시 기록을 안 불러오도록 하려면 호출하지 않아도 됨.
-# 만약 기록을 불러오려면 주석 해제하고 사용하세요.
-# load_chat_history()
-
 # ================= AI Response Function =================
-def stream_reply_and_update(user_input: str):
+def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
             system_prompt = """
@@ -294,9 +272,10 @@ AI 심리상담 챗봇 역할 지침
 답변: "안녕하세요, 반가워요. 이렇게 찾아와 주셔서 고마워요. 요즘 어떠신가요? 제가 함께 있을게요."
 사용자: "너무 우울해"
 답변: "많이 우울하시군요, 정말 힘드시겠어요. 혹시 무엇 때문에 우울한지 편하실 때 말씀해주실 수 있을까요? 이야기하고 싶지 않으시다면 그것도 괜찮아요. 그냥 여기 함께 있어드릴게요."
-"""
 
-        response = client.chat.completions.create(
+
+"""
+        stream = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -304,25 +283,32 @@ AI 심리상담 챗봇 역할 지침
             ],
             temperature=0.7,
             max_tokens=700,
+            stream=True,
         )
-        full_text = response.choices[0].message.content.strip()
 
-        # Firebase에 저장
+        placeholder = st.empty()
+        full_text = ""
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, "content") and delta.content:
+                full_text += delta.content
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.03)
+
+        # 대화 기록 저장
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
-            "reply": full_text,
+            "reply": full_text.strip(),
             "lang": language,
             "created_at": datetime.utcnow().isoformat()
         })
 
-        # 세션 대화 내역 업데이트
-        for i in range(len(st.session_state["chat_history"]) - 1, -1, -1):
-            if st.session_state["chat_history"][i]["user"] == user_input and st.session_state["chat_history"][i]["bot"] == "...":
-                st.session_state["chat_history"][i]["bot"] = full_text
-                break
-
-        return full_text
+        return full_text.strip()
 
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
@@ -333,6 +319,7 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
+    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -350,7 +337,7 @@ def render_payment_and_feedback():
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
-            st.experimental_rerun()
+            st.rerun()
 
     st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
 
@@ -419,52 +406,13 @@ def render_chat_page():
     if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
         st.warning(TEXT["usedup"])
         st.session_state["show_payment"] = True
-        st.experimental_rerun()
-
-    # 이전 대화 출력
-    for chat in st.session_state["chat_history"]:
-        st.markdown(f"<div class='user-bubble'>{chat['user']}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='bot-bubble'>{chat['bot']}</div>", unsafe_allow_html=True)
+        st.rerun()
 
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 새로운 대화 세션에 임시 추가 (bot 답변은 "..."로 표시)
-    st.session_state["chat_history"].append({"user": user_input, "bot": "..."})
-    st.experimental_rerun()
-
-# ================= Sidebar =================
-st.sidebar.header("📜 History / 대화 기록")
-
-total_visits, daily_visits = get_visit_counts()
-st.sidebar.markdown(
-    f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.4);
-    ">
-        Total visitors: {total_visits} <br>
-        Today's visitors: {daily_visits}
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-if st.session_state.get("show_payment"):
-    render_payment_and_feedback()
-else:
-    render_chat_page()
-
-# ================= Main Loop to handle streaming responses =================
-if st.session_state.get("chat_history") and st.session_state["chat_history"][-1]["bot"] == "...":
-    last_input = st.session_state["chat_history"][-1]["user"]
-    reply = stream_reply_and_update(last_input)
-    if reply:
-        st.experimental_rerun()
-
+    st.markdown(
+        f"<div class='user-bubble'>{user_input}</div>",
+        unsafe_allow_html=True
+    )
