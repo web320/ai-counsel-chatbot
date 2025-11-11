@@ -593,8 +593,10 @@ def render_payment_and_feedback():
         plan_value = "50_uses_$3"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
         payment_notice = (
-            "📸 **After completing payment, please take a screenshot and send it to**  \n"
-            "**✉️ newnewtry6@gmail.com** or Instagram **[@youtuberhawaiijelly](https://www.instagram.com/youtuberhawaiijelly)**"
+            "📸 **After completing payment, please take a screenshot and send it to:**\n"
+            "- ✉️ **newnewtry6@gmail.com**\n"
+            "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
+            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n"
         )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
@@ -605,8 +607,10 @@ def render_payment_and_feedback():
         plan_value = "50회_3000원"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
         payment_notice = (
-            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**  \n"
-            "**✉️ newnewtry6@gmail.com** 또는 **인스타그램 [@youtuberhawaiijelly](https://www.instagram.com/youtuberhawaiijelly)**"
+            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**\n"
+            "- ✉️ **newnewtry6@gmail.com**\n"
+            "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
+            "- 💬 카카오톡 아이디 **jeuspo**\n"
         )
 
     st.markdown(title_line)
@@ -628,7 +632,7 @@ def render_payment_and_feedback():
 
     st.markdown("---")
 
-    # ✨ 결제 의사(좌) / 결제 버튼 및 안내(우) 분리
+    # ✨ 결제 의사(좌) / 결제 안내 + PayPal(우)
     col1, col2 = st.columns([3, 2])
 
     with col1:
@@ -660,10 +664,8 @@ def render_payment_and_feedback():
     with col2:
         st.markdown("### 💳 Direct Payment")
         st.link_button("💳 PayPal ($3 / 50 uses)", "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG")
-        st.link_button("스크린 샷 카톡 아이디 jeuspo로 보내셔도 됩니다")
         st.markdown("---")
         st.markdown(payment_notice)
-
 
 
 # ================= Display Chat History =================
