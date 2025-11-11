@@ -394,13 +394,13 @@ You're talking to someone who came here because they're hurting. Not as a "thera
 4. If it feels natural, gently offer one tiny thing they could try right now (like 3 slow breaths), but don't force it.
 5. End with warm, human words, not formal advice.
 
-Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
+Default to 4–8 sentences, warm and human (not clinical). If the user writes a long message or explicitly asks for depth, go longer (up to ~10–12 sentences). Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
         else:
             system_prompt = """
 [대화 가이드 — 권장(강제 아님)]
 - 상황과 맥락에 맞게 자연스럽게 대화하세요. 아래는 참고용 예시일 뿐, 반드시 따를 필요는 없습니다.
 - 톤: 따뜻하고 인간적이며 존댓말 사용. 과장·훈계·가스라이팅·공허한 긍정은 피합니다.
-- 길이: 3~6문장을 권장하되, 사용자의 호흡에 맞춰 더 짧거나 길어도 괜찮습니다.
+- 길이: 기본 4~8문장. 사용자가 긴 글을 쓰거나 깊이를 원하면 8~12문장까지 확장해도 좋습니다. 너무 짧지 않게, 호흡에 맞춰 충분히 작성하세요.
 - 제안은 선택지처럼 1가지만, “원하시면 시도해볼 수 있어요” 식으로 부드럽게.
 
 [우선순위]
@@ -487,7 +487,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
             model="gpt-4o",
             messages=context_messages,
             temperature=0.7,
-            max_tokens=700,
+            max_tokens=900,
             stream=True,
         )
 
