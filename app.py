@@ -790,4 +790,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
