@@ -1,13 +1,13 @@
 # ==========================================
 # 💙 EOERWAY AI Therapy v2.9 — Wallet + Voucher + Paywall (50 uses = $3)
-# CLEAN REBUILD (syntax safe) + PayPal + Email sender + Webhook
+# CLEAN REBUILD (syntax safe) + Simple PayPal Link + Email sender + Webhook
 # ==========================================
 # - 4시간/7회 무료, 초과 시 크레딧 차감 (위기문구는 항상 무료)
 # - 지갑(크레딧) + 바우처(50회/$3) + 관리자 코드 생성기
 # - 스타일/질문 바퀴로 단조로움 완화 + 퀵리플라이 버튼
 # - 답변 길이: 기본 4~8문장, 필요 시 8~12문장 (max_tokens=900)
-# - PayPal 결제(클라이언트 버튼) → 승인 시 바우처 자동 발급(간이, 서버검증X)
-# - 이메일(SMTP)로 코드 발송 + 웹훅(op=issue_voucher) 제공 (Zapier/Kakao용)
+# - PayPal: **정적 결제 링크**만 노출(자동 발급은 추후).
+# - 방문자 카운트: **페이지 새로고침으로는 증가하지 않음**, 사용자가 **처음 메시지 보낼 때 1회만 증가**.
 
 import os
 import uuid
@@ -36,6 +36,10 @@ ADMIN_KEYS = ["2356"]             # 🔑 관리자 비밀키(코드 생성용)
 CREDIT_PACK_SIZE = 50             # 1코드 = 50회
 CREDIT_PACK_PRICE_USD = 3         # $3 (표기용)
 
+# 🔗 PayPal 정적 결제 링크(사용자 제공)
+PAYPAL_LINK = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+KAKAO_CHANNEL_ID = "jeuspo"      # 한국 전용 문의 채널 표시용
+
 # 🚨 위기 키워드(차감/페이월 우회)
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
@@ -50,8 +54,6 @@ QUESTION_WHEEL_EN = ["situation", "body sensation", "self-talk", "value/need", "
 # ===== Secrets / External =====
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
-PAYPAL_CLIENT_ID = st.secrets.get("PAYPAL_CLIENT_ID", "")  # 실제 값 넣으면 버튼 활성화
-ISSUE_TOKEN = st.secrets.get("ISSUE_TOKEN", "changeme-token")  # 웹훅 보호용 토큰
 SMTP_HOST = st.secrets.get("SMTP_HOST", "")
 SMTP_PORT = int(st.secrets.get("SMTP_PORT", 465))
 SMTP_USER = st.secrets.get("SMTP_USER", "")
@@ -61,6 +63,7 @@ SMTP_FROM = st.secrets.get("SMTP_FROM", SMTP_USER or "")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ================= Firebase =================
+
 def _firebase_config():
     raw = st.secrets.get("firebase")
     if raw is None:
@@ -75,17 +78,6 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Utilities =================
-
-def qp(name: str, default=None):
-    """Query param 안전 접근"""
-    try:
-        v = st.query_params.get(name)
-        if isinstance(v, list):
-            return v[0] if v else default
-        return v if v is not None else default
-    except Exception:
-        return default
-
 
 def gen_code(n: int = 10) -> str:
     return uuid.uuid4().hex[:n].upper()
@@ -107,19 +99,35 @@ def send_email_smtp(to_addr: str, subject: str, body: str) -> bool:
     except Exception:
         return False
 
-# ================= UID / Session =================
-if "uid" not in st.session_state:
-    st.session_state["uid"] = str(uuid.uuid4())
-USER_ID = st.session_state["uid"]
+# ================= UID / Session / BrowserID =================
+# 새로고침해도 유지되도록 URL query에 bid를 심어서 고정
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "English 🇺🇸"
 
-# ================= Visitor Counter =================
+try:
+    qp = st.query_params
+    bid = qp.get("bid")
+    if isinstance(bid, list):
+        bid = bid[0] if bid else None
+except Exception:
+    bid = None
 
-def update_visit_stats():
+if not bid:
+    bid = uuid.uuid4().hex[:12]
+    try:
+        st.query_params["bid"] = bid
+    except Exception:
+        st.experimental_set_query_params(bid=bid)
+
+st.session_state["bid"] = bid
+USER_ID = bid  # 사람 기준 고유 식별자로 사용(세션 초기화에도 유지)
+
+# ================= Human-only Visitor Counter =================
+# - 페이지 로드시 카운트하지 않음
+# - 사용자가 **처음으로 메시지 보낼 때 1회만 카운트**
+
+def _inc_human_counters():
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    user_visit_ref = db.collection("user_visits").document(USER_ID)
-    if user_visit_ref.get().exists:
-        return
-    user_visit_ref.set({"uid": USER_ID, "first_visit": datetime.utcnow().isoformat(), "day": today})
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
     if total_ref.get().exists:
@@ -132,35 +140,17 @@ def update_visit_stats():
         daily_ref.set({"count": 1})
 
 
-def get_visit_counts():
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    total_doc = db.collection("stats").document("total").get()
-    daily_doc = db.collection("stats").document(today).get()
-    total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
-    daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
-    return total, daily
+def count_unique_human_once():
+    doc_ref = db.collection("visitors").document(USER_ID)
+    snap = doc_ref.get()
+    if snap.exists:
+        return False
+    doc_ref.set({"bid": USER_ID, "first_chat": firestore.SERVER_TIMESTAMP})
+    _inc_human_counters()
+    return True
 
-if "visit_logged" not in st.session_state:
-    update_visit_stats()
-    st.session_state["visit_logged"] = True
-
-# ================= Language State =================
-if "lang" not in st.session_state:
-    st.session_state["lang"] = "English 🇺🇸"
-col_lang_a, col_lang_b = st.columns([5, 1])
-with col_lang_b:
-    lang_choice = st.radio(
-        label=" ",
-        options=["English 🇺🇸", "한국어 🇰🇷"],
-        horizontal=True,
-        label_visibility="collapsed",
-        index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
-    )
-st.session_state["lang"] = lang_choice
-language = st.session_state["lang"]
-
-# ================= Text by Language =================
-if language == "English 🇺🇸":
+# ================= Language Text =================
+if st.session_state["lang"] == "English 🇺🇸":
     TEXT = {
         "title": "❤️ A Warm AI Friend You Can Lean On",
         "free": "🌱 Free Trial",
@@ -193,8 +183,8 @@ if language == "English 🇺🇸":
         "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 Admin — Generate Voucher Codes",
         "admin_make": "Generate",
-        "paypal_header": "PayPal — 50 uses for $3",
-        "paypal_note": "After approval, a voucher will be issued automatically (beta)."
+        "paypal_header": "Pay with PayPal — $3 for 50 uses",
+        "paypal_note": "Use the button below. After payment, message our Kakao channel to receive your code."
     }
 else:
     TEXT = {
@@ -229,8 +219,8 @@ else:
         "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 관리자 — 바우처 코드 생성",
         "admin_make": "코드 생성",
-        "paypal_header": "PayPal — 50회 $3",
-        "paypal_note": "승인 후 자동으로 바우처가 발급됩니다(베타)."
+        "paypal_header": "PayPal 3달러로 50회",
+        "paypal_note": "아래 버튼으로 결제 후, 카카오톡 채널로 코드 요청을 보내주세요(한국 전용)."
     }
 
 st.title(TEXT["title"])
@@ -381,9 +371,13 @@ if op == "issue_voucher":
     emailed = False
     if email_to:
         body = (
-            f"Your EOERWAY voucher code: {code}\n\n"
-            f"Value: {CREDIT_PACK_SIZE} uses ($ {CREDIT_PACK_PRICE_USD})\n"
-            "Redeem inside the app sidebar → My Wallet → Redeem.\n"
+            f"Your EOERWAY voucher code: {code}
+
+"
+            f"Value: {CREDIT_PACK_SIZE} uses ($ {CREDIT_PACK_PRICE_USD})
+"
+            "Redeem inside the app sidebar → My Wallet → Redeem.
+"
         )
         emailed = send_email_smtp(email_to, "Your EOERWAY Code", body)
     st.json({"ok": True, "code": code, "emailed": emailed})
@@ -495,7 +489,8 @@ def show_paywall():
     st.warning(TEXT["paywall"])  # 언어별 문구
     wallet_label = TEXT["wallet"]
     redeem_label = TEXT["redeem"]
-    note = f"- **{CREDIT_PACK_SIZE}회 충전 코드 = ${CREDIT_PACK_PRICE_USD}**  \n- 이미 코드를 갖고 있다면 **사이드바 → ‘{wallet_label}’ → ‘{redeem_label}’**에서 적용하세요."
+    note = f"- **{CREDIT_PACK_SIZE}회 충전 코드 = ${CREDIT_PACK_PRICE_USD}**  
+- 이미 코드를 갖고 있다면 **사이드바 → ‘{wallet_label}’ → ‘{redeem_label}’**에서 적용하세요."
     st.markdown(note)
 
 
@@ -547,20 +542,30 @@ paypal.Buttons({{
 
 # ================= Payment & Feedback =================
 
+def render_paypal_simple():
+    st.subheader(TEXT["paypal_header"])
+    st.caption(TEXT["paypal_note"])
+    st.link_button("💳 PayPal $3 / 3달러 결제", PAYPAL_LINK)
+    if st.session_state.get("lang") == "한국어 🇰🇷":
+        st.info(f"결제 후 카카오톡 채널 **{KAKAO_CHANNEL_ID}** 로 아래 문구를 보내주세요.")
+        req = f"[EOERWAY] 50회 결제 완료, 코드 부탁드려요. BID={st.session_state.get('bid','')}"
+        st.code(req)
+
+
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # PayPal 영역
-    render_paypal_checkout()
+    # PayPal(정적 링크)
+    render_paypal_simple()
 
-    # 결제 의사 수집 (기존 UX 유지)
+    # 결제 의사 수집(기존 UX 유지)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
-    is_en = (language == "English 🇺🇸")
+    is_en = (st.session_state.get("lang") == "English 🇺🇸")
     if is_en:
         title_line = "#### 50 uses for **$3** — Purchase intent"
         btn_label = "💳 $3 for 50 uses — I'm interested"
@@ -599,7 +604,7 @@ def render_payment_and_feedback():
                 db.collection("feedbacks").document(str(uuid.uuid4())).set({
                     "uid": USER_ID,
                     "feedback": fb,
-                    "lang": language,
+                    "lang": st.session_state.get("lang"),
                     "created_at": datetime.utcnow().isoformat()
                 })
                 st.success(TEXT["feedback_sent"])
@@ -609,15 +614,14 @@ def render_payment_and_feedback():
         if admin_input:
             if admin_input in ADMIN_KEYS:
                 if not st.session_state.get("admin_unlocked"):
-                    new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
-                    persist_user({"is_paid": True, "remaining_paid_uses": new_remaining})
+                    new_remaining = int(st.session_state.get("remaining_paid_uses", 0)) + CREDIT_PACK_SIZE
+                    user_ref.set({"is_paid": True, "remaining_paid_uses": new_remaining}, merge=True)
                     st.session_state["admin_unlocked"] = True
                     st.success(TEXT["admin_success"])
                 else:
                     st.info(TEXT["admin_already"])
             else:
-                st.error(TEXT["admin_wrong"])
-
+                st.error(TEXT["admin_wrong"]) 
 # ================= Display Chat History =================
 
 def display_chat_history():
@@ -747,7 +751,8 @@ with st.sidebar.expander(TEXT["admin_gen"]):
                 create_voucher(c, int(credits_each), note=note)
                 out_codes.append(c)
             st.success("코드 생성 완료! 아래 목록을 보관하세요.")
-            st.code("\n".join(out_codes))
+            st.code("
+".join(out_codes))
         st.divider()
         st.markdown("#### 📧 Email code (SMTP)")
         email_to = st.text_input("send to")
@@ -755,9 +760,13 @@ with st.sidebar.expander(TEXT["admin_gen"]):
             code = gen_code(10)
             create_voucher(code, CREDIT_PACK_SIZE, note="admin_email")
             body = (
-                f"Your EOERWAY voucher code: {code}\n\n"
-                f"Value: {CREDIT_PACK_SIZE} uses ($ {CREDIT_PACK_PRICE_USD})\n"
-                "Redeem inside the app sidebar → My Wallet → Redeem.\n"
+                f"Your EOERWAY voucher code: {code}
+
+"
+                f"Value: {CREDIT_PACK_SIZE} uses ($ {CREDIT_PACK_PRICE_USD})
+"
+                "Redeem inside the app sidebar → My Wallet → Redeem.
+"
             )
             ok_send = send_email_smtp(email_to, "Your EOERWAY Code", body) if email_to else False
             if ok_send:
