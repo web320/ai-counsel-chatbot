@@ -603,12 +603,7 @@ def is_crisis(text: str) -> bool:
 
 def show_paywall():
     st.warning(TEXT["paywall"])  # 언어별 문구
-    st.markdown(
-        f"""
-- **{CREDIT_PACK_SIZE}회 충전 코드 = ${CREDIT_PACK_PRICE_USD}**  
-- 이미 코드를 갖고 있다면 **사이드바 → ‘{TEXT['wallet']}’ → ‘{TEXT['redeem']}’**에서 적용하세요.
-        """
-    )
+    wallet_label = TEXT["wallet"]\n    redeem_label = TEXT["redeem"]\n    st.markdown(\n        f"- **{CREDIT_PACK_SIZE}회 충전 코드 = ${CREDIT_PACK_PRICE_USD}**  \n- 이미 코드를 갖고 있다면 **사이드바 → ‘{wallet_label}’ → ‘{redeem_label}’**에서 적용하세요.")
 
 
 def charge_if_needed(user_input: str, free_used: int, free_limit: int):
@@ -730,7 +725,7 @@ def display_chat_history():
     if qr:
         cols = st.columns(len(qr))
         for i, q in enumerate(qr):
-            if cols[i].button(q, key=f"qr_{i}_{len(st.session_state['chat_history'])}"):
+            key_str = f"qr_{i}_{len(st.session_state.get('chat_history', []))}_{i}"\n            if cols[i].button(q, key=key_str):
                 st.session_state['pending_input'] = q
                 st.rerun()
 
@@ -892,5 +887,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
 
