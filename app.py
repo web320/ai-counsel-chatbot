@@ -592,6 +592,10 @@ def render_payment_and_feedback():
         caption_text = f"So far, **{total_intents}** people have shown interest."
         plan_value = "50_uses_$3"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
+        payment_notice = (
+            "📸 **After completing payment, please take a screenshot and send it to**  \n"
+            "**✉️ newnewtry6@gmail.com** or Instagram **[@Hawaiijelly](https://www.instagram.com/hawaiijelly)**"
+        )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
         btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
@@ -600,6 +604,10 @@ def render_payment_and_feedback():
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
         plan_value = "50회_3000원"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
+        payment_notice = (
+            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**  \n"
+            "**✉️ newnewtry6@gmail.com** 또는 **인스타그램 [@Hawaiijelly](https://www.instagram.com/hawaiijelly)**"
+        )
 
     st.markdown(title_line)
 
@@ -619,6 +627,8 @@ def render_payment_and_feedback():
     st.info(help_text)
 
     st.markdown("---")
+
+    # ✨ 결제 의사(좌) / 결제 버튼 및 안내(우) 분리
     col1, col2 = st.columns([3, 2])
 
     with col1:
@@ -634,16 +644,6 @@ def render_payment_and_feedback():
                 })
                 st.success(TEXT["feedback_sent"])
 
-        # 💳 PayPal & Kakao Buttons 추가 (영문/한글 UI에 따라 표시)
-        st.markdown("### 💳 Direct Payment Options")
-        colA, colB = st.columns(2)
-        with colA:
-            st.link_button("💳 PayPal ($3 / 50 uses)", "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG")
-        with colB:
-            st.link_button("💬 KakaoTalk (jeuspo)", "https://pf.kakao.com/jeuspo/chat")
-
-    with col2:
-        # (관리자 비밀번호 → 디버그용 유지)
         admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
         if admin_input:
             if admin_input in ADMIN_KEYS:
@@ -656,6 +656,14 @@ def render_payment_and_feedback():
                     st.info(TEXT["admin_already"])
             else:
                 st.error(TEXT["admin_wrong"])
+
+    with col2:
+        st.markdown("### 💳 Direct Payment")
+        st.link_button("💳 PayPal ($3 / 50 uses)", "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG")
+        st.link_button("💬 KakaoTalk (jeuspo)", "https://pf.kakao.com/jeuspo/chat")
+        st.markdown("---")
+        st.markdown(payment_notice)
+
 
 
 # ================= Display Chat History =================
