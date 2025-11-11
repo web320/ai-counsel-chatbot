@@ -634,6 +634,14 @@ def render_payment_and_feedback():
                 })
                 st.success(TEXT["feedback_sent"])
 
+        # 💳 PayPal & Kakao Buttons 추가 (영문/한글 UI에 따라 표시)
+        st.markdown("### 💳 Direct Payment Options")
+        colA, colB = st.columns(2)
+        with colA:
+            st.link_button("💳 PayPal ($3 / 50 uses)", "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG")
+        with colB:
+            st.link_button("💬 KakaoTalk (jeuspo)", "https://pf.kakao.com/jeuspo/chat")
+
     with col2:
         # (관리자 비밀번호 → 디버그용 유지)
         admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
