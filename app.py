@@ -400,32 +400,47 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-# ================= Payment / Feedback Panel =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
-    st.markdown("#### 50회 이용권 3,000원 결제 의사 확인")
+    # 🔹 언어별 라벨/문구 분기
+    is_en = (language == "English 🇺🇸")
+    if is_en:
+        title_line = "#### 50 uses for **$3** — Purchase intent"
+        btn_label = "💳 $3 for 50 uses — I'm interested"
+        info_already = "💙 You've already registered your interest. Thank you!"
+        success_msg = "We'll notify you first when payments open 💖"
+        caption_text = f"So far, **{total_intents}** people have shown interest."
+        plan_value = "50_uses_$3"
+    else:
+        title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
+        btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
+        info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
+        success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
+        caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
+        plan_value = "50회_3000원"
+
+    st.markdown(title_line)
 
     if clicked:
-        st.info("💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다.")
+        st.info(info_already)
     else:
-        if st.button("💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"):
+        if st.button(btn_label):
             intent_ref.set({
                 "uid": USER_ID,
-                "plan": "50회_3000원",
+                "plan": plan_value,
                 "created_at": datetime.utcnow().isoformat(),
             })
-            st.success("결제 기능이 열리면 가장 먼저 알려드릴게요 💖")
+            st.success(success_msg)
             st.rerun()
 
-    st.caption(f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요.")
+    st.caption(caption_text)
 
     st.markdown("---")
     col1, col2 = st.columns([3, 2])
@@ -433,30 +448,23 @@ def render_payment_and_feedback():
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-
         if st.button("📩 Submit / 보내기"):
             if not fb.strip():
                 st.warning(TEXT["feedback_empty"])
             else:
                 db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                    "uid": USER_ID,
-                    "feedback": fb,
-                    "lang": language,
+                    "uid": USER_ID, "feedback": fb, "lang": language,
                     "created_at": datetime.utcnow().isoformat()
                 })
                 st.success(TEXT["feedback_sent"])
 
     with col2:
         admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
-
         if admin_input:
             if admin_input in ADMIN_KEYS:
                 if not st.session_state.get("admin_unlocked"):
                     new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
-                    persist_user({
-                        "is_paid": True,
-                        "remaining_paid_uses": new_remaining
-                    })
+                    persist_user({"is_paid": True, "remaining_paid_uses": new_remaining})
                     st.session_state["admin_unlocked"] = True
                     st.success(TEXT["admin_success"])
                 else:
