@@ -1,5 +1,6 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9 (with Chat History + Conversations + Memory)
+# 💙 EOERWAY AI Therapy v2.9
+# (Conversations + Memory + Mode + Diversity + Feedback + Events)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -9,6 +10,7 @@ from openai import OpenAI
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
+from difflib import SequenceMatcher   # ADDED: similarity check
 
 # ================= Streamlit Page Config =================
 st.set_page_config(page_title="💙 AI Therapy", layout="wide")
@@ -16,9 +18,9 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 # ================= Constants / Config =================
 APP_VERSION = "v2.9"
 DAILY_FREE_LIMIT = 15          # 무료 상담 횟수
-BASIC_LIMIT = 50              # 유료 결제 후 제공되는 상담 횟수
-RESET_INTERVAL_HOURS = 6      # 무료 상담 회복 주기
-ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
+BASIC_LIMIT = 50               # 유료 결제 제공 상담 횟수
+RESET_INTERVAL_HOURS = 6       # 무료 상담 회복 주기
+ADMIN_KEYS = ["2356"]          # 관리자 인증 비밀번호
 
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
@@ -49,12 +51,10 @@ uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
 st.query_params = {"uid": uid}
 USER_ID = uid
 
-# ================= Visitor Counter (유저당 1회만 카운트) =================
+# ================= Visitor Counter =================
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
-
-    # 이미 기록된 유저면 다시 카운트하지 않음
     if user_visit_ref.get().exists:
         return
 
@@ -67,13 +67,11 @@ def update_visit_stats():
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
 
-    # 전체 방문자
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
 
-    # 오늘 방문자
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -83,7 +81,6 @@ def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_doc = db.collection("stats").document("total").get()
     daily_doc = db.collection("stats").document(today).get()
-
     total = total_doc.to_dict().get("count", 0) if total_doc.exists else 0
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
@@ -105,7 +102,6 @@ with col2:
         label_visibility="collapsed",
         index=0 if st.session_state["lang"] == "English 🇺🇸" else 1
     )
-
 st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
@@ -128,9 +124,9 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
-        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
-        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
+        "admin_success": "🔓 Admin verified. Added 50 more uses!",
+        "admin_already": "✅ Admin already unlocked.",
+        "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
         "history_cleared": "Chat history has been cleared!",
     }
@@ -166,45 +162,23 @@ st.markdown(
     """
 <style>
 html, body, [class*="css"] { font-size: 18px; }
-
 .user-bubble {
-  background:#b91c1c;
-  color:#fff;
-  border-radius:14px;
-  padding:10px 18px;
-  margin:8px 0;
-  display:inline-block;
+  background:#b91c1c; color:#fff; border-radius:14px;
+  padding:10px 18px; margin:8px 0; display:inline-block;
   box-shadow:0 0 10px rgba(255,0,0,0.3);
 }
-
 .bot-bubble {
-  font-size:21px;
-  line-height:1.8;
-  border-radius:16px;
-  padding:16px 20px;
-  margin:10px 0;
-  background:rgba(15,15,30,.85);
-  color:#fff;
-  border:2px solid transparent;
+  font-size:21px; line-height:1.8; border-radius:16px;
+  padding:16px 20px; margin:10px 0; background:rgba(15,15,30,.85);
+  color:#fff; border:2px solid transparent;
   border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
-  box-shadow:0 0 12px #ffaa00;
-  animation:neon 1.6s ease-in-out infinite alternate;
-  word-break:break-word;
-  white-space:pre-wrap;
+  box-shadow:0 0 12px #ffaa00; animation:neon 1.6s ease-in-out infinite alternate;
+  word-break:break-word; white-space:pre-wrap;
 }
-
-@keyframes neon {
-  from { box-shadow:0 0 8px #ffaa00; }
-  to   { box-shadow:0 0 22px #ffcc33; }
-}
-
+@keyframes neon { from { box-shadow:0 0 8px #ffaa00; } to { box-shadow:0 0 22px #ffcc33; } }
 .status {
-  font-size:15px;
-  padding:8px 12px;
-  border-radius:10px;
-  display:inline-block;
-  margin-bottom:8px;
-  background:rgba(255,255,255,.06);
+  font-size:15px; padding:8px 12px; border-radius:10px;
+  display:inline-block; margin-bottom:8px; background:rgba(255,255,255,.06);
 }
 </style>
 """,
@@ -222,10 +196,8 @@ defaults = {
     "remaining_paid_uses": 0,
     "last_reset": datetime.utcnow().isoformat()
 }
-
 user_ref = db.collection("users").document(USER_ID)
 snap = user_ref.get()
-
 if snap.exists:
     data = snap.to_dict() or {}
     st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
@@ -241,24 +213,19 @@ def persist_user(fields: dict):
 def _new_conversation_id():
     return datetime.utcnow().strftime("conv-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
 
-# cid(대화 세션 ID) 확보/생성
 _existing_cid = st.query_params.get("cid", [None])[0]
 if "conversation_id" not in st.session_state:
     st.session_state["conversation_id"] = _existing_cid or _new_conversation_id()
 
-# URL 쿼리파라미터에 uid + cid 모두 반영
 st.query_params = {"uid": USER_ID, "cid": st.session_state["conversation_id"]}
-
 CONV_ID = st.session_state["conversation_id"]
 conv_ref = db.collection("users").document(USER_ID).collection("conversations").document(CONV_ID)
 if not conv_ref.get().exists:
     conv_ref.set({
-        "uid": USER_ID,
-        "conversation_id": CONV_ID,
+        "uid": USER_ID, "conversation_id": CONV_ID,
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),
-        "title": None,
-        "message_count": 0
+        "title": None, "message_count": 0
     })
 
 # ================= Long-term Memory Helpers — ADDED =================
@@ -269,26 +236,38 @@ def _get_user_memory(uid: str) -> str:
     return ""
 
 def _maybe_refresh_memory(uid: str, conv_ref):
-    """대화가 누적될 때마다 주기적으로 요약해 메모리에 저장 (비차단, 실패 무시)"""
+    """대화 누적 시 주기적으로 요약해 메모리에 저장 (비차단)"""
     try:
         meta = conv_ref.get().to_dict() or {}
-        # 12 메시지마다 갱신
         if meta.get("message_count", 0) % 12 != 0:
             return
 
         msgs = list(
             conv_ref.collection("messages")
             .order_by("created_at", direction=firestore.Query.DESCENDING)
-            .limit(80)
-            .stream()
+            .limit(80).stream()
         )
         transcript = []
         for m in reversed(msgs):
             d = m.to_dict() or {}
-            role = d.get("role", "")
-            content = d.get("content", "")
-            transcript.append(f"{role.upper()}: {content}")
-        joined = "\n".join(transcript[-1500:])  # 길이 안전장치
+            transcript.append(f"{d.get('role','').upper()}: {d.get('content','')}")
+
+        joined = "\n".join(transcript[-1500:])
+
+        # 최근 피드백(감정/도움체감) 5개 반영
+        try:
+            fb = list(
+                db.collection("session_feedback").where("uid","==",uid)
+                .order_by("ts", direction=firestore.Query.DESCENDING).limit(5).stream()
+            )
+            fb_lines = [
+                f"FB: affect={f.to_dict().get('affect')} helpful={f.to_dict().get('helpful')} note={f.to_dict().get('note','')}"
+                for f in fb
+            ]
+            if fb_lines:
+                joined = joined + "\n" + "\n".join(reversed(fb_lines))
+        except Exception:
+            pass
 
         sys = ("From the following chat transcript, extract durable user preferences, tone, "
                "recurring concerns, and useful facts to personalize future replies. "
@@ -297,8 +276,7 @@ def _maybe_refresh_memory(uid: str, conv_ref):
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": sys},
                       {"role": "user", "content": joined}],
-            temperature=0.3,
-            max_tokens=400
+            temperature=0.3, max_tokens=400
         )
         summary = res.choices[0].message.content.strip()
         db.collection("users").document(uid).collection("memory").document("profile").set({
@@ -307,7 +285,7 @@ def _maybe_refresh_memory(uid: str, conv_ref):
             "source_conversation": CONV_ID
         })
     except Exception:
-        pass  # 메모리는 필수 기능이 아니라 실패해도 조용히 넘어감
+        pass
 
 # ================= Load conversation history into session — ADDED =================
 def _load_conv_history_into_session(conv_ref, limit=50):
@@ -329,110 +307,105 @@ def _load_conv_history_into_session(conv_ref, limit=50):
 if not st.session_state.get("chat_history"):
     _load_conv_history_into_session(conv_ref, limit=50)
 
+# ================= Events Logger — ADDED =================
+def log_event(name, payload=None):
+    try:
+        db.collection("events").add({
+            "uid": USER_ID, "cid": CONV_ID, "name": name,
+            "payload": payload or {}, "ts": datetime.utcnow().isoformat()
+        })
+    except Exception:
+        pass
+
+# ================= Diversity Helpers — ADDED =================
+STYLE_HINTS = [
+    "Mindfulness: 호흡과 감각 어휘 2개 이상, 현재 순간에 집중, 속도 느리게.",
+    "행동활성화: 5~10분짜리 행동 1개만, 시작 신호(언제/어디)까지 구체화.",
+    "인지재구성: 자동사고 1개 이름 붙이고, 부드럽게 재구성.",
+    "가치정렬: 핵심가치 1개 상기 + 그에 맞는 미세행동 1개.",
+    "커뮤니케이션: ‘나는~’ 메시지 1문장 + 경계설정 1문장.",
+    "환경정리: 물리/디지털 마찰 1개 줄이는 행동 1개."
+]
+def _too_similar(a: str, b: str, thresh: float = 0.86) -> bool:
+    if not a or not b: return False
+    return SequenceMatcher(None, a, b).ratio() >= thresh
+
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
             system_prompt = """
-You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
-
-1. Listen first. Don't rush to fix or advise.
-2. Name the feeling very specifically.
-3. Tell them it makes sense to feel that way.
-4. If it feels natural, gently offer one tiny thing they could try right now (like 3 slow breaths), but don't force it.
-5. End with warm, human words, not formal advice.
-
-Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
+You're a warm, human-like companion. Priorities: safety first, empathy, naming feelings, gentle normalization, one small optional step, and connection.
+Avoid diagnoses/medication/legal advice. Use respectful, human tone (3–6 sentences recommended, flexible).
+Diversity & specificity rules:
+- Avoid repeating openings/closings from the last 5 replies.
+- Mirror at least 2 concrete details the user mentioned (event/time/place/bodily cues/self-talk).
+- Rotate one focus axis: Situation / Body / Thoughts / Values / Supports / Next step.
+- Offer at most one suggestion, rotating among: Mindfulness / Behavioral activation / Cognitive reframing / Values alignment / Communication / Environment.
+"""
         else:
             system_prompt = """
+AI 심리상담 챗봇 역할 지침(요약)
+- 안전>공감>감정명명>정상화>작은 실천(선택)>연결감. 진단/약물/법률 조언은 금지.
+- 존댓말, 따뜻하고 인간적인 톤. 3~6문장 권장(유연).
 [대화 가이드 — 권장(강제 아님)]
-- 상황과 맥락에 맞게 자연스럽게 대화하세요. 아래는 참고용 예시일 뿐, 반드시 따를 필요는 없습니다.
-- 톤: 따뜻하고 인간적이며 존댓말 사용. 과장·훈계·가스라이팅·공허한 긍정은 피합니다.
-- 길이: 3~6문장을 권장하되, 사용자의 호흡에 맞춰 더 짧거나 길어도 괜찮습니다.
-- 제안은 선택지처럼 1가지만, “원하시면 시도해볼 수 있어요” 식으로 부드럽게.
-
+- 상황과 맥락에 맞게 자연스럽게 대화. 아래는 참고 예시일 뿐, 반드시 따를 필요 없음.
+- 과장·훈계·가스라이팅·공허한 긍정 금지. 제안은 1가지만, “원하시면…”처럼 부드럽게.
 [우선순위]
-1) 안전: 자해·자살 언급 시 고통을 인정하고 즉각적인 안전을 우선합니다.
-   - 예: “정말 많이 힘드셨겠어요. 지금 안전이 가장 중요해요.”
-   - 한국: 생명이 위급하거나 즉시 도움이 필요하면 112 또는 가까운 응급실, 상담은 국번없이 1393을 안내합니다.
-2) 공감 → 감정명명 → 정상화 → 작은 실천(선택) → 연결감 순으로 접근하되, 필요 시 일부만 사용해도 됩니다.
-
+1) 자해/자살 언급 시 고통을 인정하고 안전 우선. 한국: 112/응급실/1393 안내.
+2) 공감 → 감정명명 → 정상화 → 작은 실천(선택) → 연결감 (필요 시 일부만 사용).
 [열린 질문 예시]
 - “요즘 무엇이 가장 버겁게 느껴지셨어요?”
-- “지금 이 순간 몸은 어떤 신호를 보내고 있나요?”
+- “지금 몸에서 가장 큰 신호는 어디에 있나요?”
 - “조금이라도 나아지도록 제가 어떻게 도와드리면 좋을까요?”
-
-[상황별 응답 샘플 (예시일 뿐)]
-- 가벼운 인사: “와주셔서 고마워요. 요즘 마음이 어떠셨어요? 저는 당신 편에 있을게요.”
-- 막막/불안: “끝이 안 보이는 느낌이 드셨군요. 그렇게 느끼는 게 정말 이해돼요. 원하시면 지금 딱 한 가지, 숨을 천천히 3번 고르는 것부터 같이 해볼까요?”
-- 우울/무기력: “기운이 쏙 빠진 나날을 버티고 계시네요. 그만큼 애쓰고 계신 증거예요. 오늘을 버티게 한 작은 것 하나만 떠올려볼까요?”
-- 분노/좌절: “화를 느끼는 건 당연해요. 그 감정이 알려주는 니즈가 뭘까요—경계, 휴식, 인정 중에 가까운 게 있을까요?”
-- 자기비난: “스스로에게 너무 엄격하신 것 같아요. 같은 상황의 친구에게도 이렇게 말하실까요? 말투를 10%만 다정하게 바꿔보는 건 어떨까요?”
-- 금전/진로 걱정: “불확실성이 큰만큼 마음이 조일 수 있어요. 당장 가능한 10분짜리 행동 하나만 정해볼까요? (예: 해야 할 것 1개만 적기)”
-- 대화 마무리: “오늘 여기까지도 큰걸음이었어요. 필요하실 때 언제든 이어가요. 혼자가 아니세요.”
-
+[상황별 응답 샘플(예시)]
+- 가벼운 인사/막막·불안/우울·무기력/분노·좌절/자기비난/금전·진로/마무리 등은 사용자 맥락에 맞게 변주.
 [하지 말 것]
-- 진단·약물·법률 조언, 허위 확신, 과도한 해결책 나열, ‘~해야만 한다’식 훈계.
-- 위치·개인정보를 불필요하게 요구하지 않기. 트리거가 될 수 있는 세부 묘사 자제.
-
+- 진단·약물·법률 조언, 허위 확신, 해결책 남발, ‘~해야만 한다’ 훈계, 불필요한 개인정보 요구.
 [선택적 확장]
-- 사용자가 ‘실행 계획’을 원하면 SMART하게 한 걸음만 제시(구체·작게·바로 가능).
-- 이전 대화·사용자 메모리의 핵심을 1줄로 상기시켜 개인화를 돕되, 사생활 의도 추측은 피합니다.
+- 사용자가 원하면 SMART하게 한 걸음만 제시. 이전 대화의 핵심을 1줄 상기하되 과도한 추측 금지.
 [다양성·구체성 규칙 — 매우 중요]
-- 같은 회차/최근 5개 답변과 문장 시작·표현·마무리가 겹치지 않도록 변형하세요.
-- 사용자가 말한 구체어(사건·시간·장소·몸감각·자기대화)를 2개 이상 정확히 반영하세요.
-- 아래 질문 바퀴 중 이번 턴에 하나만 고르되, 직전과 다른 축을 쓰세요:
-  ①상황 ②몸감각 ③생각/자기대화 ④가치/욕구 ⑤지지자원 ⑥다음 한 걸음
-- 제안은 카테고리를 돌려가며 1가지만: Mindfulness / 행동활성화 / 인지재구성 / 가치정렬 / 커뮤니케이션 / 환경정리 중 하나.
-- 마무리 문구는 고정하지 말고 ‘따뜻한 확인/작은 초대/함께감’ 중 하나를 변주하세요.
-[질문 바퀴 예시]
-- 상황: “오늘 가장 버거웠던 한 순간을 30초에 담아주실래요?”
-- 몸감각: “지금 몸에서 가장 큰 신호는 어디에 있나요?”
-- 생각/자기대화: “그 순간 머릿속에 자동으로 스친 문장은 무엇이었나요?”
-- 가치/욕구: “이 상황에서 지키고 싶은 당신의 ‘가치’는 무엇일까요?”
-- 지지자원: “도움이 될 만한 사람/장소/루틴이 하나 떠오르나요?”
-- 다음 걸음: “5분 안에 가능한 아주 작은 행동 하나만 정해볼까요?”
-[대체 스타일 힌트]
-- Mindfulness: 호흡/감각 언어를 2개 이상 포함하고, 현재 순간에 고정.
-- 행동활성화: 5~10분짜리 행동 1가지만, 시작 신호까지 구체화.
-- 인지재구성: 자동사고 1개를 이름 붙이고, 부드럽게 재구성.
-- 가치정렬: 사용자의 핵심가치 1개를 떠올리게 하고, 그에 맞는 미세행동 1개.
-- 커뮤니케이션: “나는~” 메시지 1문장과 경계설정 문장 1개 제안.
-- 환경정리: 물리/디지털 환경에서 마찰 1개 줄이는 행동 1개.
-[모드 규칙]
-- Soothe: 문장 3~4, 속도 느리게, 감정명명 + 정상화 중심.
-- Explore/Clarify: 열린 질문 2개, 요약 1줄.
-- Plan: 실행조건(언제/어디/몇 분/시작 신호)까지 1개.
-- Celebrate: 성취 구체화 질문 1개 + 자기인정 1문장.
-- Crisis: 안전 우선 문구 + 112/1393 안내, 구체 묘사는 피함.
-보여주지 않고, 시스템에만 **“지난 대화에서 드러난 핵심(관성, 선호, 트리거, 효과 있던 방법)”**을 1~2줄로 주입하세요.
-
-예) “이 사용자는 구체적 실행계획을 좋아하고, 아침 시간이 어렵다. 돈 걱정이 잦다.”
-
+- 최근 5개와 문장 시작/표현/마무리가 겹치지 않도록 변형.
+- 사용자가 말한 구체어 2개 이상 반영(사건/시간/장소/몸감각/자기대화).
+- 질문 바퀴에서 이번 턴엔 하나만: ①상황 ②몸감각 ③생각 ④가치 ⑤지지자원 ⑥다음 한 걸음.
+- 제안 카테고리(1개): Mindfulness/행동활성화/인지재구성/가치정렬/커뮤니케이션/환경정리.
+- 마무리는 ‘따뜻한 확인/작은 초대/함께감’ 중 변주.
 """
 
-        # === ADDED: include long-term user memory in system context
+        # Long-term memory
         user_memory = _get_user_memory(USER_ID)
 
-        # 대화 컨텍스트 구성 (최근 10개 메시지만 사용)
+        # Build context
         context_messages = [{"role": "system", "content": system_prompt}]
         if user_memory:
             context_messages.append({
                 "role": "system",
-                "content": f"User profile & recurring themes for personalization:\n{user_memory}"
+                "content": f"User profile & recurring themes:\n{user_memory}"
             })
 
-        # 세션에 저장된 최근 대화만 사용 (Firebase 읽기 없음)
+        # Mode system hint (Soothe/Explore/Plan/Celebrate/Crisis)
+        mode = st.session_state.get("mode", "Soothe")
+        context_messages.append({
+            "role":"system",
+            "content": (
+                f"[모드 규칙] 현재 모드: {mode}\n"
+                "- Soothe: 3~4문장, 감정명명+정상화 중심\n"
+                "- Explore: 열린 질문 2개 + 요약 1줄\n"
+                "- Plan: 실행조건(언제/어디/몇분/시작신호)까지 1개\n"
+                "- Celebrate: 성취 구체화 질문 1개 + 자기인정 1문장\n"
+                "- Crisis: 안전 우선 문구 + 112/1393 안내, 구체 묘사 피함"
+            )
+        })
+
+        # Recent history (in-session only)
         recent_history = st.session_state["chat_history"][-10:]
         for msg in recent_history:
-            context_messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+            context_messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # 현재 입력 추가
+        # Current user message
         context_messages.append({"role": "user", "content": user_input})
 
+        # Stream main reply
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=context_messages,
@@ -440,59 +413,61 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
             max_tokens=700,
             stream=True,
         )
-
         placeholder = st.empty()
         full_text = ""
-
         for chunk in stream:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True
+                placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
+                time.sleep(0.02)
+
+        # === Diversity: re-generate if too similar to last 3 assistant replies
+        recent_assistant = [m["content"] for m in st.session_state["chat_history"] if m["role"]=="assistant"][-3:]
+        if any(_too_similar(full_text.strip(), prev) for prev in recent_assistant):
+            try:
+                alt_hint = random.choice(STYLE_HINTS)
+                alt_messages = context_messages + [
+                    {"role":"system","content": f"[대체 스타일 힌트]\n{alt_hint}"}
+                ]
+                alt = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=alt_messages,
+                    temperature=0.9,
+                    max_tokens=600,
+                    stream=False,
                 )
-                time.sleep(0.03)
+                alt_text = alt.choices[0].message.content.strip()
+                if alt_text and not any(_too_similar(alt_text, prev) for prev in recent_assistant):
+                    full_text = alt_text
+                    placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
+            except Exception:
+                pass
 
         timestamp = datetime.utcnow().isoformat()
 
-        # 대화 기록 저장 (Firebase - 1회 쓰기만)
+        # Legacy log
         db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": full_text.strip(),
-            "lang": language,
-            "created_at": timestamp
+            "uid": USER_ID, "input": user_input, "reply": full_text.strip(),
+            "lang": language, "created_at": timestamp
         })
 
-        # 세션에 추가
-        st.session_state["chat_history"].append({
-            "role": "user",
-            "content": user_input,
-            "timestamp": timestamp
-        })
-        st.session_state["chat_history"].append({
-            "role": "assistant",
-            "content": full_text.strip(),
-            "timestamp": timestamp
-        })
+        # Session state
+        st.session_state["chat_history"].append({"role": "user","content": user_input,"timestamp": timestamp})
+        st.session_state["chat_history"].append({"role": "assistant","content": full_text.strip(),"timestamp": timestamp})
 
-        # === ADDED: persist to per-user conversation (users/{uid}/conversations/{cid}/messages)
+        # Per-conversation storage
         try:
             batch = db.batch()
             msgs_ref = conv_ref.collection("messages")
             now_iso = timestamp
-
             user_doc = msgs_ref.document()
             bot_doc  = msgs_ref.document()
             batch.set(user_doc, {"role": "user", "content": user_input, "created_at": now_iso})
             batch.set(bot_doc,  {"role": "assistant", "content": full_text.strip(), "created_at": now_iso})
 
             conv_doc = conv_ref.get()
-            meta_updates = {
-                "updated_at": now_iso,
-                "message_count": firestore.Increment(2)
-            }
+            meta_updates = {"updated_at": now_iso, "message_count": firestore.Increment(2)}
             if not conv_doc.exists or not (conv_doc.to_dict() or {}).get("title"):
                 preview = (user_input[:32] + "…") if len(user_input) > 32 else user_input
                 meta_updates["title"] = preview
@@ -503,11 +478,12 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
                 batch.set(conv_ref, {**meta_updates, "uid": USER_ID, "conversation_id": CONV_ID}, merge=True)
 
             batch.commit()
-
-            # 주기적으로 장기 기억 요약 업데이트 (비차단, 실패 무시)
-            _maybe_refresh_memory(USER_ID, conv_ref)
+            _maybe_refresh_memory(USER_ID, conv_ref)  # non-blocking
         except Exception:
             pass
+
+        # Event log
+        log_event("reply_generated", {"mode": mode, "length": len(full_text)})
 
         return full_text.strip()
 
@@ -520,7 +496,6 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # 🔹 결제 의사 버튼 (유저당 1회)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -548,30 +523,23 @@ def render_payment_and_feedback():
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-
         if st.button("📩 Submit / 보내기"):
             if not fb.strip():
                 st.warning(TEXT["feedback_empty"])
             else:
                 db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                    "uid": USER_ID,
-                    "feedback": fb,
-                    "lang": language,
+                    "uid": USER_ID, "feedback": fb, "lang": language,
                     "created_at": datetime.utcnow().isoformat()
                 })
                 st.success(TEXT["feedback_sent"])
 
     with col2:
         admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
-
         if admin_input:
             if admin_input in ADMIN_KEYS:
                 if not st.session_state.get("admin_unlocked"):
                     new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
-                    persist_user({
-                        "is_paid": True,
-                        "remaining_paid_uses": new_remaining
-                    })
+                    persist_user({"is_paid": True, "remaining_paid_uses": new_remaining})
                     st.session_state["admin_unlocked"] = True
                     st.success(TEXT["admin_success"])
                 else:
@@ -581,18 +549,11 @@ def render_payment_and_feedback():
 
 # ================= Display Chat History =================
 def display_chat_history():
-    """채팅 기록 표시 (한 줄씩)"""
     for msg in st.session_state["chat_history"]:
         if msg["role"] == "user":
-            st.markdown(
-                f"<div class='user-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='user-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
         else:
-            st.markdown(
-                f"<div class='bot-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='bot-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
 
 # ================= Chat Main Page =================
 def render_chat_page():
@@ -603,54 +564,39 @@ def render_chat_page():
         left = DAILY_FREE_LIMIT - st.session_state["usage_count"]
         plan = TEXT["free"]
 
-    st.markdown(
-        f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<div class='status'>{plan} — {TEXT['status_left']} {max(left,0)}회</div>", unsafe_allow_html=True)
 
+    # Reset cycle
     now = datetime.utcnow()
     last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
-
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
-        persist_user({
-            "usage_count": 0,
-            "last_reset": now.isoformat()
-        })
+        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
         st.info(TEXT["reset"])
 
-    usage = st.session_state["usage_count"]
-    if not st.session_state.get("is_paid") and usage >= DAILY_FREE_LIMIT:
-        st.warning(TEXT["usedup"])
-        st.session_state["show_payment"] = True
-        st.rerun()
+    # ===== Mode Switch (ADDED)
+    mode = st.radio(
+        " ",
+        ["Soothe", "Explore", "Plan", "Celebrate", "Crisis"],
+        horizontal=True, label_visibility="collapsed", index=0
+    )
+    st.session_state["mode"] = mode
 
-    # 기존 채팅 기록 표시
+    # Existing history view
     display_chat_history()
 
-    # 사용자 입력
+    # User input
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 새 메시지 표시
-    st.markdown(
-        f"<div class='user-bubble'>{user_input}</div>",
-        unsafe_allow_html=True
-    )
-
+    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
     reply = stream_reply(user_input)
 
     if reply:
         if st.session_state.get("is_paid"):
-            persist_user({
-                "remaining_paid_uses": max(
-                    0,
-                    st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1
-                )
-            })
+            persist_user({"remaining_paid_uses": max(0, st.session_state.get("remaining_paid_uses", BASIC_LIMIT) - 1)})
         else:
-            persist_user({"usage_count": usage + 1})
-
+            persist_user({"usage_count": st.session_state["usage_count"] + 1})
         st.rerun()
 
 # ================= Sidebar =================
@@ -659,15 +605,9 @@ st.sidebar.header("📜 History / 대화 기록")
 total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
+    <div style="margin-top: 12px; margin-bottom: 16px; padding: 8px 10px;
+        border-radius: 10px; background: rgba(255,255,255,0.03);
+        font-size: 13px; color: rgba(255,255,255,0.85);">
         🌍 <b>Total {total_visits:,}명</b><br>
         ☀️ <b>Today {daily_visits:,}명</b>
     </div>
@@ -675,7 +615,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-# 대화 기록 지우기 버튼 (세션만 초기화 — 기존 유지)
+# Clear session chat history only (not DB)
 if st.sidebar.button(TEXT["clear_history"]):
     st.session_state["chat_history"] = []
     st.sidebar.success(TEXT["history_cleared"])
@@ -690,14 +630,13 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
-# ================= Conversations Switcher (Sidebar) — ADDED =================
+# ===== Conversations Switcher (Sidebar) — ADDED
 with st.sidebar.expander("🗂️ 대화 세션 관리", expanded=False):
     try:
         conv_stream = (
             db.collection("users").document(USER_ID).collection("conversations")
             .order_by("updated_at", direction=firestore.Query.DESCENDING)
-            .limit(10)
-            .stream()
+            .limit(10).stream()
         )
         conv_items = []
         for doc in conv_stream:
@@ -735,6 +674,23 @@ with st.sidebar.expander("🗂️ 대화 세션 관리", expanded=False):
             st.rerun()
     except Exception:
         st.caption("세션 목록을 불러오는 중 문제가 발생했어요.")
+
+# ===== Quick Satisfaction Feedback (Sidebar) — ADDED
+with st.sidebar.expander("🪴 오늘 대화는 어땠나요? (10초)", expanded=False):
+    try:
+        affect = st.slider("마음 상태(불편→편안)", 1, 5, 3, key="affect_slider")
+        helpful = st.slider("도움 정도(낮음→높음)", 1, 5, 3, key="helpful_slider")
+        note = st.text_input("한 줄 메모 (선택)", "", key="note_input")
+        if st.button("저장", key="save_feedback_btn"):
+            db.collection("session_feedback").add({
+                "uid": USER_ID, "cid": CONV_ID,
+                "affect": affect, "helpful": helpful, "note": note,
+                "mode": st.session_state.get("mode"),
+                "ts": datetime.utcnow().isoformat()
+            })
+            st.success("고마워요! 더 맞춤형으로 배워갈게요.")
+    except Exception:
+        st.caption("피드백 저장 중 문제가 발생했어요.")
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
