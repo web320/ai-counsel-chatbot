@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9 (with Chat History + Conversations + Memory)
+# 💙 EOERWAY AI Therapy v2.9 (Chat History only / No Conversations, No Quick-Feedback)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -237,97 +237,12 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Conversations (Per-User) — ADDED =================
-def _new_conversation_id():
-    return datetime.utcnow().strftime("conv-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
-
-# cid(대화 세션 ID) 확보/생성
-_existing_cid = st.query_params.get("cid", [None])[0]
-if "conversation_id" not in st.session_state:
-    st.session_state["conversation_id"] = _existing_cid or _new_conversation_id()
-
-# URL 쿼리파라미터에 uid + cid 모두 반영
-st.query_params = {"uid": USER_ID, "cid": st.session_state["conversation_id"]}
-
-CONV_ID = st.session_state["conversation_id"]
-conv_ref = db.collection("users").document(USER_ID).collection("conversations").document(CONV_ID)
-if not conv_ref.get().exists:
-    conv_ref.set({
-        "uid": USER_ID,
-        "conversation_id": CONV_ID,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
-        "title": None,
-        "message_count": 0
-    })
-
-# ================= Long-term Memory Helpers — ADDED =================
+# ================= Long-term Memory (read-only; keeps as-is) =================
 def _get_user_memory(uid: str) -> str:
     doc = db.collection("users").document(uid).collection("memory").document("profile").get()
     if doc.exists:
         return (doc.to_dict() or {}).get("text", "")
     return ""
-
-def _maybe_refresh_memory(uid: str, conv_ref):
-    """대화가 누적될 때마다 주기적으로 요약해 메모리에 저장 (비차단, 실패 무시)"""
-    try:
-        meta = conv_ref.get().to_dict() or {}
-        # 12 메시지마다 갱신
-        if meta.get("message_count", 0) % 12 != 0:
-            return
-
-        msgs = list(
-            conv_ref.collection("messages")
-            .order_by("created_at", direction=firestore.Query.DESCENDING)
-            .limit(80)
-            .stream()
-        )
-        transcript = []
-        for m in reversed(msgs):
-            d = m.to_dict() or {}
-            role = d.get("role", "")
-            content = d.get("content", "")
-            transcript.append(f"{role.upper()}: {content}")
-        joined = "\n".join(transcript[-1500:])  # 길이 안전장치
-
-        sys = ("From the following chat transcript, extract durable user preferences, tone, "
-               "recurring concerns, and useful facts to personalize future replies. "
-               "Keep it under 180 words. Use bullet points.")
-        res = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": sys},
-                      {"role": "user", "content": joined}],
-            temperature=0.3,
-            max_tokens=400
-        )
-        summary = res.choices[0].message.content.strip()
-        db.collection("users").document(uid).collection("memory").document("profile").set({
-            "text": summary,
-            "updated_at": datetime.utcnow().isoformat(),
-            "source_conversation": CONV_ID
-        })
-    except Exception:
-        pass  # 메모리는 필수 기능이 아니라 실패해도 조용히 넘어감
-
-# ================= Load conversation history into session — ADDED =================
-def _load_conv_history_into_session(conv_ref, limit=50):
-    try:
-        msgs = conv_ref.collection("messages").order_by("created_at").limit(limit).stream()
-        loaded = []
-        for m in msgs:
-            d = m.to_dict() or {}
-            loaded.append({
-                "role": d.get("role", "assistant" if d.get("role") != "user" else "user"),
-                "content": d.get("content", ""),
-                "timestamp": d.get("created_at", "")
-            })
-        if loaded:
-            st.session_state["chat_history"] = loaded[-50:]
-    except Exception:
-        pass
-
-if not st.session_state.get("chat_history"):
-    _load_conv_history_into_session(conv_ref, limit=50)
 
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
@@ -411,7 +326,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
 
 """
 
-        # === ADDED: include long-term user memory in system context
+        # 메모리(읽기만)
         user_memory = _get_user_memory(USER_ID)
 
         # 대화 컨텍스트 구성 (최근 10개 메시지만 사용)
@@ -477,37 +392,7 @@ Respond in 4-6 sentences, warm and human, never clinical. Never diagnose or sugg
             "timestamp": timestamp
         })
 
-        # === ADDED: persist to per-user conversation (users/{uid}/conversations/{cid}/messages)
-        try:
-            batch = db.batch()
-            msgs_ref = conv_ref.collection("messages")
-            now_iso = timestamp
-
-            user_doc = msgs_ref.document()
-            bot_doc  = msgs_ref.document()
-            batch.set(user_doc, {"role": "user", "content": user_input, "created_at": now_iso})
-            batch.set(bot_doc,  {"role": "assistant", "content": full_text.strip(), "created_at": now_iso})
-
-            conv_doc = conv_ref.get()
-            meta_updates = {
-                "updated_at": now_iso,
-                "message_count": firestore.Increment(2)
-            }
-            if not conv_doc.exists or not (conv_doc.to_dict() or {}).get("title"):
-                preview = (user_input[:32] + "…") if len(user_input) > 32 else user_input
-                meta_updates["title"] = preview
-
-            if conv_doc.exists:
-                batch.update(conv_ref, meta_updates)
-            else:
-                batch.set(conv_ref, {**meta_updates, "uid": USER_ID, "conversation_id": CONV_ID}, merge=True)
-
-            batch.commit()
-
-            # 주기적으로 장기 기억 요약 업데이트 (비차단, 실패 무시)
-            _maybe_refresh_memory(USER_ID, conv_ref)
-        except Exception:
-            pass
+        # (REMOVED) per-user conversation 저장/메모리 요약 관련 코드
 
         return full_text.strip()
 
@@ -690,51 +575,7 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
-# ================= Conversations Switcher (Sidebar) — ADDED =================
-with st.sidebar.expander("🗂️ 대화 세션 관리", expanded=False):
-    try:
-        conv_stream = (
-            db.collection("users").document(USER_ID).collection("conversations")
-            .order_by("updated_at", direction=firestore.Query.DESCENDING)
-            .limit(10)
-            .stream()
-        )
-        conv_items = []
-        for doc in conv_stream:
-            d = doc.to_dict() or {}
-            label = (d.get("title") or d.get("conversation_id") or doc.id)
-            updated = d.get("updated_at", "")
-            conv_items.append((doc.id, f"{label} · {updated[:16]}"))
-
-        if conv_items:
-            labels = [lbl for _, lbl in conv_items]
-            idx = 0
-            for i, (cid, _) in enumerate(conv_items):
-                if cid == CONV_ID:
-                    idx = i
-                    break
-            choice = st.selectbox("대화 선택", labels, index=idx)
-            selected_cid = conv_items[labels.index(choice)][0]
-            if selected_cid != CONV_ID:
-                st.session_state["conversation_id"] = selected_cid
-                st.session_state["chat_history"] = []
-                st.query_params = {"uid": USER_ID, "cid": selected_cid}
-                st.rerun()
-
-        if st.button("➕ 새 대화 시작"):
-            new_cid = datetime.utcnow().strftime("conv-%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
-            st.session_state["conversation_id"] = new_cid
-            st.session_state["chat_history"] = []
-            db.collection("users").document(USER_ID).collection("conversations").document(new_cid).set({
-                "uid": USER_ID, "conversation_id": new_cid,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-                "title": None, "message_count": 0
-            })
-            st.query_params = {"uid": USER_ID, "cid": new_cid}
-            st.rerun()
-    except Exception:
-        st.caption("세션 목록을 불러오는 중 문제가 발생했어요.")
+# (REMOVED) Conversations Switcher / Quick Satisfaction Feedback
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
