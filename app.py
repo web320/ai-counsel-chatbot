@@ -1,16 +1,21 @@
 # ==========================================
 # 💙 EOERWAY AI Therapy v2.9 — Wallet + Voucher + Paywall (50 uses = $3)
-# CLEAN REBUILD (syntax safe)
+# CLEAN REBUILD (syntax safe) + PayPal + Email sender + Webhook
 # ==========================================
 # - 4시간/7회 무료, 초과 시 크레딧 차감 (위기문구는 항상 무료)
 # - 지갑(크레딧) + 바우처(50회/$3) + 관리자 코드 생성기
 # - 스타일/질문 바퀴로 단조로움 완화 + 퀵리플라이 버튼
 # - 답변 길이: 기본 4~8문장, 필요 시 8~12문장 (max_tokens=900)
+# - PayPal 결제(클라이언트 버튼) → 승인 시 바우처 자동 발급(간이, 서버검증X)
+# - 이메일(SMTP)로 코드 발송 + 웹훅(op=issue_voucher) 제공 (Zapier/Kakao용)
 
 import os
 import uuid
 import json
 import time
+import smtplib
+import ssl
+from email.mime.text import MIMEText
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -42,17 +47,17 @@ STYLE_WHEEL = ["Soothe", "Explore", "Clarify", "Plan", "Celebrate"]
 QUESTION_WHEEL_KO = ["상황", "몸감각", "생각/자기대화", "가치/욕구", "다음 한 걸음"]
 QUESTION_WHEEL_EN = ["situation", "body sensation", "self-talk", "value/need", "next step"]
 
-# ================= ads.txt (for AdSense) =================
-try:
-    if "ads.txt" in st.query_params:  # Streamlit 1.31+
-        st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
-        st.stop()
-except Exception:
-    pass
-
-# ================= OpenAI (LLM) =================
+# ===== Secrets / External =====
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+PAYPAL_CLIENT_ID = st.secrets.get("PAYPAL_CLIENT_ID", "")  # 실제 값 넣으면 버튼 활성화
+ISSUE_TOKEN = st.secrets.get("ISSUE_TOKEN", "changeme-token")  # 웹훅 보호용 토큰
+SMTP_HOST = st.secrets.get("SMTP_HOST", "")
+SMTP_PORT = int(st.secrets.get("SMTP_PORT", 465))
+SMTP_USER = st.secrets.get("SMTP_USER", "")
+SMTP_PASS = st.secrets.get("SMTP_PASS", "")
+SMTP_FROM = st.secrets.get("SMTP_FROM", SMTP_USER or "")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ================= Firebase =================
@@ -69,33 +74,58 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# ================= Utilities =================
+
+def qp(name: str, default=None):
+    """Query param 안전 접근"""
+    try:
+        v = st.query_params.get(name)
+        if isinstance(v, list):
+            return v[0] if v else default
+        return v if v is not None else default
+    except Exception:
+        return default
+
+
+def gen_code(n: int = 10) -> str:
+    return uuid.uuid4().hex[:n].upper()
+
+
+def send_email_smtp(to_addr: str, subject: str, body: str) -> bool:
+    if not (SMTP_HOST and SMTP_USER and SMTP_PASS and SMTP_FROM):
+        return False
+    try:
+        msg = MIMEText(body, _charset="utf-8")
+        msg["Subject"] = subject
+        msg["From"] = SMTP_FROM
+        msg["To"] = to_addr
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_FROM, [to_addr], msg.as_string())
+        return True
+    except Exception:
+        return False
+
 # ================= UID / Session =================
 if "uid" not in st.session_state:
     st.session_state["uid"] = str(uuid.uuid4())
 USER_ID = st.session_state["uid"]
 
 # ================= Visitor Counter =================
+
 def update_visit_stats():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     user_visit_ref = db.collection("user_visits").document(USER_ID)
-
     if user_visit_ref.get().exists:
         return
-
-    user_visit_ref.set({
-        "uid": USER_ID,
-        "first_visit": datetime.utcnow().isoformat(),
-        "day": today
-    })
-
+    user_visit_ref.set({"uid": USER_ID, "first_visit": datetime.utcnow().isoformat(), "day": today})
     total_ref = db.collection("stats").document("total")
     daily_ref = db.collection("stats").document(today)
-
     if total_ref.get().exists:
         total_ref.update({"count": firestore.Increment(1)})
     else:
         total_ref.set({"count": 1})
-
     if daily_ref.get().exists:
         daily_ref.update({"count": firestore.Increment(1)})
     else:
@@ -117,7 +147,6 @@ if "visit_logged" not in st.session_state:
 # ================= Language State =================
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
-
 col_lang_a, col_lang_b = st.columns([5, 1])
 with col_lang_b:
     lang_choice = st.radio(
@@ -144,7 +173,7 @@ if language == "English 🇺🇸":
         "feedback_placeholder": "e.g., The AI felt really comforting 💕",
         "feedback_sent": "💖 Feedback saved safely. Thank you!",
         "feedback_empty": "Please write something 💬",
-        "payment_title": "💳 Payment Guide",
+        "payment_title": "💳 Payment & Codes",
         "feedback_title": "💌 Service Feedback",
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
@@ -163,7 +192,9 @@ if language == "English 🇺🇸":
         "paywall": "You've used your free limit. Redeem a code to continue.",
         "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 Admin — Generate Voucher Codes",
-        "admin_make": "Generate"
+        "admin_make": "Generate",
+        "paypal_header": "PayPal — 50 uses for $3",
+        "paypal_note": "After approval, a voucher will be issued automatically (beta)."
     }
 else:
     TEXT = {
@@ -178,7 +209,7 @@ else:
         "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
         "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
         "feedback_empty": "내용을 입력해주세요 💬",
-        "payment_title": "💳 결제 안내",
+        "payment_title": "💳 결제 & 코드",
         "feedback_title": "💌 서비스 피드백",
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
@@ -197,7 +228,9 @@ else:
         "paywall": "무료 한도를 모두 사용했어요. 코드를 충전하면 이어서 대화할 수 있어요.",
         "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 관리자 — 바우처 코드 생성",
-        "admin_make": "코드 생성"
+        "admin_make": "코드 생성",
+        "paypal_header": "PayPal — 50회 $3",
+        "paypal_note": "승인 후 자동으로 바우처가 발급됩니다(베타)."
     }
 
 st.title(TEXT["title"])
@@ -207,19 +240,10 @@ st.markdown(
     """
     <style>
     html, body, [class*="css"] { font-size: 18px; }
-    .user-bubble {
-      background:#b91c1c; color:#fff; border-radius:14px; padding:10px 18px; margin:8px 0;
-      display:inline-block; box-shadow:0 0 10px rgba(255,0,0,0.3);
-    }
-    .bot-bubble {
-      font-size:21px; line-height:1.8; border-radius:16px; padding:16px 20px; margin:10px 0;
-      background:rgba(15,15,30,.85); color:#fff; border:2px solid transparent;
-      border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1; box-shadow:0 0 12px #ffaa00;
-      animation:neon 1.6s ease-in-out infinite alternate; word-break:break-word; white-space:pre-wrap;
-    }
+    .user-bubble { background:#b91c1c; color:#fff; border-radius:14px; padding:10px 18px; margin:8px 0; display:inline-block; box-shadow:0 0 10px rgba(255,0,0,0.3); }
+    .bot-bubble { font-size:21px; line-height:1.8; border-radius:16px; padding:16px 20px; margin:10px 0; background:rgba(15,15,30,.85); color:#fff; border:2px solid transparent; border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1; box-shadow:0 0 12px #ffaa00; animation:neon 1.6s ease-in-out infinite alternate; word-break:break-word; white-space:pre-wrap; }
     @keyframes neon { from { box-shadow:0 0 8px #ffaa00; } to { box-shadow:0 0 22px #ffcc33; } }
-    .status { font-size:15px; padding:8px 12px; border-radius:10px; display:inline-block; margin-bottom:8px;
-      background:rgba(255,255,255,.06); }
+    .status { font-size:15px; padding:8px 12px; border-radius:10px; display:inline-block; margin-bottom:8px; background:rgba(255,255,255,.06); }
     </style>
     """,
     unsafe_allow_html=True
@@ -257,7 +281,7 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= (Optional) Memory Reader =================
+# ================= Optional Memory Reader =================
 
 def _get_user_memory(uid: str) -> str:
     doc = db.collection("users").document(uid).collection("memory").document("profile").get()
@@ -269,19 +293,19 @@ def _get_user_memory(uid: str) -> str:
 
 def ensure_user(uid: str):
     ref = db.collection("users").document(uid)
-    snap = ref.get()
-    if not snap.exists:
+    snap2 = ref.get()
+    if not snap2.exists:
         ref.set(defaults, merge=True)
     else:
-        missing = {k: v for k, v in defaults.items() if k not in (snap.to_dict() or {})}
+        missing = {k: v for k, v in defaults.items() if k not in (snap2.to_dict() or {})}
         if missing:
             ref.set(missing, merge=True)
     return ref
 
 
 def get_user(uid: str) -> dict:
-    doc = db.collection("users").document(uid).get()
-    return doc.to_dict() or {}
+    doc2 = db.collection("users").document(uid).get()
+    return doc2.to_dict() or {}
 
 
 def create_voucher(code: str, credits: int, note: str = "", created_by: str = "admin"):
@@ -309,26 +333,16 @@ def redeem_voucher(code: str, uid: str):
         v = v_snap.to_dict()
         if v.get("used_by"):
             raise ValueError("ALREADY_USED")
-
         u_snap = user_ref_local.get(transaction=transaction)
         if not u_snap.exists:
             transaction.set(user_ref_local, defaults)
             u = {"credits": 0, "purchased_packs": 0, "last_reset": datetime.utcnow().isoformat()}
         else:
             u = u_snap.to_dict()
-
         new_credits = int(u.get("credits", 0)) + int(v.get("credits", 0))
         new_packs = int(u.get("purchased_packs", 0)) + 1
-
-        transaction.update(user_ref_local, {
-            "credits": new_credits,
-            "purchased_packs": new_packs,
-            "updated_at": firestore.SERVER_TIMESTAMP
-        })
-        transaction.update(voucher_ref, {
-            "used_by": uid,
-            "used_at": firestore.SERVER_TIMESTAMP
-        })
+        transaction.update(user_ref_local, {"credits": new_credits, "purchased_packs": new_packs, "updated_at": firestore.SERVER_TIMESTAMP})
+        transaction.update(voucher_ref, {"used_by": uid, "used_at": firestore.SERVER_TIMESTAMP})
         return new_credits
 
     transaction = db.transaction()
@@ -347,14 +361,33 @@ def decrement_credit(uid: str, amount: int = 1):
         curr = int(data_local.get("credits", 0))
         if curr < amount:
             raise ValueError("NO_CREDIT")
-        transaction.update(user_ref_local, {
-            "credits": curr - amount,
-            "updated_at": firestore.SERVER_TIMESTAMP
-        })
+        transaction.update(user_ref_local, {"credits": curr - amount, "updated_at": firestore.SERVER_TIMESTAMP})
         return curr - amount
 
     transaction = db.transaction()
     return _tx(transaction)
+
+# ================= Webhook: issue_voucher (GET) =================
+# 사용: https://yourapp/?op=issue_voucher&token=ISSUE_TOKEN&email=abc@x.com
+op = qp("op")
+if op == "issue_voucher":
+    token = qp("token")
+    if token != ISSUE_TOKEN:
+        st.json({"ok": False, "error": "bad_token"})
+        st.stop()
+    email_to = qp("email")
+    code = gen_code(10)
+    create_voucher(code, CREDIT_PACK_SIZE, note="webhook")
+    emailed = False
+    if email_to:
+        body = (
+            f"Your EOERWAY voucher code: {code}\n\n"
+            f"Value: {CREDIT_PACK_SIZE} uses ($ {CREDIT_PACK_PRICE_USD})\n"
+            "Redeem inside the app sidebar → My Wallet → Redeem.\n"
+        )
+        emailed = send_email_smtp(email_to, "Your EOERWAY Code", body)
+    st.json({"ok": True, "code": code, "emailed": emailed})
+    st.stop()
 
 # ================= Variety Helpers =================
 
@@ -365,10 +398,7 @@ def _next_style_and_qtype():
         st.session_state["q_idx"] = 0
     style = STYLE_WHEEL[st.session_state["style_idx"]]
     st.session_state["style_idx"] = (st.session_state["style_idx"] + 1) % len(STYLE_WHEEL)
-    if language == "English 🇺🇸":
-        qwheel = QUESTION_WHEEL_EN
-    else:
-        qwheel = QUESTION_WHEEL_KO
+    qwheel = QUESTION_WHEEL_EN if language == "English 🇺🇸" else QUESTION_WHEEL_KO
     qtype = qwheel[st.session_state["q_idx"]]
     st.session_state["q_idx"] = (st.session_state["q_idx"] + 1) % len(qwheel)
     return style, qtype
@@ -384,7 +414,7 @@ def quick_replies_for(lang: str):
     base_en = ["Tell me more", "Give me a 1‑minute step", "Summarize briefly"]
     return base_en if lang == "English 🇺🇸" else base_ko
 
-# ================= AI Response Function =================
+# ================= AI Response =================
 
 def is_crisis(text: str) -> bool:
     t = (text or "").lower()
@@ -399,9 +429,9 @@ def stream_reply(user_input: str):
         if language == "English 🇺🇸":
             system_prompt = (
                 "You're talking to someone who came here because they're hurting. Not as a therapist, "
-                "but as a real person who genuinely cares. Default to 4–8 sentences; if the user writes "
-                "a long message or asks for depth, go longer (up to ~10–12). Never diagnose or suggest "
-                "medication. If they mention self‑harm or suicide, gently acknowledge their pain and suggest professional help."
+                "but as a real person who genuinely cares. Default to 4–8 sentences; if the user writes a long "
+                "message or asks for depth, go longer (up to ~10–12). Never diagnose or suggest medication. "
+                "If they mention self‑harm or suicide, gently acknowledge their pain and suggest professional help."
             )
         else:
             system_prompt = (
@@ -413,7 +443,6 @@ def stream_reply(user_input: str):
 
         user_memory = _get_user_memory(USER_ID)
         style, qtype = _next_style_and_qtype()
-
         if "last_starters" not in st.session_state:
             st.session_state["last_starters"] = []
         forbidden_starters = " | ".join(st.session_state["last_starters"][-4:])
@@ -424,10 +453,8 @@ def stream_reply(user_input: str):
             context_messages.append({"role": "system", "content": f"Avoid starting with these openings: {forbidden_starters}"})
         if user_memory:
             context_messages.append({"role": "system", "content": f"Personalization memory: {user_memory}"})
-
         for msg in st.session_state["chat_history"][-10:]:
             context_messages.append({"role": msg["role"], "content": msg["content"]})
-
         context_messages.append({"role": "user", "content": user_input})
 
         stream = client.chat.completions.create(
@@ -440,39 +467,24 @@ def stream_reply(user_input: str):
 
         placeholder = st.empty()
         full_text = ""
-
         for chunk in stream:
             delta = chunk.choices[0].delta
             if hasattr(delta, "content") and delta.content:
                 full_text += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True
-                )
+                placeholder.markdown(f"<div class='bot-bubble'>{full_text}💫</div>", unsafe_allow_html=True)
                 time.sleep(0.02)
 
         timestamp = datetime.utcnow().isoformat()
-
-        db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": full_text.strip(),
-            "lang": language,
-            "created_at": timestamp
-        })
-
+        db.collection("chats").add({"uid": USER_ID, "input": user_input, "reply": full_text.strip(), "lang": language, "created_at": timestamp})
         st.session_state["chat_history"].append({"role": "user", "content": user_input, "timestamp": timestamp})
         st.session_state["chat_history"].append({"role": "assistant", "content": full_text.strip(), "timestamp": timestamp})
-
         try:
             st.session_state["last_starters"].append(_starter(full_text))
             st.session_state["last_starters"] = st.session_state["last_starters"][-5:]
         except Exception:
             pass
-
         st.session_state["quick_replies"] = quick_replies_for(language)
         return full_text.strip()
-
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
@@ -501,12 +513,48 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
         show_paywall()
         return False, False
 
+# ================= PayPal (Client Buttons) =================
+
+def render_paypal_checkout():
+    st.subheader(TEXT["paypal_header"])
+    st.caption(TEXT["paypal_note"])
+    if not PAYPAL_CLIENT_ID:
+        st.info("Set PAYPAL_CLIENT_ID in secrets to enable PayPal buttons.")
+        st.link_button("PayPal.me (fallback)", "https://www.paypal.com/paypalme/YOUR_ID/3")
+        return
+    issue_url = "?op=issue_voucher&token=" + ISSUE_TOKEN
+    html = f"""
+<div id='paypal-button-container'></div>
+<script src='https://www.paypal.com/sdk/js?client-id={PAYPAL_CLIENT_ID}&currency=USD'></script>
+<script>
+paypal.Buttons({{
+  createOrder: function(data, actions) {{
+    return actions.order.create({{
+      purchase_units: [{{ amount: {{ value: '3.00' }}, description: 'EOERWAY 50 uses pack' }}]
+    }});
+  }},
+  onApprove: async function(data, actions) {{
+    await actions.order.capture();
+    const resp = await fetch((window.location.search?window.location.href+'&':'?') + 'op=issue_voucher&token={ISSUE_TOKEN}', {{credentials:'same-origin'}});
+    const json = await resp.json();
+    const el = document.getElementById('paypal-button-container');
+    el.innerHTML = '<div style="font-size:18px; padding:10px; color:#0f0">Your code: <b>' + (json.code || 'CHECK EMAIL') + '</b></div>';
+  }}
+}}).render('#paypal-button-container');
+</script>
+"""
+    st.components.v1.html(html, height=250)
+
 # ================= Payment & Feedback =================
 
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
+    # PayPal 영역
+    render_paypal_checkout()
+
+    # 결제 의사 수집 (기존 UX 유지)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -520,7 +568,6 @@ def render_payment_and_feedback():
         success_msg = "We'll notify you first when payments open 💖"
         caption_text = f"So far, **{total_intents}** people have shown interest."
         plan_value = "50_uses_$3"
-        help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
         btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
@@ -528,10 +575,8 @@ def render_payment_and_feedback():
         success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
         plan_value = "50회_3000원"
-        help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
 
     st.markdown(title_line)
-
     if clicked:
         st.info(info_already)
     else:
@@ -539,9 +584,7 @@ def render_payment_and_feedback():
             intent_ref.set({"uid": USER_ID, "plan": plan_value, "created_at": datetime.utcnow().isoformat()})
             st.success(success_msg)
             st.rerun()
-
     st.caption(caption_text)
-    st.info(help_text)
 
     st.markdown("---")
     col1, col2 = st.columns([3, 2])
@@ -559,7 +602,7 @@ def render_payment_and_feedback():
                     "lang": language,
                     "created_at": datetime.utcnow().isoformat()
                 })
-                st.success(TEXT["feedback_sent"])}
+                st.success(TEXT["feedback_sent"])
 
     with col2:
         admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
@@ -578,12 +621,11 @@ def render_payment_and_feedback():
 # ================= Display Chat History =================
 
 def display_chat_history():
-    for idx, msg in enumerate(st.session_state["chat_history"]):
+    for msg in st.session_state["chat_history"]:
         if msg["role"] == "user":
             st.markdown(f"<div class='user-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
         else:
             st.markdown(f"<div class='bot-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-
     qr = st.session_state.get("quick_replies", [])
     if qr:
         cols = st.columns(len(qr))
@@ -597,7 +639,6 @@ def display_chat_history():
 
 def render_chat_page():
     ensure_user(USER_ID)
-
     credits_now = int(st.session_state.get("credits", 0))
     usage = int(st.session_state.get("usage_count", 0))
 
@@ -608,17 +649,13 @@ def render_chat_page():
         left_display = credits_now
         plan_label = TEXT["paid"] if credits_now > 0 else TEXT["free"]
 
-    st.markdown(
-        f"<div class='status'>{plan_label} — {TEXT['status_left']} {max(left_display, 0)}회</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<div class='status'>{plan_label} — {TEXT['status_left']} {max(left_display, 0)}회</div>", unsafe_allow_html=True)
 
     now = datetime.utcnow()
     try:
         last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
     except Exception:
         last_reset = now
-
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         persist_user({"usage_count": 0, "last_reset": now.isoformat()})
         st.info(TEXT["reset"])
@@ -627,10 +664,7 @@ def render_chat_page():
     display_chat_history()
 
     preset = st.session_state.pop("pending_input", None)
-    if preset:
-        user_input = preset
-    else:
-        user_input = st.chat_input(TEXT["input"])
+    user_input = preset if preset else st.chat_input(TEXT["input"])
     if not user_input:
         return
 
@@ -641,7 +675,6 @@ def render_chat_page():
         return
 
     st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
-
     reply = stream_reply(user_input)
     if reply:
         if not used_credit and usage < DAILY_FREE_LIMIT:
@@ -702,20 +735,36 @@ with st.sidebar.expander(TEXT["admin_gen"]):
         st.success("관리자 모드 활성화")
 
     if st.session_state.is_admin:
-        def gen_code(n: int = 8) -> str:
+        def gen_code_local(n: int = 8) -> str:
             return uuid.uuid4().hex[:n].upper()
-
         num = st.number_input("생성 개수", min_value=1, max_value=200, value=10)
         credits_each = st.number_input("코드당 크레딧", min_value=1, max_value=1000, value=CREDIT_PACK_SIZE)
         note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
         if st.button(TEXT["admin_make"]):
             out_codes = []
             for _ in range(int(num)):
-                c = gen_code(10)
+                c = gen_code_local(10)
                 create_voucher(c, int(credits_each), note=note)
                 out_codes.append(c)
             st.success("코드 생성 완료! 아래 목록을 보관하세요.")
             st.code("\n".join(out_codes))
+        st.divider()
+        st.markdown("#### 📧 Email code (SMTP)")
+        email_to = st.text_input("send to")
+        if st.button("Send 50-use code by email"):
+            code = gen_code(10)
+            create_voucher(code, CREDIT_PACK_SIZE, note="admin_email")
+            body = (
+                f"Your EOERWAY voucher code: {code}\n\n"
+                f"Value: {CREDIT_PACK_SIZE} uses ($ {CREDIT_PACK_PRICE_USD})\n"
+                "Redeem inside the app sidebar → My Wallet → Redeem.\n"
+            )
+            ok_send = send_email_smtp(email_to, "Your EOERWAY Code", body) if email_to else False
+            if ok_send:
+                st.success(f"Sent to {email_to}")
+            else:
+                st.warning("Email not sent (SMTP not configured). Code generated below.")
+                st.code(code)
 
 # Payment & Feedback 토글
 if st.session_state.get("show_payment"):
@@ -732,5 +781,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
