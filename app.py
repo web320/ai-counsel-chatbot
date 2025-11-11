@@ -21,9 +21,9 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.9"
-DAILY_FREE_LIMIT = 15          # 무료 상담 횟수 (6시간마다 복구)
+DAILY_FREE_LIMIT = 7        # 무료 상담 횟수 (6시간마다 복구)
 BASIC_LIMIT = 50               # (과거 호환용) 남아있는 유료 회수 개념
-RESET_INTERVAL_HOURS = 6       # 무료 상담 회복 주기
+RESET_INTERVAL_HOURS = 4       # 무료 상담 회복 주기
 ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
 
 # 💳 크레딧/코드 과금 체계
