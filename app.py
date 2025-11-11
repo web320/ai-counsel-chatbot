@@ -36,6 +36,11 @@ CRISIS_KEYWORDS = [
     "suicide", "self-harm", "kill myself", "end my life"
 ]
 
+# ===== Conversational Variety (Style & Question wheels) =====
+STYLE_WHEEL = ["Soothe", "Explore", "Clarify", "Plan", "Celebrate"]
+QUESTION_WHEEL_KO = ["상황", "몸감각", "생각/자기대화", "가치/욕구", "다음 한 걸음"]
+QUESTION_WHEEL_EN = ["situation", "body sensation", "self-talk", "value/need", "next step"]
+
 # ================= ads.txt (for AdSense) =================
 if "ads.txt" in st.query_params:
     st.write("google.com, pub-5846666879010880, DIRECT, f08c47fec0942fa0")
@@ -382,6 +387,33 @@ def decrement_credit(uid: str, amount: int = 1):
 
 
 # ================= AI Response Function =================
+# Helpers for variety
+def _next_style_and_qtype():
+    if 'style_idx' not in st.session_state: st.session_state['style_idx'] = 0
+    if 'q_idx' not in st.session_state: st.session_state['q_idx'] = 0
+    style = STYLE_WHEEL[st.session_state['style_idx']]
+    st.session_state['style_idx'] = (st.session_state['style_idx'] + 1) % len(STYLE_WHEEL)
+    if language == "English 🇺🇸":
+        qwheel = QUESTION_WHEEL_EN
+    else:
+        qwheel = QUESTION_WHEEL_KO
+    qtype = qwheel[st.session_state['q_idx']]
+    st.session_state['q_idx'] = (st.session_state['q_idx'] + 1) % len(qwheel)
+    return style, qtype
+
+def _starter(text: str) -> str:
+    s = (text or "").strip()
+    return s[:14] if len(s) > 14 else s
+
+# Quick replies generator
+def quick_replies_for(user_input: str, reply: str, lang: str):
+    base_ko = ["계속 얘기할래요", "지금 할 수 있는 1분 행동 알려줘", "짧게 요약해줘"]
+    base_en = ["Tell me more", "Give me a 1‑minute step", "Summarize briefly"]
+    if lang == "English 🇺🇸":
+        return base_en
+    return base_ko
+
+
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
@@ -467,7 +499,14 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
         user_memory = _get_user_memory(USER_ID)
 
         # 대화 컨텍스트 구성 (최근 10개 메시지만 사용)
-        context_messages = [{"role": "system", "content": system_prompt}]
+        style, qtype = _next_style_and_qtype()
+# 최근 시작 문장 기록(반복 피하기)
+if 'last_starters' not in st.session_state: st.session_state['last_starters'] = []
+forbidden_starters = " | ".join(st.session_state['last_starters'][-4:])
+context_messages = [{"role": "system", "content": system_prompt}]
+context_messages.append({"role": "system", "content": f"Current style focus: {style}. Ask exactly one {qtype}-type question at the end."})
+if forbidden_starters:
+    context_messages.append({"role": "system", "content": f"Avoid starting with these openings: {forbidden_starters}"})
         if user_memory:
             context_messages.append({
                 "role": "system",
@@ -503,6 +542,10 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
                     unsafe_allow_html=True
                 )
                 time.sleep(0.03)
+                    f"<div class='bot-bubble'>{full_text}💫</div>",
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.03)
 
         timestamp = datetime.utcnow().isoformat()
 
@@ -521,6 +564,23 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
             "content": user_input,
             "timestamp": timestamp
         })
+        st.session_state["chat_history"].append({
+            "role": "assistant",
+            "content": full_text.strip(),
+            "timestamp": timestamp
+        })
+
+        # 다양성 메모리: 시작 문장 추출해서 기록
+        try:
+            st.session_state['last_starters'].append(_starter(full_text))
+            st.session_state['last_starters'] = st.session_state['last_starters'][-5:]
+        except Exception:
+            pass
+
+        # Quick replies 저장
+        st.session_state['quick_replies'] = quick_replies_for(user_input, full_text, language)
+
+        return full_text.strip()
         st.session_state["chat_history"].append({
             "role": "assistant",
             "content": full_text.strip(),
@@ -654,7 +714,7 @@ def render_payment_and_feedback():
 
 def display_chat_history():
     """채팅 기록 표시 (한 줄씩)"""
-    for msg in st.session_state["chat_history"]:
+    for idx, msg in enumerate(st.session_state["chat_history"]):
         if msg["role"] == "user":
             st.markdown(
                 f"<div class='user-bubble'>{msg['content']}</div>",
@@ -665,6 +725,14 @@ def display_chat_history():
                 f"<div class='bot-bubble'>{msg['content']}</div>",
                 unsafe_allow_html=True
             )
+    # 마지막 봇 메시지 아래에 Quick Replies 노출
+    qr = st.session_state.get('quick_replies', [])
+    if qr:
+        cols = st.columns(len(qr))
+        for i, q in enumerate(qr):
+            if cols[i].button(q, key=f"qr_{i}_{len(st.session_state['chat_history'])}"):
+                st.session_state['pending_input'] = q
+                st.rerun()
 
 
 # ================= Chat Main Page =================
@@ -701,8 +769,12 @@ def render_chat_page():
     # 기존 채팅 기록 표시
     display_chat_history()
 
-    # 사용자 입력
-    user_input = st.chat_input(TEXT["input"])
+    # 사용자 입력 (Quick Reply가 눌리면 자동 전송)
+    preset = st.session_state.pop('pending_input', None)
+    if preset:
+        user_input = preset
+    else:
+        user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
@@ -820,4 +892,5 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
 
