@@ -21,7 +21,7 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.9"
-DAILY_FREE_LIMIT = 7        # 무료 상담 횟수 (6시간마다 복구)
+DAILY_FREE_LIMIT = 7          # 무료 상담 횟수 (6시간마다 복구)
 BASIC_LIMIT = 50               # (과거 호환용) 남아있는 유료 회수 개념
 RESET_INTERVAL_HOURS = 4       # 무료 상담 회복 주기
 ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
@@ -133,8 +133,8 @@ if language == "English 🇺🇸":
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
         "warn": "Please enter something 💬",
-        "usedup": "🌙 You've used all 15 free sessions today!",
-        "reset": "⏰ Free sessions reset! (Every 6 hours)",
+        "usedup": f"🌙 You've used all {DAILY_FREE_LIMIT} free sessions.",
+        "reset": f"⏰ Free sessions reset! (Every {RESET_INTERVAL_HOURS} hours)",
         "reply_error": "AI response error",
         "feedback_placeholder": "e.g., The AI felt really comforting 💕",
         "feedback_sent": "💖 Feedback saved safely. Thank you!",
@@ -167,8 +167,8 @@ else:
         "paid": "💎 유료 이용중",
         "input": "지금 어떤 기분이예요?",
         "warn": "내용을 입력해주세요 💬",
-        "usedup": "🌙 오늘의 무료 상담 15회를 모두 사용했어요!",
-        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (6시간마다 복구)",
+        "usedup": f"🌙 오늘의 무료 상담 {DAILY_FREE_LIMIT}회를 모두 사용했어요!",
+        "reset": f"⏰ 무료 상담이 다시 가능해졌어요! ({RESET_INTERVAL_HOURS}시간마다 복구)",
         "reply_error": "AI 응답 오류",
         "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
         "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
@@ -820,3 +820,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
