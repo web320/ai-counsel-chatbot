@@ -538,7 +538,6 @@ def render_payment_and_feedback():
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
     is_en = (language == "English 🇺🇸")
-       if is_en:
         title_line = "#### 50 uses for **$3** — Purchase intent"
         btn_label = "💳 $3 for 50 uses — I'm interested"
         info_already = "💙 You've already registered your interest. Thank you!"
