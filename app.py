@@ -550,7 +550,8 @@ def render_payment_and_feedback():
             "📸 **After completing payment, please take a screenshot and send it to:**\n"
             "- ✉️ **newnewtry6@gmail.com**\n"
             "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
-            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n"
+            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
+            "✅ Once verified, your voucher code will be sent **within 3 minutes.**\n"
         )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
@@ -564,7 +565,8 @@ def render_payment_and_feedback():
             "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**\n"
             "- ✉️ **newnewtry6@gmail.com**\n"
             "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
-            "- 💬 카카오톡 아이디 **jeuspo**\n"
+            "- 💬 카카오톡 아이디 **jeuspo**\n\n"
+            "✅ 확인이 되면 **3분 이내에 코드가 발송됩니다.**\n"
         )
 
     st.markdown(title_line)
@@ -618,7 +620,7 @@ def render_payment_and_feedback():
     with col2:
         st.markdown("### 💳 Direct Payment")
 
-        # 🌈 네온 무지개 결제버튼 CSS
+        # 🌈 네온 무지개 결제버튼 CSS (hover 효과 추가됨)
         st.markdown("""
         <style>
         .rainbow-btn {
@@ -636,12 +638,13 @@ def render_payment_and_feedback():
             box-shadow:0 0 25px rgba(255,255,255,0.3);
             cursor:pointer;
             animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
-            transition:transform 0.2s;
+            transition:transform 0.25s, box-shadow 0.25s;
             text-decoration:none;
         }
         .rainbow-btn:hover {
             transform:scale(1.08);
-            box-shadow:0 0 40px rgba(255,255,255,0.8);
+            box-shadow:0 0 40px rgba(255,255,255,0.9);
+            filter:brightness(1.2);
         }
         @keyframes rainbowGlow {
             0% {background-position:0%;}
@@ -654,7 +657,6 @@ def render_payment_and_feedback():
         </style>
         """, unsafe_allow_html=True)
 
-        # 🌈 무지개 네온 버튼 출력
         paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
         btn_text = "💳 3달러 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
         st.markdown(f"""
@@ -663,6 +665,7 @@ def render_payment_and_feedback():
 
         st.markdown("---")
         st.markdown(payment_notice)
+
 
 # ================= Display Chat History =================
 def display_chat_history():
