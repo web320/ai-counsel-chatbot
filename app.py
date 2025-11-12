@@ -662,56 +662,54 @@ def render_payment_and_feedback():
                 st.error(TEXT["admin_wrong"])
 
   with col2:
-    st.markdown("### 💳 Direct Payment")
+        with col2:
+        st.markdown("### 💳 Direct Payment")
 
-    # 🌈 네온 무지개 결제버튼 CSS
-    st.markdown("""
-    <style>
-    .rainbow-btn {
-        display:inline-block;
-        padding:14px 28px;
-        font-size:18px;
-        font-weight:bold;
-        text-transform:uppercase;
-        color:white;
-        background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
-        background-size:400%;
-        border:none;
-        border-radius:50px;
-        text-shadow:0 0 10px rgba(255,255,255,0.7);
-        box-shadow:0 0 25px rgba(255,255,255,0.3);
-        cursor:pointer;
-        animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
-        transition:transform 0.2s;
-        text-decoration:none;
-    }
+        # 🌈 네온 무지개 결제버튼 CSS
+        st.markdown("""
+        <style>
+        .rainbow-btn {
+            display:inline-block;
+            padding:14px 28px;
+            font-size:18px;
+            font-weight:bold;
+            text-transform:uppercase;
+            color:white;
+            background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
+            background-size:400%;
+            border:none;
+            border-radius:50px;
+            text-shadow:0 0 10px rgba(255,255,255,0.7);
+            box-shadow:0 0 25px rgba(255,255,255,0.3);
+            cursor:pointer;
+            animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
+            transition:transform 0.2s;
+            text-decoration:none;
+        }
+        .rainbow-btn:hover {
+            transform:scale(1.08);
+            box-shadow:0 0 40px rgba(255,255,255,0.8);
+        }
+        @keyframes rainbowGlow {
+            0% {background-position:0%;}
+            100% {background-position:400%;}
+        }
+        @keyframes neonPulse {
+            0%,100% {text-shadow:0 0 10px #fff, 0 0 20px #ff00ff;}
+            50% {text-shadow:0 0 20px #00ffff, 0 0 40px #33ff33;}
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-    .rainbow-btn:hover {
-        transform:scale(1.08);
-        box-shadow:0 0 40px rgba(255,255,255,0.8);
-    }
+        # 🌈 무지개 네온 버튼 출력
+        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+        btn_text = "💳 3,000원 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
+        st.markdown(f"""
+        <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
+        """, unsafe_allow_html=True)
 
-    @keyframes rainbowGlow {
-        0% {background-position:0%;}
-        100% {background-position:400%;}
-    }
-
-    @keyframes neonPulse {
-        0%,100% {text-shadow:0 0 10px #fff, 0 0 20px #ff00ff;}
-        50% {text-shadow:0 0 20px #00ffff, 0 0 40px #33ff33;}
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # 🌈 네온 결제버튼 표시
-    paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-    st.markdown(f"""
-    <a href="{paypal_link}" target="_blank" class="rainbow-btn">💳 Pay $3 / 50 uses</a>
-    """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown(payment_notice)
-
+        st.markdown("---")
+        st.markdown(payment_notice)
 
 
 # ================= Display Chat History =================
