@@ -551,7 +551,8 @@ def render_payment_and_feedback():
             "- ✉️ **newnewtry6@gmail.com**\n"
             "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
             "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
-            "✅ When the developer confirms your message, **the voucher code will be sent immediately.** 💙"
+            "✅ When the developer confirms your message, "
+    "**the voucher code will be sent immediately.** 💙\n"
 \n"
         )
     else:
