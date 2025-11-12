@@ -21,14 +21,14 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.9"
-DAILY_FREE_LIMIT = 7        # 무료 상담 횟수 (6시간마다 복구)
-BASIC_LIMIT = 50               # (과거 호환용) 남아있는 유료 회수 개념
-RESET_INTERVAL_HOURS = 4       # 무료 상담 회복 주기
+DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
+RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
+BASIC_LIMIT = 50              # (과거 호환용) 남아있는 유료 회수 개념
 ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
 
 # 💳 크레딧/코드 과금 체계
-CREDIT_PACK_SIZE = 50     # 50회
-CREDIT_PACK_PRICE_USD = 3 # $3 (영문 UI 표기)
+CREDIT_PACK_SIZE = 50         # 50회
+CREDIT_PACK_PRICE_USD = 3     # $3 (영문 UI 표기)
 
 # 🚨 위기 키워드: 포함되면 차감/페이월 모두 우회 (안전 우선)
 CRISIS_KEYWORDS = [
@@ -133,8 +133,8 @@ if language == "English 🇺🇸":
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
         "warn": "Please enter something 💬",
-        "usedup": "🌙 You've used all 15 free sessions today!",
-        "reset": "⏰ Free sessions reset! (Every 6 hours)",
+        "usedup": f"🌙 You've used all {DAILY_FREE_LIMIT} free sessions today!",
+        "reset": f"⏰ Free sessions reset! (Every {RESET_INTERVAL_HOURS} hours)",
         "reply_error": "AI response error",
         "feedback_placeholder": "e.g., The AI felt really comforting 💕",
         "feedback_sent": "💖 Feedback saved safely. Thank you!",
@@ -167,8 +167,8 @@ else:
         "paid": "💎 유료 이용중",
         "input": "지금 어떤 기분이예요?",
         "warn": "내용을 입력해주세요 💬",
-        "usedup": "🌙 오늘의 무료 상담 15회를 모두 사용했어요!",
-        "reset": "⏰ 무료 상담이 다시 가능해졌어요! (6시간마다 복구)",
+        "usedup": f"🌙 오늘의 무료 상담 {DAILY_FREE_LIMIT}회를 모두 사용했어요!",
+        "reset": f"⏰ 무료 상담이 다시 가능해졌어요! ({RESET_INTERVAL_HOURS}시간마다 복구)",
         "reply_error": "AI 응답 오류",
         "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
         "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
@@ -254,7 +254,7 @@ if "chat_history" not in st.session_state:
 # ================= Firestore Defaults / User State =================
 defaults = {
     "is_paid": False,                    # (이전 호환) 사용 안 함
-    "usage_count": 0,                    # 무료 사용량(6시간 회복)
+    "usage_count": 0,                    # 무료 사용량(주기적 회복)
     "remaining_paid_uses": 0,            # (이전 호환) 사용 안 함
     "last_reset": datetime.utcnow().isoformat(),
     # 신규 지갑 필드
@@ -273,11 +273,9 @@ else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
-
 def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
-
 
 # ================= Long-term Memory (read-only; keeps as-is) =================
 def _get_user_memory(uid: str) -> str:
@@ -287,7 +285,6 @@ def _get_user_memory(uid: str) -> str:
     return ""
 
 # ================= Wallet / Voucher Helpers =================
-
 def ensure_user(uid: str):
     ref = db.collection("users").document(uid)
     snap = ref.get()
@@ -300,11 +297,9 @@ def ensure_user(uid: str):
             ref.set(to_merge, merge=True)
     return ref
 
-
 def get_user(uid: str) -> dict:
     doc = db.collection("users").document(uid).get()
     return doc.to_dict() or {}
-
 
 def create_voucher(code: str, credits: int, note: str = "", created_by: str = "admin"):
     db.collection("vouchers").document(code).set({
@@ -317,7 +312,6 @@ def create_voucher(code: str, credits: int, note: str = "", created_by: str = "a
         "note": note,
         "created_at": firestore.SERVER_TIMESTAMP,
     })
-
 
 def redeem_voucher(code: str, uid: str):
     voucher_ref = db.collection("vouchers").document(code)
@@ -358,7 +352,6 @@ def redeem_voucher(code: str, uid: str):
     transaction = db.transaction()
     return _tx(transaction)
 
-
 def decrement_credit(uid: str, amount: int = 1):
     user_ref = db.collection("users").document(uid)
 
@@ -379,7 +372,6 @@ def decrement_credit(uid: str, amount: int = 1):
 
     transaction = db.transaction()
     return _tx(transaction)
-
 
 # ================= AI Response Function =================
 def stream_reply(user_input: str):
@@ -430,39 +422,7 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
 [선택적 확장]
 - 사용자가 ‘실행 계획’을 원하면 SMART하게 한 걸음만 제시(구체·작게·바로 가능).
 - 이전 대화·사용자 메모리의 핵심을 1줄로 상기시켜 개인화를 돕되, 사생활 의도 추측은 피합니다.
-[다양성·구체성 규칙 — 매우 중요]
-- 같은 회차/최근 5개 답변과 문장 시작·표현·마무리가 겹치지 않도록 변형하세요.
-- 사용자가 말한 구체어(사건·시간·장소·몸감각·자기대화)를 2개 이상 정확히 반영하세요.
-- 아래 질문 바퀴 중 이번 턴에 하나만 고르되, 직전과 다른 축을 쓰세요:
-  ①상황 ②몸감각 ③생각/자기대화 ④가치/욕구 ⑤지지자원 ⑥다음 한 걸음
-- 제안은 카테고리를 돌려가며 1가지만: Mindfulness / 행동활성화 / 인지재구성 / 가치정렬 / 커뮤니케이션 / 환경정리 중 하나.
-- 마무리 문구는 고정하지 말고 ‘따뜻한 확인/작은 초대/함께감’ 중 하나를 변주하세요.
-[질문 바퀴 예시]
-- 상황: “오늘 가장 버거웠던 한 순간을 30초에 담아주실래요?”
-- 몸감각: “지금 몸에서 가장 큰 신호는 어디에 있나요?”
-- 생각/자기대화: “그 순간 머릿속에 자동으로 스친 문장은 무엇이었나요?”
-- 가치/욕구: “이 상황에서 지키고 싶은 당신의 ‘가치’는 무엇일까요?”
-- 지지자원: “도움이 될 만한 사람/장소/루틴이 하나 떠오르나요?”
-- 다음 걸음: “5분 안에 가능한 아주 작은 행동 하나만 정해볼까요?”
-[대체 스타일 힌트]
-- Mindfulness: 호흡/감각 언어를 2개 이상 포함하고, 현재 순간에 고정.
-- 행동활성화: 5~10분짜리 행동 1가지만, 시작 신호까지 구체화.
-- 인지재구성: 자동사고 1개를 이름 붙이고, 부드럽게 재구성.
-- 가치정렬: 사용자의 핵심가치 1개를 떠올리게 하고, 그에 맞는 미세행동 1개.
-- 커뮤니케이션: “나는~” 메시지 1문장과 경계설정 문장 1개 제안.
-- 환경정리: 물리/디지털 환경에서 마찰 1개 줄이는 행동 1개.
-[모드 규칙]
-- Soothe: 문장 3~4, 속도 느리게, 감정명명 + 정상화 중심.
-- Explore/Clarify: 열린 질문 2개, 요약 1줄.
-- Plan: 실행조건(언제/어디/몇 분/시작 신호)까지 1개.
-- Celebrate: 성취 구체화 질문 1개 + 자기인정 1문장.
-- Crisis: 안전 우선 문구 + 112/1393 안내, 구체 묘사는 피함.
-보여주지 않고, 시스템에만 **“지난 대화에서 드러난 핵심(관성, 선호, 트리거, 효과 있던 방법)”**을 1~2줄로 주입하세요.
-
-예) “이 사용자는 구체적 실행계획을 좋아하고, 아침 시간이 어렵다. 돈 걱정이 잦다.”
-
 """
-
         # 메모리(읽기만)
         user_memory = _get_user_memory(USER_ID)
 
@@ -533,13 +493,10 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-
 # ================= Paywall Guard =================
-
 def is_crisis(text: str) -> bool:
     t = (text or "").lower()
     return any(k in t for k in [k.lower() for k in CRISIS_KEYWORDS])
-
 
 def show_paywall():
     st.warning(TEXT["paywall"])  # 언어별 문구
@@ -549,7 +506,6 @@ def show_paywall():
 - 이미 코드를 갖고 있다면 **사이드바 → ‘{TEXT['wallet']}’ → ‘{TEXT['redeem']}’**에서 적용하세요.
         """
     )
-
 
 def charge_if_needed(user_input: str, free_used: int, free_limit: int):
     """무료 한도 초과 시 크레딧 1 차감. (위기는 우회)
@@ -571,9 +527,7 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
         show_paywall()
         return False, False
 
-
-# ================= Payment & Feedback (기존 유지, 안내만 보강) =================
-
+# ================= Payment & Feedback =================
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
@@ -661,8 +615,7 @@ def render_payment_and_feedback():
             else:
                 st.error(TEXT["admin_wrong"])
 
-  with col2:
-        with col2:
+    with col2:
         st.markdown("### 💳 Direct Payment")
 
         # 🌈 네온 무지개 결제버튼 CSS
@@ -711,9 +664,7 @@ def render_payment_and_feedback():
         st.markdown("---")
         st.markdown(payment_notice)
 
-
 # ================= Display Chat History =================
-
 def display_chat_history():
     """채팅 기록 표시 (한 줄씩)"""
     for msg in st.session_state["chat_history"]:
@@ -728,9 +679,7 @@ def display_chat_history():
                 unsafe_allow_html=True
             )
 
-
 # ================= Chat Main Page =================
-
 def render_chat_page():
     ensure_user(USER_ID)
     # 상태 라벨 계산: 무료 잔여 또는 크레딧
@@ -788,7 +737,6 @@ def render_chat_page():
         if not used_credit and usage < DAILY_FREE_LIMIT:
             persist_user({"usage_count": usage + 1})
         st.rerun()
-
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -882,5 +830,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
