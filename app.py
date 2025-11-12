@@ -551,7 +551,8 @@ def render_payment_and_feedback():
             "- ✉️ **newnewtry6@gmail.com**\n"
             "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
             "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
-            "✅ Once verified, your voucher code will be sent **within 3 minutes.**\n"
+            "✅ When the developer confirms your message, **the voucher code will be sent immediately.** 💙
+\n"
         )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
@@ -566,7 +567,7 @@ def render_payment_and_feedback():
             "- ✉️ **newnewtry6@gmail.com**\n"
             "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
             "- 💬 카카오톡 아이디 **jeuspo**\n\n"
-            "✅ 확인이 되면 **3분 이내에 코드가 발송됩니다.**\n"
+            "✅ 개발자가 문자를 확인하면 **즉시 코드를 발송해드립니다**\n"
         )
 
     st.markdown(title_line)
