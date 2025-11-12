@@ -656,7 +656,7 @@ def render_payment_and_feedback():
 
         # 🌈 무지개 네온 버튼 출력
         paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 3,000원 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
+        btn_text = "💳 3달러 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
         st.markdown(f"""
         <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
         """, unsafe_allow_html=True)
