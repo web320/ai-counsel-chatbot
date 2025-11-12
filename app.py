@@ -538,7 +538,7 @@ def render_payment_and_feedback():
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
     is_en = (language == "English 🇺🇸")
-    if is_en:
+       if is_en:
         title_line = "#### 50 uses for **$3** — Purchase intent"
         btn_label = "💳 $3 for 50 uses — I'm interested"
         info_already = "💙 You've already registered your interest. Thank you!"
@@ -552,8 +552,7 @@ def render_payment_and_feedback():
             "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
             "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
             "✅ When the developer confirms your message, "
-    "**the voucher code will be sent immediately.** 💙\n"
-\n"
+            "**the voucher code will be sent immediately.** 💙\n"
         )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
@@ -568,7 +567,7 @@ def render_payment_and_feedback():
             "- ✉️ **newnewtry6@gmail.com**\n"
             "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
             "- 💬 카카오톡 아이디 **jeuspo**\n\n"
-            "✅ 개발자가 문자를 확인하면 **즉시 코드를 발송해드립니다**\n"
+            "✅ 개발자가 문자를 확인하면 **즉시 코드를 발송해드립니다** 💙\n"
         )
 
     st.markdown(title_line)
