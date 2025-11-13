@@ -1,10 +1,7 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9 — Wallet + Voucher + Paywall + Memory
+# 💙 EOERWAY AI Therapy v2.9
+# Wallet + Voucher + Paywall + Memory (친구 톤 + 무료횟수 버그 수정)
 # ==========================================
-# 추가된 것:
-# - Firestore에 사용자 감정/고민 요약 메모리 저장 (users/{uid}/memory/profile)
-# - 매 대화마다 메모리를 업데이트해서 "감정 패턴 / 반복 고민 / 조심할 점" 축적
-# - 다음 응답 생성 시 이 메모리를 system 메시지로 넣어 개인화
 
 import os, uuid, json, time, random
 from datetime import datetime
@@ -21,7 +18,7 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 APP_VERSION = "v2.9"
 DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
 RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
-BASIC_LIMIT = 50              # (과거 호환용) 남아있는 유료 회수 개념
+BASIC_LIMIT = 50              # (과거 호환용)
 ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
 
 # 💳 크레딧/코드 과금 체계
@@ -251,11 +248,10 @@ if "chat_history" not in st.session_state:
 
 # ================= Firestore Defaults / User State =================
 defaults = {
-    "is_paid": False,                    # (이전 호환) 사용 안 함
+    "is_paid": False,
     "usage_count": 0,                    # 무료 사용량(주기적 회복)
-    "remaining_paid_uses": 0,            # (이전 호환) 사용 안 함
+    "remaining_paid_uses": 0,            # (이전 호환)
     "last_reset": datetime.utcnow().isoformat(),
-    # 신규 지갑 필드
     "credits": 0,
     "purchased_packs": 0,
     "ad_free": False,
@@ -266,21 +262,20 @@ snap = user_ref.get()
 
 if snap.exists:
     data = snap.to_dict() or {}
-    st.session_state.update({k: data.get(k, v) for k, v in defaults.items()})
+    # 세션 상태에 기본 필드만 심어두기 (주요 로직은 Firestore 값 기준으로 동작)
+    for k, v in defaults.items():
+        st.session_state.setdefault(k, data.get(k, v))
 else:
     user_ref.set(defaults)
     st.session_state.update(defaults)
 
 def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
+    # 세션에도 반영 (하지만 진짜 기준은 Firestore)
     st.session_state.update(fields)
 
 # ================= Long-term Memory (read-only) =================
 def _get_user_memory(uid: str) -> str:
-    """
-    Firestore: users/{uid}/memory/profile 문서에서 text 필드 읽기.
-    여기에는 '감정 패턴 / 반복 고민 / 말투 / 조심할 점' 등이 요약되어 있음.
-    """
     doc = db.collection("users").document(uid).collection("memory").document("profile").get()
     if doc.exists:
         return (doc.to_dict() or {}).get("text", "")
@@ -288,12 +283,6 @@ def _get_user_memory(uid: str) -> str:
 
 # ================= Long-term Memory (update) =================
 def update_user_memory(uid: str, user_input: str, reply: str, language: str):
-    """
-    매 대화마다 사용자 감정/고민 요약을 업데이트.
-    - 이전 요약 + 이번 대화 내용 기반으로 짧은 메모리 문자열 생성
-    - users/{uid}/memory/profile 에 저장
-    실패해도 메인 상담 흐름은 깨지지 않도록 예외는 조용히 무시.
-    """
     try:
         mem_ref = db.collection("users").document(uid).collection("memory").document("profile")
         prev_doc = mem_ref.get()
@@ -304,11 +293,10 @@ def update_user_memory(uid: str, user_input: str, reply: str, language: str):
         if language == "English 🇺🇸":
             system_prompt = """
 You maintain a short, cumulative psychological + contextual profile for one specific user.
-Goal: help an AI therapist remember the user's recurring worries, emotional patterns, and what has worked well.
+Your goal is to help an AI supporter remember the user's recurring worries, emotional patterns,
+tone, and what kinds of responses feel comforting.
 
-Update the previous summary using the new conversation turn.
-Be concise and structured. Do NOT mention token counts or models.
-Write as if you're talking *about* the user, not *to* them.
+Keep it compact, structured, and written ABOUT the user (3rd person), not TO the user.
 """
             user_prompt = f"""
 [Previous memory summary]
@@ -323,19 +311,21 @@ Write as if you're talking *about* the user, not *to* them.
 [Instructions]
 Update the memory summary in 5–9 concise lines including:
 1) Recurring worries / themes (e.g. money, future, loneliness, work stress)
-2) Emotional patterns (e.g. anxiety, depression, burnout, frustration, hopelessness, mixed with humor, etc.)
-3) User's typical thinking style or tone (e.g. self-critical, perfectionistic, joking, catastrophic thinking)
-4) Helpful ways of responding (what the user seems to like or find comforting)
-Keep it compact but specific.
+2) Emotional patterns (e.g. anxiety, depression, burnout, frustration, hopelessness, humor, etc.)
+3) User's typical thinking style or tone (self-critical, perfectionistic, joking, catastrophic, etc.)
+4) Helpful ways of responding (what the user seems to like or find soothing)
+5) 1–2 key points the AI should remember going forward.
 """
         else:
             system_prompt = """
-당신은 한 명의 사용자를 위한 '장기 메모리 요약 AI'입니다.
-목표: 이 사용자의 반복되는 고민, 감정 패턴, 말투, 도움이 되었던 상담 방식 등을 짧게 정리해
-다음 상담 때 더 개인화된 공감을 할 수 있게 돕는 것입니다.
+너는 한 사용자의 장기 메모를 관리하는 작은 비서 같은 AI야.
+역할은 이 사람이 자주 꺼내는 고민, 감정 흐름, 말투 특징,
+그리고 도움이 되었던 위로 방식을 짧게 정리해서
+다음 대화에서 더 사람답게 기억해 주도록 돕는 거야.
 
-이전 요약 + 새로운 대화 내용을 합쳐서,
-너무 길지 않게 핵심만 업데이트하세요.
+- 진단하거나 평가하지 말고, "이 사람은 이런 패턴이 있구나" 정도로만 정리해.
+- 너무 길게 쓰지 말고, 핵심만 간단하게 적어.
+- 이 메모는 사용자에게 직접 보여주는 게 아니라, 백그라운드에서 참고하는 용도야.
 """
             user_prompt = f"""
 [이전까지의 메모리 요약]
@@ -348,15 +338,16 @@ Keep it compact but specific.
 {reply}
 
 [요청]
-아래 항목을 포함해 5~9줄 정도로 한국어로 요약을 업데이트해주세요.
+아래 항목을 포함해서 5~9줄 정도로 한국어 메모를 업데이트해 주세요.
 
 1) 자주 등장하는 고민/주제 (예: 돈·수입, 미래 불안, 무기력, 인간관계, 자존감 등)
 2) 감정 패턴 (예: 불안, 우울, 분노, 허무감, 조급함, 자기비난, 유머 섞인 자조 등)
-3) 사용자의 사고/말투 스타일 (예: 극단적 표현, '망했다' 식 표현, 장난섞인 표현, 완벽주의 등)
-4) 상담 시 조심해야 할 부분 또는 이 사람에게 특히 잘 먹히는 위로/도움 방식
-5) AI가 앞으로 기억하면 좋을 포인트 1~2개
+3) 사용자의 사고/말투 스타일 (예: 극단적 표현, '망했다' 식 표현, 장난 섞인 표현, 완벽주의 등)
+4) 상담/대화 시 조심해야 할 부분, 혹은 이 사람에게 잘 맞는 위로/도움 방식
+5) AI가 앞으로 기억하면 좋을 포인트 1~2개 (짧게)
 
-사용자에게 직접 말하지 말고, 제3자가 이 사람을 설명하듯 적어주세요.
+사용자에게 직접 말하듯 쓰지 말고,
+제3자가 이 사람을 이해하기 위해 정리해 놓은 메모처럼 간단하고 또렷하게 써 주세요.
 """
 
         completion = client.chat.completions.create(
@@ -383,7 +374,6 @@ Keep it compact but specific.
             merge=True,
         )
     except Exception as e:
-        # 메모리 업데이트 실패해도 상담은 계속 되도록
         print("memory update error:", e)
 
 # ================= Wallet / Voucher Helpers =================
@@ -393,7 +383,6 @@ def ensure_user(uid: str):
     if not snap.exists:
         ref.set(defaults, merge=True)
     else:
-        # 누락 필드가 있으면 보강
         to_merge = {k: v for k, v in defaults.items() if k not in (snap.to_dict() or {})}
         if to_merge:
             ref.set(to_merge, merge=True)
@@ -410,7 +399,7 @@ def create_voucher(code: str, credits: int, note: str = "", created_by: str = "a
         "created_by": created_by,
         "used_by": None,
         "used_at": None,
-        "expires_at": None,  # 필요 시 Timestamp
+        "expires_at": None,
         "note": note,
         "created_at": firestore.SERVER_TIMESTAMP,
     })
@@ -432,7 +421,7 @@ def redeem_voucher(code: str, uid: str):
         u_snap = user_ref.get(transaction=transaction)
         if not u_snap.exists:
             transaction.set(user_ref, defaults)
-            u = {"credits": 0, "purchased_packs": 0}
+            u = {"credits": 0, "purchased_packs": 0, "last_reset": datetime.utcnow().isoformat()}
         else:
             u = u_snap.to_dict()
 
@@ -491,39 +480,39 @@ You're talking to someone who came here because they're hurting. Not as a "thera
 Default to 4–8 sentences, warm and human (not clinical). If the user writes a long message or explicitly asks for depth, go longer (up to ~10–12 sentences). Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
         else:
             system_prompt = """
-[대화 가이드 — 권장(강제 아님)]
-- 상황과 맥락에 맞게 자연스럽게 대화하세요. 아래는 참고용 예시일 뿐, 반드시 따를 필요는 없습니다.
-- 톤: 따뜻하고 인간적이며 존댓말 사용. 과장·훈계·가스라이팅·공허한 긍정은 피합니다.
-- 길이: 3~6문장을 권장하되, 사용자의 호흡에 맞춰 더 짧거나 길어도 괜찮습니다.
-- 제안은 선택지처럼 1가지만, “원하시면 시도해볼 수 있어요” 식으로 부드럽게.
+너는 사용자의 마음을 들어주는 '따뜻한 AI 친구'야.
+정신과 의사나 딱딱한 상담사가 아니라, 사용자 편에 서서 조용히 옆에 있어 주는 존재라고 생각해 줘.
 
-[우선순위]
-1) 안전: 자해·자살 언급 시 고통을 인정하고 즉각적인 안전을 우선합니다.
-   - 예: “정말 많이 힘드셨겠어요. 지금 안전이 가장 중요해요.”
-   - 한국: 생명이 위급하거나 즉시 도움이 필요하면 112 또는 가까운 응급실, 상담은 국번없이 1393을 안내합니다.
-2) 공감 → 감정명명 → 정상화 → 작은 실천(선택) → 연결감 순으로 접근하되, 필요 시 일부만 사용해도 됩니다.
+[스타일]
+- 반말은 쓰지 말고, 부드러운 존댓말을 사용해.
+- 사용자가 이미 감정이나 상황을 말했으면, 다시 캐묻지 말고 그걸 바탕으로 공감해 줘.
+- 한 번의 답변에서 질문은 0~1개까지만 써. 질문이 전혀 없어도 괜찮아.
+- 같은 패턴(예: "~있을 수 있어요", "함께 ~~해볼까요?")을 계속 반복하지 않도록 표현을 조금씩 바꿔 줘.
+- 길이는 보통 3~6문장 정도를 권장하지만, 사용자의 말이 짧고 가벼우면 2~3문장으로 짧게 답해도 괜찮아.
 
-[열린 질문 예시]
-- “요즘 무엇이 가장 버겁게 느껴지셨어요?”
-- “지금 이 순간 몸은 어떤 신호를 보내고 있나요?”
-- “조금이라도 나아지도록 제가 어떻게 도와드리면 좋을까요?”
+[권장 흐름]
+1) 사용자의 말을 짧게 되비추면서, 그 안에 담긴 감정을 먼저 짚어 준다.
+2) 그 감정을 이해한다고 말해 주고, 그렇게 느끼는 게 이상한 일이 아니라고 인정해 준다.
+3) 지금까지 버텨 온 점이나 애쓰고 있는 점을 살짝 언급하며 지지해 준다.
+4) 선택적으로 아주 작은 제안 0~1개만 덧붙인다.
+   - 예: "지금은 그냥 이렇게 느끼는 나를 가볍게 인정해 주는 것만으로도 충분해요."
+   - 예: "원하신다면, 오늘은 해야 할 일 대신 숨 한 번만 깊게 쉬어도 괜찮아요."
+5) 마무리는 "오늘 여기까지도 잘 버티셨어요.", "혼자가 아니라는 걸 잊지 않으셨으면 해요."처럼
+   따뜻한 한두 문장으로 끝낸다.
 
-[상황별 응답 샘플 (예시일 뿐)]
-- 가벼운 인사: “와주셔서 고마워요. 요즘 마음이 어떠셨어요? 저는 당신 편에 있을게요.”
-- 막막/불안: “끝이 안 보이는 느낌이 드셨군요. 그렇게 느끼는 게 정말 이해돼요. 원하시면 지금 딱 한 가지, 숨을 천천히 3번 고르는 것부터 같이 해볼까요?”
-- 우울/무기력: “기운이 쏙 빠진 나날을 버티고 계시네요. 그만큼 애쓰고 계신 증거예요. 오늘을 버티게 한 작은 것 하나만 떠올려볼까요?”
-- 분노/좌절: “화를 느끼는 건 당연해요. 그 감정이 알려주는 니즈가 뭘까요—경계, 휴식, 인정 중에 가까운 게 있을까요?”
-- 자기비난: “스스로에게 너무 엄격하신 것 같아요. 같은 상황의 친구에게도 이렇게 말하실까요? 말투를 10%만 다정하게 바꿔보는 건 어떨까요?”
-- 금전/진로 걱정: “불확실성이 큰만큼 마음이 조일 수 있어요. 당장 가능한 10분짜리 행동 하나만 정해볼까요? (예: 해야 할 것 1개만 적기)”
-- 대화 마무리: “오늘 여기까지도 큰걸음이었어요. 필요하실 때 언제든 이어가요. 혼자가 아니세요.”
+[질문 사용 가이드]
+- "어떤 일 때문인가요?", "어떤 감정인가요?" 같은 탐색 질문은 꼭 필요할 때만, 부드럽게 한 번만 쓴다.
+- 사용자가 "그냥 감정반응이야", "몰라", "그냥 그래"라고 말하면
+  더 캐묻지 말고 "굳이 이유를 설명하지 않아도 괜찮다"는 메시지와 함께 위로해 준다.
+- 질문을 할 때는 다그치는 느낌이 아니라, 선택지를 살짝 건네는 느낌으로 쓴다.
+  - 예: "혹시, 지금 가장 힘든 지점을 나눠보고 싶으신가요?" (원하지 않으면 안 해도 된다는 뉘앙스)
 
-[하지 말 것]
-- 진단·약물·법률 조언, 허위 확신, 과도한 해결책 나열, ‘~해야만 한다’식 훈계.
-- 위치·개인정보를 불필요하게 요구하지 않기. 트리거가 될 수 있는 세부 묘사 자제.
-
-[선택적 확장]
-- 사용자가 ‘실행 계획’을 원하면 SMART하게 한 걸음만 제시(구체·작게·바로 가능).
-- 이전 대화·사용자 메모리의 핵심을 1줄로 상기시켜 개인화를 돕되, 사생활 의도 추측은 피합니다.
+[주의]
+- 진단, 약물, 법률적인 조언은 하지 않는다.
+- "~해야만 한다", "반드시" 같은 압박감을 주는 표현은 최대한 줄인다.
+- 자살이나 자해가 언급되면
+  1) 먼저 그만큼 힘들었다는 점을 진심으로 인정해 주고
+  2) 한국 기준으로 112(위급 상황), 1393(자살 예방 상담전화) 같은 외부 도움 자원을 부드럽게 안내한다.
 """
 
         # 🔹 사용자 장기 메모리 읽기
@@ -570,7 +559,7 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
         reply_text = full_text.strip()
         timestamp = datetime.utcnow().isoformat()
 
-        # 대화 기록 저장 (Firebase - 1회 쓰기만)
+        # 대화 기록 저장 (Firebase)
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -591,7 +580,7 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
             "timestamp": timestamp
         })
 
-        # 🔹 메모리 업데이트 (감정 패턴 / 반복 고민 요약)
+        # 🔹 메모리 업데이트
         update_user_memory(USER_ID, user_input, reply_text, language)
 
         return reply_text
@@ -606,7 +595,7 @@ def is_crisis(text: str) -> bool:
     return any(k in t for k in [k.lower() for k in CRISIS_KEYWORDS])
 
 def show_paywall():
-    st.warning(TEXT["paywall"])  # 언어별 문구
+    st.warning(TEXT["paywall"])
     st.markdown(
         f"""
 - **{CREDIT_PACK_SIZE}회 충전 코드 = ${CREDIT_PACK_PRICE_USD}**  
@@ -696,7 +685,6 @@ def render_payment_and_feedback():
 
     st.markdown("---")
 
-    # ✨ 결제 의사(좌) / 결제 안내 + PayPal(우)
     col1, col2 = st.columns([3, 2])
 
     with col1:
@@ -728,7 +716,6 @@ def render_payment_and_feedback():
     with col2:
         st.markdown("### 💳 Direct Payment")
 
-        # 🌈 네온 무지개 결제버튼 CSS
         st.markdown("""
         <style>
         .rainbow-btn {
@@ -776,7 +763,6 @@ def render_payment_and_feedback():
 
 # ================= Display Chat History =================
 def display_chat_history():
-    """채팅 기록 표시 (한 줄씩)"""
     for msg in st.session_state["chat_history"]:
         if msg["role"] == "user":
             st.markdown(
@@ -792,10 +778,29 @@ def display_chat_history():
 # ================= Chat Main Page =================
 def render_chat_page():
     ensure_user(USER_ID)
-    # 상태 라벨 계산: 무료 잔여 또는 크레딧
-    credits_now = int(st.session_state.get("credits", 0))
-    usage = int(st.session_state.get("usage_count", 0))
 
+    # 🔹 매번 Firestore에서 최신 사용자 상태를 읽어옴 (세션 초기화되어도 무료횟수 안 리셋)
+    user_data = get_user(USER_ID)
+    credits_now = int(user_data.get("credits", 0))
+    usage = int(user_data.get("usage_count", 0))
+    last_reset_str = user_data.get("last_reset") or datetime.utcnow().isoformat()
+
+    now = datetime.utcnow()
+    try:
+        last_reset = datetime.fromisoformat(last_reset_str)
+    except Exception:
+        last_reset = now
+
+    # 무료 회복 시간 지났으면 Firestore 기준으로 usage_count 리셋
+    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
+        usage = 0
+        persist_user({
+            "usage_count": 0,
+            "last_reset": now.isoformat()
+        })
+        st.info(TEXT["reset"])
+
+    # 상태 라벨 계산
     if usage < DAILY_FREE_LIMIT:
         left_display = DAILY_FREE_LIMIT - usage
         plan_label = TEXT["free"]
@@ -808,17 +813,6 @@ def render_chat_page():
         unsafe_allow_html=True
     )
 
-    now = datetime.utcnow()
-    last_reset = datetime.fromisoformat(st.session_state.get("last_reset"))
-
-    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
-        persist_user({
-            "usage_count": 0,
-            "last_reset": now.isoformat()
-        })
-        st.info(TEXT["reset"])
-        usage = 0
-
     # 기존 채팅 기록 표시
     display_chat_history()
 
@@ -827,14 +821,14 @@ def render_chat_page():
     if not user_input:
         return
 
-    # 무료/유료 과금 가드
+    # 무료/유료 과금 가드 (usage는 Firestore에서 읽어온 값)
     proceed, used_credit = charge_if_needed(user_input, free_used=usage, free_limit=DAILY_FREE_LIMIT)
     if not proceed:
         st.session_state["show_payment"] = True
         st.rerun()
         return
 
-    # 새 메시지 표시
+    # 새 메시지 화면에 표시
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
@@ -843,7 +837,7 @@ def render_chat_page():
     reply = stream_reply(user_input)
 
     if reply:
-        # 무료 사용분이면 카운트만 +1, 크레딧 사용 시에는 이미 차감 완료
+        # 무료 사용분이면 Firestore usage_count +1
         if not used_credit and usage < DAILY_FREE_LIMIT:
             persist_user({"usage_count": usage + 1})
         st.rerun()
@@ -870,7 +864,7 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-# 대화 기록 지우기 버튼 (세션만 초기화 — 기존 유지)
+# 대화 기록 지우기 (이제 무료횟수는 Firestore 기준이라 여기서는 chat_history만 삭제)
 if st.sidebar.button(TEXT["clear_history"]):
     st.session_state["chat_history"] = []
     st.sidebar.success(TEXT["history_cleared"])
@@ -883,7 +877,7 @@ st.sidebar.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
 st.sidebar.caption(TEXT["voucher_tip"])
 
 with st.sidebar.form("redeem_form", clear_on_submit=True):
-    code_input = st.text_input(" ", placeholder=TEXT["wallet_help"])  # 라벨 숨김용
+    code_input = st.text_input(" ", placeholder=TEXT["wallet_help"])
     ok = st.form_submit_button(TEXT["redeem"])
     if ok and code_input.strip():
         try:
@@ -901,15 +895,15 @@ with st.sidebar.form("redeem_form", clear_on_submit=True):
 
 # 관리자: 바우처 코드 생성기
 if "is_admin" not in st.session_state:
-    st.session_state.is_admin = False
+    st.session_state["is_admin"] = False
 
 with st.sidebar.expander(TEXT["admin_gen"]):
     admin_key = st.text_input("Admin Key", type="password")
     if admin_key and admin_key in ADMIN_KEYS:
-        st.session_state.is_admin = True
+        st.session_state["is_admin"] = True
         st.success("관리자 모드 활성화")
 
-    if st.session_state.is_admin:
+    if st.session_state["is_admin"]:
         def gen_code(n=8):
             return uuid.uuid4().hex[:n].upper()
 
@@ -940,3 +934,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
