@@ -1,12 +1,10 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9 — Wallet + Voucher + Paywall (50 uses = $3)
+# 💙 EOERWAY AI Therapy v2.9 — Wallet + Voucher + Paywall + Memory
 # ==========================================
-# 변경점 요약:
-# - 지갑(credits) + 바우처 코드(vouchers) 충전/차감 추가
-# - 위기문구는 항상 무료 (차감X)
-# - 무료 한도 초과 시 자동 크레딧 차감, 없으면 페이월 안내
-# - 사이드바에 "내 지갑" + "관리자 코드 생성" 추가
-# - 기존 구조/스타일 최대한 유지
+# 추가된 것:
+# - Firestore에 사용자 감정/고민 요약 메모리 저장 (users/{uid}/memory/profile)
+# - 매 대화마다 메모리를 업데이트해서 "감정 패턴 / 반복 고민 / 조심할 점" 축적
+# - 다음 응답 생성 시 이 메모리를 system 메시지로 넣어 개인화
 
 import os, uuid, json, time, random
 from datetime import datetime
@@ -277,12 +275,116 @@ def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
 
-# ================= Long-term Memory (read-only; keeps as-is) =================
+# ================= Long-term Memory (read-only) =================
 def _get_user_memory(uid: str) -> str:
+    """
+    Firestore: users/{uid}/memory/profile 문서에서 text 필드 읽기.
+    여기에는 '감정 패턴 / 반복 고민 / 말투 / 조심할 점' 등이 요약되어 있음.
+    """
     doc = db.collection("users").document(uid).collection("memory").document("profile").get()
     if doc.exists:
         return (doc.to_dict() or {}).get("text", "")
     return ""
+
+# ================= Long-term Memory (update) =================
+def update_user_memory(uid: str, user_input: str, reply: str, language: str):
+    """
+    매 대화마다 사용자 감정/고민 요약을 업데이트.
+    - 이전 요약 + 이번 대화 내용 기반으로 짧은 메모리 문자열 생성
+    - users/{uid}/memory/profile 에 저장
+    실패해도 메인 상담 흐름은 깨지지 않도록 예외는 조용히 무시.
+    """
+    try:
+        mem_ref = db.collection("users").document(uid).collection("memory").document("profile")
+        prev_doc = mem_ref.get()
+        prev_text = ""
+        if prev_doc.exists:
+            prev_text = (prev_doc.to_dict() or {}).get("text", "")
+
+        if language == "English 🇺🇸":
+            system_prompt = """
+You maintain a short, cumulative psychological + contextual profile for one specific user.
+Goal: help an AI therapist remember the user's recurring worries, emotional patterns, and what has worked well.
+
+Update the previous summary using the new conversation turn.
+Be concise and structured. Do NOT mention token counts or models.
+Write as if you're talking *about* the user, not *to* them.
+"""
+            user_prompt = f"""
+[Previous memory summary]
+{prev_text}
+
+[New user message]
+{user_input}
+
+[Assistant reply (for context)]
+{reply}
+
+[Instructions]
+Update the memory summary in 5–9 concise lines including:
+1) Recurring worries / themes (e.g. money, future, loneliness, work stress)
+2) Emotional patterns (e.g. anxiety, depression, burnout, frustration, hopelessness, mixed with humor, etc.)
+3) User's typical thinking style or tone (e.g. self-critical, perfectionistic, joking, catastrophic thinking)
+4) Helpful ways of responding (what the user seems to like or find comforting)
+Keep it compact but specific.
+"""
+        else:
+            system_prompt = """
+당신은 한 명의 사용자를 위한 '장기 메모리 요약 AI'입니다.
+목표: 이 사용자의 반복되는 고민, 감정 패턴, 말투, 도움이 되었던 상담 방식 등을 짧게 정리해
+다음 상담 때 더 개인화된 공감을 할 수 있게 돕는 것입니다.
+
+이전 요약 + 새로운 대화 내용을 합쳐서,
+너무 길지 않게 핵심만 업데이트하세요.
+"""
+            user_prompt = f"""
+[이전까지의 메모리 요약]
+{prev_text}
+
+[이번 대화의 사용자 메시지]
+{user_input}
+
+[이번 대화에서 AI의 응답(참고용)]
+{reply}
+
+[요청]
+아래 항목을 포함해 5~9줄 정도로 한국어로 요약을 업데이트해주세요.
+
+1) 자주 등장하는 고민/주제 (예: 돈·수입, 미래 불안, 무기력, 인간관계, 자존감 등)
+2) 감정 패턴 (예: 불안, 우울, 분노, 허무감, 조급함, 자기비난, 유머 섞인 자조 등)
+3) 사용자의 사고/말투 스타일 (예: 극단적 표현, '망했다' 식 표현, 장난섞인 표현, 완벽주의 등)
+4) 상담 시 조심해야 할 부분 또는 이 사람에게 특히 잘 먹히는 위로/도움 방식
+5) AI가 앞으로 기억하면 좋을 포인트 1~2개
+
+사용자에게 직접 말하지 말고, 제3자가 이 사람을 설명하듯 적어주세요.
+"""
+
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.4,
+            max_tokens=400,
+        )
+        new_text = completion.choices[0].message.content.strip()
+        if not new_text:
+            return
+
+        mem_ref.set(
+            {
+                "text": new_text,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+                "last_user_message": user_input,
+                "last_reply": reply,
+                "lang": language,
+            },
+            merge=True,
+        )
+    except Exception as e:
+        # 메모리 업데이트 실패해도 상담은 계속 되도록
+        print("memory update error:", e)
 
 # ================= Wallet / Voucher Helpers =================
 def ensure_user(uid: str):
@@ -423,10 +525,11 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
 - 사용자가 ‘실행 계획’을 원하면 SMART하게 한 걸음만 제시(구체·작게·바로 가능).
 - 이전 대화·사용자 메모리의 핵심을 1줄로 상기시켜 개인화를 돕되, 사생활 의도 추측은 피합니다.
 """
-        # 메모리(읽기만)
+
+        # 🔹 사용자 장기 메모리 읽기
         user_memory = _get_user_memory(USER_ID)
 
-        # 대화 컨텍스트 구성 (최근 10개 메시지만 사용)
+        # 🔹 대화 컨텍스트 구성 (최근 10개 + 메모리)
         context_messages = [{"role": "system", "content": system_prompt}]
         if user_memory:
             context_messages.append({
@@ -464,13 +567,14 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
                 )
                 time.sleep(0.03)
 
+        reply_text = full_text.strip()
         timestamp = datetime.utcnow().isoformat()
 
         # 대화 기록 저장 (Firebase - 1회 쓰기만)
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
-            "reply": full_text.strip(),
+            "reply": reply_text,
             "lang": language,
             "created_at": timestamp
         })
@@ -483,11 +587,14 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
         })
         st.session_state["chat_history"].append({
             "role": "assistant",
-            "content": full_text.strip(),
+            "content": reply_text,
             "timestamp": timestamp
         })
 
-        return full_text.strip()
+        # 🔹 메모리 업데이트 (감정 패턴 / 반복 고민 요약)
+        update_user_memory(USER_ID, user_input, reply_text, language)
+
+        return reply_text
 
     except Exception as e:
         st.error(f"{TEXT['reply_error']}: {e}")
@@ -572,7 +679,6 @@ def render_payment_and_feedback():
 
     st.markdown(title_line)
 
-
     if clicked:
         st.info(info_already)
     else:
@@ -622,7 +728,7 @@ def render_payment_and_feedback():
     with col2:
         st.markdown("### 💳 Direct Payment")
 
-        # 🌈 네온 무지개 결제버튼 CSS (hover 효과 추가됨)
+        # 🌈 네온 무지개 결제버튼 CSS
         st.markdown("""
         <style>
         .rainbow-btn {
@@ -667,7 +773,6 @@ def render_payment_and_feedback():
 
         st.markdown("---")
         st.markdown(payment_notice)
-
 
 # ================= Display Chat History =================
 def display_chat_history():
