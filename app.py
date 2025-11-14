@@ -744,6 +744,8 @@ def render_payment_and_feedback():
 def render_onboarding():
     ensure_user(USER_ID)
     user_data = get_user(USER_ID)
+
+    # 이미 온보딩 완료면 반환
     if user_data.get("onboarding_done"):
         return
 
@@ -751,15 +753,20 @@ def render_onboarding():
     st.markdown(f"### {TEXT['ob_title']}")
     st.write(TEXT["ob_desc"])
 
+    # ⭐ 바로 대화 시작하기 버튼
+    skip = st.button("필요 없어요, 바로 대화 시작할게요 💙")
+    if skip:
+        persist_user({"onboarding_done": True})
+        st.success("바로 대화 화면으로 이동할게요 💙")
+        time.sleep(0.5)
+        st.rerun()
+
+    # -------- 기존 온보딩 폼 --------
     with st.form("onboarding_form"):
         topic = st.selectbox(TEXT["ob_q1"], ONBOARDING_TOPICS)
         other_topic = ""
         if topic == ONBOARDING_TOPICS[-1]:
-            if language == "English 🇺🇸":
-                other_placeholder = "Write a few words about what's hardest lately."
-            else:
-                other_placeholder = "요즘 어떤 점이 가장 힘든지 짧게 적어주세요."
-            other_topic = st.text_input(" ", placeholder=other_placeholder)
+            other_topic = st.text_input(" ", placeholder="직접 적어주세요")
 
         q2 = st.text_area(TEXT["ob_q2"], placeholder=TEXT["ob_placeholder_q2"])
         q3 = st.text_area(TEXT["ob_q3"], placeholder=TEXT["ob_placeholder_q3"])
