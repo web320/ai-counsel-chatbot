@@ -1,6 +1,7 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9
+# 💙 EOERWAY AI Therapy v2.9 (Complete)
 # Wallet + Voucher + Paywall + Memory + Onboarding
+# Unique Visitor Counter (Fixed)
 # ==========================================
 
 import os, uuid, json, time, random
@@ -16,16 +17,14 @@ st.set_page_config(page_title="💙 AI Therapy", layout="wide")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.9"
-DAILY_FREE_LIMIT = 7          # 무료 상담 횟수
-RESET_INTERVAL_HOURS = 4      # 무료 상담 회복 주기
-BASIC_LIMIT = 50              # (과거 호환용)
-ADMIN_KEYS = ["2356"]         # 관리자(본인) 인증용 비밀번호
+DAILY_FREE_LIMIT = 7
+RESET_INTERVAL_HOURS = 4
+BASIC_LIMIT = 50
+ADMIN_KEYS = ["2356"]
 
-# 💳 크레딧/코드 과금 체계
-CREDIT_PACK_SIZE = 50         # 50회
-CREDIT_PACK_PRICE_USD = 3     # $3 (영문 UI 표기)
+CREDIT_PACK_SIZE = 50
+CREDIT_PACK_PRICE_USD = 3
 
-# 🚨 위기 키워드: 포함되면 차감/페이월 모두 우회 (안전 우선)
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
     "suicide", "self-harm", "kill myself", "end my life"
@@ -55,40 +54,31 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Query Params / UID =================
-uid = st.query_params.get("uid", [str(uuid.uuid4())])[0]
-st.query_params = {"uid": uid}
-USER_ID = uid
+# ================= Unique Visitor ID (브라우저 고유값) =================
+if "unique_visitor_id" not in st.session_state:
+    st.session_state["unique_visitor_id"] = str(uuid.uuid4())
 
-# ================= Visitor Counter (유저당 1회만 카운트) =================
+USER_ID = st.session_state["unique_visitor_id"]
+
+# ================= Visitor Counter =================
 def update_visit_stats():
+    visitor_id = USER_ID
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    user_visit_ref = db.collection("user_visits").document(USER_ID)
 
-    # 이미 기록된 유저면 다시 카운트하지 않음
-    if user_visit_ref.get().exists:
+    visitor_ref = db.collection("visitors").document(visitor_id)
+    if visitor_ref.get().exists:
         return
 
-    user_visit_ref.set({
-        "uid": USER_ID,
-        "first_visit": datetime.utcnow().isoformat(),
+    visitor_ref.set({
+        "first_visit": firestore.SERVER_TIMESTAMP,
         "day": today,
     })
 
     total_ref = db.collection("stats").document("total")
+    total_ref.set({"count": firestore.Increment(1)}, merge=True)
+
     daily_ref = db.collection("stats").document(today)
-
-    # 전체 방문자
-    if total_ref.get().exists:
-        total_ref.update({"count": firestore.Increment(1)})
-    else:
-        total_ref.set({"count": 1})
-
-    # 오늘 방문자
-    if daily_ref.get().exists:
-        daily_ref.update({"count": firestore.Increment(1)})
-    else:
-        daily_ref.set({"count": 1})
+    daily_ref.set({"count": firestore.Increment(1)}, merge=True)
 
 def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -102,7 +92,6 @@ def get_visit_counts():
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
-
 # ================= Language State =================
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
@@ -139,32 +128,32 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode granted 50 credits to this account!",
-        "admin_already": "✅ Admin credits are already added in this session.",
+        "admin_success": "🔓 Admin mode granted 50 credits!",
+        "admin_already": "✅ Already added in this session.",
         "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
         "history_cleared": "Chat history has been cleared!",
         "wallet": "💙 My Wallet",
-        "wallet_help": "Paste a voucher code to top up your credits.",
+        "wallet_help": "Paste your voucher code to redeem.",
         "redeem": "Redeem",
-        "voucher_ok": "Topped up! Current credits: ",
+        "voucher_ok": "Done! Credits: ",
         "voucher_bad": "Invalid code.",
         "voucher_used": "This code was already used.",
-        "paywall": "You've used your free limit. Redeem a code to continue.",
+        "paywall": "You've used all free limits. Redeem a code to continue.",
         "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
-        "admin_gen": "🔑 Admin — Generate Voucher Codes & Credits",
+        "admin_gen": "🔑 Admin — Generate Voucher Codes",
         "admin_make": "Generate",
         # Onboarding
-        "ob_title": "💙 Before we start, could you tell me just three things?",
-        "ob_desc": "This helps me give less generic advice and talk more like a real friend who knows you.",
-        "ob_q1": "1) These days, what's the main area that feels hardest?",
-        "ob_q2": "2) If you described your current state in one line, what would you say?",
-        "ob_q3": "3) What would you most like to get from today's chat?",
-        "ob_placeholder_q2": "e.g., I feel stuck and anxious about money all the time.",
-        "ob_placeholder_q3": "e.g., I just want some comfort and one tiny next step.",
+        "ob_title": "💙 Before we start, can you tell me just three things?",
+        "ob_desc": "So I can talk less like a robot and more like a friend.",
+        "ob_q1": "1) What's the area that feels hardest these days?",
+        "ob_q2": "2) Describe your current state in one line:",
+        "ob_q3": "3) What would you like most from today's chat?",
+        "ob_placeholder_q2": "e.g., I feel stuck and stressed about money.",
+        "ob_placeholder_q3": "e.g., I just want comfort and one small next step.",
         "ob_start_btn": "Start Chat",
-        "ob_required": "Please fill in at least one line so I can support you better 💙",
-        "ob_saved": "Got it. I'll remember this and keep it in mind during our talks. 💙",
+        "ob_required": "Please fill at least one line 💙",
+        "ob_saved": "Got it. I'll remember this during our talks 💙",
     }
 
     ONBOARDING_TOPICS = [
@@ -172,9 +161,9 @@ if language == "English 🇺🇸":
         "Work / study / burnout",
         "Relationships / friends",
         "Family / romance",
-        "Health / body / sleep",
-        "Just living itself feels hard",
-        "Other (I'll write it myself)",
+        "Health / sleep",
+        "Life feels hard in general",
+        "Other (I'll write)",
     ]
 else:
     TEXT = {
@@ -183,53 +172,53 @@ else:
         "paid": "💎 유료 이용중",
         "input": "지금 어떤 기분이예요?",
         "warn": "내용을 입력해주세요 💬",
-        "usedup": f"🌙 오늘의 무료 상담 {DAILY_FREE_LIMIT}회를 모두 사용했어요!",
-        "reset": f"⏰ 무료 상담이 다시 가능해졌어요! ({RESET_INTERVAL_HOURS}시간마다 복구)",
+        "usedup": f"🌙 무료 상담 {DAILY_FREE_LIMIT}회를 모두 사용했어요",
+        "reset": f"⏰ 무료 상담이 복구되었어요 ({RESET_INTERVAL_HOURS}시간마다)",
         "reply_error": "AI 응답 오류",
         "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
-        "feedback_sent": "💖 피드백이 저장되었습니다. 감사합니다!",
+        "feedback_sent": "💖 피드백이 저장되었습니다!",
         "feedback_empty": "내용을 입력해주세요 💬",
         "payment_title": "💳 결제 안내",
         "feedback_title": "💌 서비스 피드백",
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
-        "admin_success": "🔓 관리자 모드로 50회 크레딧이 추가되었습니다!",
-        "admin_already": "✅ 이미 이 세션에서 관리자 크레딧을 추가하셨어요.",
-        "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
+        "admin_success": "🔓 관리자 모드로 50회 충전됨!",
+        "admin_already": "✅ 이미 추가되었습니다",
+        "admin_wrong": "❌ 관리자 비밀번호가 틀렸어요",
         "clear_history": "🗑️ 대화 기록 지우기",
-        "history_cleared": "대화 기록이 삭제되었습니다!",
+        "history_cleared": "대화 기록 삭제됨!",
         "wallet": "💙 내 지갑",
-        "wallet_help": "구매/지급 받은 바우처 코드를 붙여넣어 충전하세요.",
+        "wallet_help": "바우처 코드를 붙여넣어 충전하세요",
         "redeem": "충전하기",
-        "voucher_ok": "충전 완료! 현재 크레딧: ",
-        "voucher_bad": "코드가 올바르지 않아요.",
-        "voucher_used": "이미 사용된 코드예요.",
-        "paywall": "무료 한도를 모두 사용했어요. 코드를 충전하면 이어서 대화할 수 있어요.",
+        "voucher_ok": "충전 완료! 잔여 크레딧: ",
+        "voucher_bad": "코드가 올바르지 않아요",
+        "voucher_used": "이미 사용된 코드예요",
+        "paywall": "무료 한도를 모두 사용했어요. 코드를 충전해 주세요",
         "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
-        "admin_gen": "🔑 관리자 — 바우처 코드 생성 & 크레딧 관리",
+        "admin_gen": "🔑 관리자 — 바우처 코드 생성",
         "admin_make": "코드 생성",
         # Onboarding
-        "ob_title": "💙 대화를 시작하기 전에, 딱 세 가지만 알려주실래요?",
-        "ob_desc": "그래야 뻔한 조언이 아니라, 정말 나를 아는 친구처럼 이야기해 줄 수 있어요.",
-        "ob_q1": "1) 요즘 가장 힘든 분야는 무엇인가요?",
-        "ob_q2": "2) 지금 내 상태를 한 줄로 표현한다면 어떤 말이 떠오르나요?",
-        "ob_q3": "3) 오늘 이 대화에서 가장 얻고 싶은 건 무엇인가요?",
-        "ob_placeholder_q2": "예: 돈 걱정이 너무 커서 숨이 막혀요.",
-        "ob_placeholder_q3": "예: 그냥 위로 한 마디와, 오늘 할 수 있는 아주 작은 행동 하나요.",
+        "ob_title": "💙 대화를 시작하기 전에, 딱 세 가지만 알려주세요",
+        "ob_desc": "그렇게 해야 정말 나를 아는 친구처럼 이야기할 수 있어요.",
+        "ob_q1": "1) 요즘 가장 힘든 분야는?",
+        "ob_q2": "2) 지금 내 상태를 한 줄로 표현한다면?",
+        "ob_q3": "3) 오늘 대화에서 가장 얻고 싶은 건?",
+        "ob_placeholder_q2": "예: 돈 걱정 때문에 하루종일 불안해요.",
+        "ob_placeholder_q3": "예: 위로 한 마디와 아주 작은 행동 하나요.",
         "ob_start_btn": "시작하기",
-        "ob_required": "짧은 한 줄이라도 적어주시면, 더 잘 도와줄 수 있어요 💙",
-        "ob_saved": "고맙습니다. 이 내용을 기억해 두고 앞으로 대화에 꼭 반영할게요. 💙",
+        "ob_required": "한 줄이라도 적어주시면 도와드릴 수 있어요 💙",
+        "ob_saved": "기억해 둘게요. 앞으로 참고할게요 💙",
     }
 
     ONBOARDING_TOPICS = [
         "돈 / 수입",
-        "일 / 공부 / 번아웃",
-        "인간관계 / 친구",
+        "일 / 번아웃",
+        "인간관계",
         "가족 / 연애",
-        "건강 / 몸 / 수면",
-        "그냥 살아가는 것 자체가 힘들어요",
-        "기타 (직접 적을게요)",
+        "건강 / 수면",
+        "그냥 사는 게 힘들어요",
+        "기타 (직접 적기)",
     ]
 
 st.title(TEXT["title"])
@@ -284,20 +273,20 @@ html, body, [class*="css"] { font-size: 18px; }
     unsafe_allow_html=True
 )
 
-# ================= Chat History Session State =================
+# ================= Chat History =================
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 
 # ================= Firestore Defaults / User State =================
 defaults = {
     "is_paid": False,
-    "usage_count": 0,                    # 무료 사용량(주기적 회복)
-    "remaining_paid_uses": 0,            # (이전 호환)
+    "usage_count": 0,
+    "remaining_paid_uses": 0,
     "last_reset": datetime.utcnow().isoformat(),
     "credits": 0,
     "purchased_packs": 0,
     "ad_free": False,
-    # 온보딩 기본값
+    # Onboarding
     "onboarding_done": False,
     "ob_topic": "",
     "ob_feeling_line": "",
@@ -318,7 +307,6 @@ else:
 def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
-
 # ================= Long-term Memory (read-only) =================
 def _get_user_memory(uid: str) -> str:
     doc = db.collection("users").document(uid).collection("memory").document("profile").get()
@@ -337,62 +325,45 @@ def update_user_memory(uid: str, user_input: str, reply: str, language: str):
 
         if language == "English 🇺🇸":
             system_prompt = """
-You maintain a short, cumulative psychological + contextual profile for one specific user.
-Your goal is to help an AI supporter remember the user's recurring worries, emotional patterns,
-tone, and what kinds of responses feel comforting.
-
-Keep it compact, structured, and written ABOUT the user (3rd person), not TO the user.
-"""
+You maintain a short, evolving psychological + contextual profile of this user.
+Keep it compact, 3rd-person, and focused on recurring themes and what responses help them."""
             user_prompt = f"""
-[Previous memory summary]
+[Previous memory]
 {prev_text}
 
-[New user message]
+[New message]
 {user_input}
 
-[Assistant reply (for context)]
+[Assistant reply]
 {reply}
 
-[Instructions]
-Update the memory summary in 5–9 concise lines including:
-1) Recurring worries / themes (e.g. money, future, loneliness, work stress)
-2) Emotional patterns (e.g. anxiety, depression, burnout, frustration, hopelessness, humor, etc.)
-3) User's typical thinking style or tone (self-critical, perfectionistic, joking, catastrophic, etc.)
-4) Helpful ways of responding (what the user seems to like or find soothing)
-5) 1–2 key points the AI should remember going forward.
+Update in 5–9 lines including:
+- Ongoing themes (money stress, loneliness, burnout, etc.)
+- Emotional patterns
+- Thinking style
+- Helpful response styles
+- 1–2 key points to remember next time
 """
         else:
             system_prompt = """
-너는 한 사용자의 장기 메모를 관리하는 작은 비서 같은 AI야.
-역할은 이 사람이 자주 꺼내는 고민, 감정 흐름, 말투 특징,
-그리고 도움이 되었던 위로 방식을 짧게 정리해서
-다음 대화에서 더 사람답게 기억해 주도록 돕는 거야.
-
-- 진단하거나 평가하지 말고, "이 사람은 이런 패턴이 있구나" 정도로만 정리해.
-- 너무 길게 쓰지 말고, 핵심만 간단하게 적어.
-- 이 메모는 사용자에게 직접 보여주는 게 아니라, 백그라운드에서 참고하는 용도야.
-"""
+너는 한 사용자의 감정 패턴과 반복되는 고민을 짧게 정리하는 AI야.
+제3자 시점으로 간단하게 ‘이 사람이 어떤 경향을 보인다’만 적어 줘."""
             user_prompt = f"""
-[이전까지의 메모리 요약]
+[이전 메모]
 {prev_text}
 
-[이번 대화의 사용자 메시지]
+[사용자 메시지]
 {user_input}
 
-[이번 대화에서 AI의 응답(참고용)]
+[AI 응답]
 {reply}
 
-[요청]
-아래 항목을 포함해서 5~9줄 정도로 한국어 메모를 업데이트해 주세요.
-
-1) 자주 등장하는 고민/주제 (예: 돈·수입, 미래 불안, 무기력, 인간관계, 자존감 등)
-2) 감정 패턴 (예: 불안, 우울, 분노, 허무감, 조급함, 자기비난, 유머 섞인 자조 등)
-3) 사용자의 사고/말투 스타일 (예: 극단적 표현, '망했다' 식 표현, 장난 섞인 표현, 완벽주의 등)
-4) 상담/대화 시 조심해야 할 부분, 혹은 이 사람에게 잘 맞는 위로/도움 방식
-5) AI가 앞으로 기억하면 좋을 포인트 1~2개 (짧게)
-
-사용자에게 직접 말하듯 쓰지 말고,
-제3자가 이 사람을 이해하기 위해 정리해 놓은 메모처럼 간단하고 또렷하게 써 주세요.
+요약을 5~9줄로 새로 정리해 주세요:
+- 반복되는 고민
+- 감정 패턴
+- 말투/사고 스타일
+- 도움되는 위로 방식
+- 다음 대화를 위해 기억할 점
 """
 
         completion = client.chat.completions.create(
@@ -408,18 +379,17 @@ Update the memory summary in 5–9 concise lines including:
         if not new_text:
             return
 
-        mem_ref.set(
-            {
-                "text": new_text,
-                "updated_at": firestore.SERVER_TIMESTAMP,
-                "last_user_message": user_input,
-                "last_reply": reply,
-                "lang": language,
-            },
-            merge=True,
-        )
+        mem_ref.set({
+            "text": new_text,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+            "last_user_message": user_input,
+            "last_reply": reply,
+            "lang": language,
+        }, merge=True)
+
     except Exception as e:
         print("memory update error:", e)
+
 
 # ================= Wallet / Voucher Helpers =================
 def ensure_user(uid: str):
@@ -427,10 +397,6 @@ def ensure_user(uid: str):
     snap = ref.get()
     if not snap.exists:
         ref.set(defaults, merge=True)
-    else:
-        to_merge = {k: v for k, v in defaults.items() if k not in (snap.to_dict() or {})}
-        if to_merge:
-            ref.set(to_merge, merge=True)
     return ref
 
 def get_user(uid: str) -> dict:
@@ -464,11 +430,7 @@ def redeem_voucher(code: str, uid: str):
             raise ValueError("ALREADY_USED")
 
         u_snap = user_ref.get(transaction=transaction)
-        if not u_snap.exists:
-            transaction.set(user_ref, defaults)
-            u = {"credits": 0, "purchased_packs": 0, "last_reset": datetime.utcnow().isoformat()}
-        else:
-            u = u_snap.to_dict()
+        u = u_snap.to_dict() if u_snap.exists else defaults
 
         new_credits = int(u.get("credits", 0)) + int(v.get("credits", 0))
         new_packs = int(u.get("purchased_packs", 0)) + 1
@@ -476,7 +438,7 @@ def redeem_voucher(code: str, uid: str):
         transaction.update(user_ref, {
             "credits": new_credits,
             "purchased_packs": new_packs,
-            "last_reset": u.get("last_reset") or datetime.utcnow().isoformat(),
+            "last_reset": u.get("last_reset"),
             "updated_at": firestore.SERVER_TIMESTAMP,
         })
         transaction.update(voucher_ref, {
@@ -494,122 +456,47 @@ def decrement_credit(uid: str, amount: int = 1):
     @firestore.transactional
     def _tx(transaction):
         snap = user_ref.get(transaction=transaction)
-        if not snap.exists:
-            raise ValueError("NO_USER")
         data = snap.to_dict() or {}
         curr = int(data.get("credits", 0))
         if curr < amount:
             raise ValueError("NO_CREDIT")
-        transaction.update(user_ref, {
-            "credits": curr - amount,
-            "updated_at": firestore.SERVER_TIMESTAMP,
-        })
+        transaction.update(user_ref, {"credits": curr - amount})
         return curr - amount
 
-    transaction = db.transaction()
-    return _tx(transaction)
+    tx = db.transaction()
+    return _tx(tx)
 
-# ================= AI Response Function =================
+
+# ================= AI Response =================
 def stream_reply(user_input: str):
     try:
         if language == "English 🇺🇸":
             system_prompt = """
-You're talking to someone who came here because they're hurting. Not as a "therapist" - as a real person who genuinely cares.
-
-1. Listen first. Don't rush to fix or advise.
-2. Name the feeling very specifically.
-3. Tell them it makes sense to feel that way.
-4. If it feels natural, gently offer one tiny thing they could try right now (like 3 slow breaths), but don't force it.
-5. End with warm, human words, not formal advice.
-
-Whenever you are given onboarding information or a user profile in system messages, read it carefully
-and use it to make your response feel tailored to this person. Avoid generic, obvious advice they probably
-already know; tie your suggestions directly to their current struggles and to what they said they want from today's chat.
-
-Default to 4–8 sentences, warm and human (not clinical). If the user writes a long message or explicitly asks for depth,
-go longer (up to ~10–12 sentences). Never diagnose or suggest medication. If they mention self-harm or suicide,
-gently acknowledge their pain and suggest professional help."""
+You're a warm AI friend. Listen gently, acknowledge feelings, avoid generic advice."""
         else:
             system_prompt = """
-너는 사용자의 마음을 들어주는 '따뜻한 AI 친구'야.
-정신과 의사나 딱딱한 상담사가 아니라, 사용자 편에 서서 조용히 옆에 있어 주는 존재라고 생각해 줘.
+너는 따뜻한 AI 친구야. 공감 → 지지 → 작은 제안 → 따뜻한 마무리 흐름으로 작성해 줘."""
 
-[스타일]
-- 반말은 쓰지 말고, 부드러운 존댓말을 사용해.
-- 사용자가 이미 감정이나 상황을 말했으면, 다시 캐묻지 말고 그걸 바탕으로 공감해 줘.
-- 한 번의 답변에서 질문은 0~1개까지만 써. 질문이 전혀 없어도 괜찮아.
-- 같은 패턴(예: "~있을 수 있어요", "함께 ~~해볼까요?")을 계속 반복하지 않도록 표현을 조금씩 바꿔 줘.
-- 길이는 보통 3~6문장 정도를 권장하지만, 사용자의 말이 짧고 가벼우면 2~3문장으로 짧게 답해도 괜찮아.
-
-[권장 흐름]
-1) 사용자의 말을 짧게 되비추면서, 그 안에 담긴 감정을 먼저 짚어 준다.
-2) 그 감정을 이해한다고 말해 주고, 그렇게 느끼는 게 이상한 일이 아니라고 인정해 준다.
-3) 지금까지 버텨 온 점이나 애쓰고 있는 점을 살짝 언급하며 지지해 준다.
-4) 선택적으로 아주 작은 제안 0~1개만 덧붙인다.
-   - 예: "지금은 그냥 이렇게 느끼는 나를 가볍게 인정해 주는 것만으로도 충분해요."
-   - 예: "원하신다면, 오늘은 해야 할 일 대신 숨 한 번만 깊게 쉬어도 괜찮아요."
-5) 마무리는 "오늘 여기까지도 잘 버티셨어요.", "혼자가 아니라는 걸 잊지 않으셨으면 해요."처럼
-   따뜻한 한두 문장으로 끝낸다.
-
-- 온보딩에서 사용자가 말해 준 "요즘 가장 힘든 것"과
-  "오늘 이 대화에서 얻고 싶은 것"이 system 메시지로 주어질 수 있어요.
-  이 정보는 꼭 참고해서, 누구에게나 할 수 있는 뻔한 조언 대신
-  이 사람 상황에 맞는 이야기로 답해 주세요.
-
-[질문 사용 가이드]
-- "어떤 일 때문인가요?", "어떤 감정인가요?" 같은 탐색 질문은 꼭 필요할 때만, 부드럽게 한 번만 쓴다.
-- 사용자가 "그냥 감정반응이야", "몰라", "그냥 그래"라고 말하면
-  더 캐묻지 말고 "굳이 이유를 설명하지 않아도 괜찮다"는 메시지와 함께 위로해 준다.
-- 질문을 할 때는 다그치는 느낌이 아니라, 선택지를 살짝 건네는 느낌으로 쓴다.
-  - 예: "혹시, 지금 가장 힘든 지점을 나눠보고 싶으신가요?" (원하지 않으면 안 해도 된다는 뉘앙스)
-
-[주의]
-- 진단, 약물, 법률적인 조언은 하지 않는다.
-- "~해야만 한다", "반드시" 같은 압박감을 주는 표현은 최대한 줄인다.
-- 자살이나 자해가 언급되면
-  1) 먼저 그만큼 힘들었다는 점을 진심으로 인정해 주고
-  2) 한국 기준으로 112(위급 상황), 1393(자살 예방 상담전화) 같은 외부 도움 자원을 부드럽게 안내한다.
-"""
-
-        # 🔹 사용자 장기 메모리 읽기
         user_memory = _get_user_memory(USER_ID)
-
-        # 🔹 온보딩 정보 읽기
         user_doc = get_user(USER_ID)
+
         onboarding_info = ""
         if user_doc.get("onboarding_done"):
             lines = []
-            topic = user_doc.get("ob_topic", "")
-            feel_line = user_doc.get("ob_feeling_line", "")
-            goal_line = user_doc.get("ob_today_goal", "")
-            if topic:
-                lines.append(f"- Main ongoing struggle: {topic}")
-            if feel_line:
-                lines.append(f"- User's one-line description of their recent state: {feel_line}")
-            if goal_line:
-                lines.append(f"- What the user wants from today's chat: {goal_line}")
-            if lines:
-                onboarding_info = "\n".join(lines)
+            if user_doc.get("ob_topic"): lines.append(f"- Topic: {user_doc['ob_topic']}")
+            if user_doc.get("ob_feeling_line"): lines.append(f"- State: {user_doc['ob_feeling_line']}")
+            if user_doc.get("ob_today_goal"): lines.append(f"- Goal: {user_doc['ob_today_goal']}")
+            onboarding_info = "\n".join(lines)
 
-        # 🔹 대화 컨텍스트 구성 (최근 10개 + 메모리 + 온보딩)
         context_messages = [{"role": "system", "content": system_prompt}]
         if user_memory:
-            context_messages.append({
-                "role": "system",
-                "content": f"User profile & recurring themes for personalization:\n{user_memory}"
-            })
+            context_messages.append({"role": "system", "content": f"User memory:\n{user_memory}"})
         if onboarding_info:
-            context_messages.append({
-                "role": "system",
-                "content": f"Onboarding info about this user:\n{onboarding_info}"
-            })
+            context_messages.append({"role": "system", "content": f"Onboarding:\n{onboarding_info}"})
 
         recent_history = st.session_state["chat_history"][-10:]
         for msg in recent_history:
-            context_messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+            context_messages.append(msg)
 
         context_messages.append({"role": "user", "content": user_input})
 
@@ -622,22 +509,19 @@ gently acknowledge their pain and suggest professional help."""
         )
 
         placeholder = st.empty()
-        full_text = ""
+        full = ""
 
         for chunk in stream:
             delta = chunk.choices[0].delta
-            if hasattr(delta, "content") and delta.content:
-                full_text += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full_text}💫</div>",
-                    unsafe_allow_html=True
-                )
+            if delta.content:
+                full += delta.content
+                placeholder.markdown(f"<div class='bot-bubble'>{full}💫</div>", unsafe_allow_html=True)
                 time.sleep(0.03)
 
-        reply_text = full_text.strip()
+        reply_text = full.strip()
         timestamp = datetime.utcnow().isoformat()
 
-        # 대화 기록 저장 (Firebase)
+        # Firebase chat log
         db.collection("chats").add({
             "uid": USER_ID,
             "input": user_input,
@@ -646,19 +530,9 @@ gently acknowledge their pain and suggest professional help."""
             "created_at": timestamp
         })
 
-        # 세션에 추가
-        st.session_state["chat_history"].append({
-            "role": "user",
-            "content": user_input,
-            "timestamp": timestamp
-        })
-        st.session_state["chat_history"].append({
-            "role": "assistant",
-            "content": reply_text,
-            "timestamp": timestamp
-        })
+        st.session_state["chat_history"].append({"role": "user", "content": user_input})
+        st.session_state["chat_history"].append({"role": "assistant", "content": reply_text})
 
-        # 🔹 메모리 업데이트
         update_user_memory(USER_ID, user_input, reply_text, language)
 
         return reply_text
@@ -667,39 +541,32 @@ gently acknowledge their pain and suggest professional help."""
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-# ================= Paywall Guard =================
+
+# ================= Paywall =================
 def is_crisis(text: str) -> bool:
     t = (text or "").lower()
     return any(k in t for k in [k.lower() for k in CRISIS_KEYWORDS])
 
 def show_paywall():
     st.warning(TEXT["paywall"])
-    st.markdown(
-        f"""
-- **{CREDIT_PACK_SIZE}회 충전 코드 = ${CREDIT_PACK_PRICE_USD}**  
-- 이미 코드를 갖고 있다면 **사이드바 → ‘{TEXT['wallet']}’ → ‘{TEXT['redeem']}’**에서 적용하세요.
-        """
-    )
+    st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD}")
 
 def charge_if_needed(user_input: str, free_used: int, free_limit: int):
-    """무료 한도 초과 시 크레딧 1 차감. (위기는 우회)
-    returns: (proceed: bool, used_credit: bool)
-    """
     if is_crisis(user_input):
         return True, False
 
     if free_used < free_limit:
         return True, False
 
-    # 무료 한도 초과 → 크레딧 차감 필요
     try:
-        left = decrement_credit(USER_ID, amount=1)
-        st.toast(f"크레딧 1회 사용됨 (잔여 {left}회)")
+        left = decrement_credit(USER_ID, 1)
         persist_user({"credits": left})
+        st.toast(f"크레딧 1회 사용됨 (잔여 {left})")
         return True, True
-    except ValueError:
+    except:
         show_paywall()
         return False, False
+
 
 # ================= Payment & Feedback =================
 def render_payment_and_feedback():
@@ -707,175 +574,102 @@ def render_payment_and_feedback():
     st.subheader(TEXT["payment_title"])
 
     intent_ref = db.collection("purchase_intent").document(USER_ID)
-    intent_doc = intent_ref.get()
-    clicked = intent_doc.exists
+    clicked = intent_ref.get().exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
-    is_en = (language == "English 🇺🇸")
-    if is_en:
-        title_line = "#### 50 uses for **$3** — Purchase intent"
-        btn_label = "💳 $3 for 50 uses — I'm interested"
-        info_already = "💙 You've already registered your interest. Thank you!"
-        success_msg = "We'll notify you first when payments open 💖"
-        caption_text = f"So far, **{total_intents}** people have shown interest."
-        plan_value = "50_uses_$3"
-        help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
+    if language == "English 🇺🇸":
+        btn = "💳 $3 for 50 uses — I'm interested"
+        info_done = "💙 You've already registered. Thank you!"
+        success = "We'll notify you first when payments open 💖"
+        caption = f"{total_intents} people have shown interest."
+        plan = "50_uses_$3"
         payment_notice = (
-            "📸 **After completing payment, please take a screenshot and send it to:**\n"
-            "- ✉️ **newnewtry6@gmail.com**\n"
-            "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
-            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
-            "✅ When the developer confirms your message, "
-            "**the voucher code will be sent immediately.** 💙\n"
+            "📸 After payment, send a screenshot:\n"
+            "- Email: newnewtry6@gmail.com\n"
+            "- Instagram: @youtuberhawaiijelly\n"
+            "- KakaoTalk ID: jeuspo\n"
         )
     else:
-        title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
-        btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
-        info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
-        success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
-        caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
-        plan_value = "50회_3000원"
-        help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
+        btn = "💳 3,000원 / 50회 — 결제 의사 표시"
+        info_done = "이미 눌러주셨어요 💙"
+        success = "결제 열리면 가장 먼저 알려드릴게요 💖"
+        caption = f"{total_intents}명이 결제 의사를 눌렀어요."
+        plan = "50회_3000원"
         payment_notice = (
-            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**\n"
-            "- ✉️ **newnewtry6@gmail.com**\n"
-            "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
-            "- 💬 카카오톡 아이디 **jeuspo**\n\n"
-            "✅ 개발자가 문자를 확인하면 **즉시 코드를 발송해드립니다** 💙\n"
+            "📸 결제 후 스크린샷을 보내주세요:\n"
+            "- 이메일: newnewtry6@gmail.com\n"
+            "- 인스타그램: @youtuberhawaiijelly\n"
+            "- 카카오톡: jeuspo\n"
         )
-
-    st.markdown(title_line)
 
     if clicked:
-        st.info(info_already)
+        st.info(info_done)
     else:
-        if st.button(btn_label):
+        if st.button(btn):
             intent_ref.set({
                 "uid": USER_ID,
-                "plan": plan_value,
+                "plan": plan,
                 "created_at": datetime.utcnow().isoformat(),
             })
-            st.success(success_msg)
+            st.success(success)
             st.rerun()
 
-    st.caption(caption_text)
-    st.info(help_text)
+    st.caption(caption)
 
+    # Feedback
     st.markdown("---")
+    st.subheader(TEXT["feedback_title"])
+    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
+    if st.button("📩 Submit"):
+        if fb.strip():
+            db.collection("feedbacks").add({
+                "uid": USER_ID,
+                "feedback": fb,
+                "lang": language,
+                "created_at": datetime.utcnow().isoformat()
+            })
+            st.success(TEXT["feedback_sent"])
+        else:
+            st.warning(TEXT["feedback_empty"])
 
-    col1, col2 = st.columns([3, 2])
+    # Admin
+    st.markdown("---")
+    st.markdown(f"### {TEXT['admin_gen']}")
 
-    with col1:
-        # ===== 서비스 피드백 =====
-        st.subheader(TEXT["feedback_title"])
-        fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-        if st.button("📩 Submit / 보내기"):
-            if not fb.strip():
-                st.warning(TEXT["feedback_empty"])
-            else:
-                db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                    "uid": USER_ID, "feedback": fb, "lang": language,
-                    "created_at": datetime.utcnow().isoformat()
-                })
-                st.success(TEXT["feedback_sent"])
+    if "is_admin" not in st.session_state:
+        st.session_state["is_admin"] = False
 
-        # ===== 여기부터 관리자 영역 (서비스 피드백 아래) =====
+    pw = st.text_input("Admin Key", type="password")
+    if pw and pw in ADMIN_KEYS:
+        st.session_state["is_admin"] = True
+        st.success("관리자 모드 활성화")
+
+    if st.session_state["is_admin"]:
+        credit_pw = st.text_input("크레딧 비밀번호", type="password")
+        if credit_pw and credit_pw in ADMIN_KEYS:
+            current = get_user(USER_ID).get("credits", 0)
+            new = current + CREDIT_PACK_SIZE
+            persist_user({"credits": new})
+            st.success("50 크레딧 지급 완료!")
+            st.rerun()
+
+        # voucher generator
         st.markdown("---")
-        st.markdown(f"### {TEXT['admin_gen']}")
+        st.markdown("#### 바우처 생성")
+        num = st.number_input("개수", 1, 200, 10)
+        each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
 
-        if "is_admin" not in st.session_state:
-            st.session_state["is_admin"] = False
+        if st.button(TEXT["admin_make"]):
+            out = []
+            for _ in range(int(num)):
+                c = uuid.uuid4().hex[:10].upper()
+                create_voucher(c, each)
+                out.append(c)
+            st.code("\n".join(out))
 
-        admin_key = st.text_input("Admin Key", type="password", key="admin_key_main")
-        if admin_key and admin_key in ADMIN_KEYS:
-            st.session_state["is_admin"] = True
-            st.success("관리자 모드 활성화")
 
-        if st.session_state["is_admin"]:
-            credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password", key="credit_admin_pw")
-            if credit_admin:
-                if credit_admin in ADMIN_KEYS:
-                    if not st.session_state.get("admin_unlocked"):
-                        current_data = get_user(USER_ID)
-                        current_credits = int(current_data.get("credits", 0))
-                        new_credits = current_credits + CREDIT_PACK_SIZE
-                        persist_user({"credits": new_credits})
-                        st.session_state["admin_unlocked"] = True
-                        st.success(TEXT["admin_success"])
-                        st.experimental_rerun()
-                    else:
-                        st.info(TEXT["admin_already"])
-                else:
-                    st.error(TEXT["admin_wrong"])
-
-            st.markdown("---")
-
-            def gen_code(n=8):
-                return uuid.uuid4().hex[:n].upper()
-
-            num = st.number_input("생성 개수", 1, 200, 10)
-            credits_each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
-            note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
-            if st.button(TEXT["admin_make"]):
-                out = []
-                for _ in range(int(num)):
-                    c = gen_code(10)
-                    create_voucher(c, credits_each, note=note)
-                    out.append(c)
-                st.success("코드 생성 완료! 아래 목록을 보관하세요.")
-                st.code("\n".join(out))
-
-    with col2:
-        st.markdown("### 💳 Direct Payment")
-
-        st.markdown("""
-        <style>
-        .rainbow-btn {
-            display:inline-block;
-            padding:14px 28px;
-            font-size:18px;
-            font-weight:bold;
-            text-transform:uppercase;
-            color:white;
-            background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
-            background-size:400%;
-            border:none;
-            border-radius:50px;
-            text-shadow:0 0 10px rgba(255,255,255,0.7);
-            box-shadow:0 0 25px rgba(255,255,255,0.3);
-            cursor:pointer;
-            animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
-            transition:transform 0.25s, box-shadow 0.25s;
-            text-decoration:none;
-        }
-        .rainbow-btn:hover {
-            transform:scale(1.08);
-            box-shadow:0 0 40px rgba(255,255,255,0.9);
-            filter:brightness(1.2);
-        }
-        @keyframes rainbowGlow {
-            0% {background-position:0%;}
-            100% {background-position:400%;}
-        }
-        @keyframes neonPulse {
-            0%,100% {text-shadow:0 0 10px #fff, 0 0 20px #ff00ff;}
-            50% {text-shadow:0 0 20px #00ffff, 0 0 40px #33ff33;}
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 3달러 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
-        st.markdown(f"""
-        <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
-        """, unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.markdown(payment_notice)
-
-# ================= Onboarding Page =================
+# ================= Onboarding =================
 def render_onboarding():
-    ensure_user(USER_ID)
     user_data = get_user(USER_ID)
     if user_data.get("onboarding_done"):
         return
@@ -886,83 +680,63 @@ def render_onboarding():
 
     with st.form("onboarding_form"):
         topic = st.selectbox(TEXT["ob_q1"], ONBOARDING_TOPICS)
-        other_topic = ""
+        other = ""
         if topic == ONBOARDING_TOPICS[-1]:
-            if language == "English 🇺🇸":
-                other_placeholder = "Write a few words about what's hardest lately."
-            else:
-                other_placeholder = "요즘 어떤 점이 가장 힘든지 짧게 적어주세요."
-            other_topic = st.text_input(" ", placeholder=other_placeholder)
+            other = st.text_input(" ", placeholder="내용 입력")
 
         q2 = st.text_area(TEXT["ob_q2"], placeholder=TEXT["ob_placeholder_q2"])
         q3 = st.text_area(TEXT["ob_q3"], placeholder=TEXT["ob_placeholder_q3"])
 
-        submitted = st.form_submit_button(TEXT["ob_start_btn"])
+        ok = st.form_submit_button(TEXT["ob_start_btn"])
 
-    if submitted:
-        final_topic = other_topic.strip() if (topic == ONBOARDING_TOPICS[-1] and other_topic.strip()) else topic
-        if not (final_topic.strip() or q2.strip() or q3.strip()):
+    if ok:
+        final_topic = other.strip() if topic == ONBOARDING_TOPICS[-1] and other else topic
+
+        if not (final_topic or q2.strip() or q3.strip()):
             st.warning(TEXT["ob_required"])
         else:
             persist_user({
                 "onboarding_done": True,
-                "ob_topic": final_topic.strip(),
+                "ob_topic": final_topic,
                 "ob_feeling_line": q2.strip(),
                 "ob_today_goal": q3.strip(),
-                "onboarding_at": datetime.utcnow().isoformat(),
             })
             st.success(TEXT["ob_saved"])
             time.sleep(0.7)
             st.rerun()
 
-# ================= Display Chat History =================
+
+# ================= Chat History =================
 def display_chat_history():
     for msg in st.session_state["chat_history"]:
         if msg["role"] == "user":
-            st.markdown(
-                f"<div class='user-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='user-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
         else:
-            st.markdown(
-                f"<div class='bot-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='bot-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
 
-# ================= Chat Main Page =================
+
+# ================= Chat Page =================
 def render_chat_page():
-    ensure_user(USER_ID)
-
     user_data = get_user(USER_ID)
-    credits_now = int(user_data.get("credits", 0))
+
+    credits = int(user_data.get("credits", 0))
     usage = int(user_data.get("usage_count", 0))
-    last_reset_str = user_data.get("last_reset") or datetime.utcnow().isoformat()
+    last_reset = datetime.fromisoformat(user_data.get("last_reset"))
 
     now = datetime.utcnow()
-    try:
-        last_reset = datetime.fromisoformat(last_reset_str)
-    except Exception:
-        last_reset = now
-
-    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
+    if (now - last_reset).total_seconds() >= RESET_INTERVAL_HOURS * 3600:
+        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
         usage = 0
-        persist_user({
-            "usage_count": 0,
-            "last_reset": now.isoformat()
-        })
         st.info(TEXT["reset"])
 
     if usage < DAILY_FREE_LIMIT:
-        left_display = DAILY_FREE_LIMIT - usage
-        plan_label = TEXT["free"]
+        left = DAILY_FREE_LIMIT - usage
+        plan = TEXT["free"]
     else:
-        left_display = credits_now
-        plan_label = TEXT["paid"] if credits_now > 0 else TEXT["free"]
+        left = credits
+        plan = TEXT["paid"] if credits > 0 else TEXT["free"]
 
-    st.markdown(
-        f"<div class='status'>{plan_label} — {TEXT['status_left']} {max(left_display,0)}회</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<div class='status'>{plan} — {TEXT['status_left']} {left}</div>", unsafe_allow_html=True)
 
     display_chat_history()
 
@@ -970,23 +744,21 @@ def render_chat_page():
     if not user_input:
         return
 
-    proceed, used_credit = charge_if_needed(user_input, free_used=usage, free_limit=DAILY_FREE_LIMIT)
+    proceed, used_credit = charge_if_needed(user_input, usage, DAILY_FREE_LIMIT)
     if not proceed:
         st.session_state["show_payment"] = True
         st.rerun()
         return
 
-    st.markdown(
-        f"<div class='user-bubble'>{user_input}</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
 
     reply = stream_reply(user_input)
 
-    if reply:
-        if not used_credit and usage < DAILY_FREE_LIMIT:
-            persist_user({"usage_count": usage + 1})
-        st.rerun()
+    if reply and not used_credit and usage < DAILY_FREE_LIMIT:
+        persist_user({"usage_count": usage + 1})
+
+    st.rerun()
+
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -995,16 +767,13 @@ total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
     <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
+        margin-top:10px;
+        padding:8px;
+        border-radius:8px;
+        background:rgba(255,255,255,0.05);
     ">
-        🌍 <b>Total {total_visits:,}명</b><br>
-        ☀️ <b>Today {daily_visits:,}명</b>
+        🌍 Total: <b>{total_visits:,}</b><br>
+        ☀️ Today: <b>{daily_visits:,}</b>
     </div>
     """,
     unsafe_allow_html=True
@@ -1016,28 +785,25 @@ if st.sidebar.button(TEXT["clear_history"]):
     st.rerun()
 
 st.sidebar.markdown(f"### {TEXT['wallet']}")
-user_snapshot = get_user(USER_ID)
-st.sidebar.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
+info = get_user(USER_ID)
+st.sidebar.metric("Credits", int(info.get("credits", 0)))
 st.sidebar.caption(TEXT["voucher_tip"])
 
 with st.sidebar.form("redeem_form", clear_on_submit=True):
-    code_input = st.text_input(" ", placeholder=TEXT["wallet_help"])
+    code = st.text_input(" ", placeholder=TEXT["wallet_help"])
     ok = st.form_submit_button(TEXT["redeem"])
-    if ok and code_input.strip():
+    if ok and code.strip():
         try:
-            new_balance = redeem_voucher(code_input.strip(), USER_ID)
-            persist_user({"credits": int(new_balance)})
-            st.success(TEXT["voucher_ok"] + str(new_balance))
+            bal = redeem_voucher(code.strip(), USER_ID)
+            persist_user({"credits": bal})
+            st.success(TEXT["voucher_ok"] + str(bal))
             st.rerun()
         except ValueError as e:
             if str(e) == "INVALID_CODE":
                 st.error(TEXT["voucher_bad"])
             elif str(e) == "ALREADY_USED":
                 st.error(TEXT["voucher_used"])
-            else:
-                st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
-# Payment & Feedback 토글
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
@@ -1047,10 +813,9 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
-# ================= Main Render =================
-onboarding_done = bool(user_snapshot.get("onboarding_done"))
 
-if not onboarding_done:
+# ================= Main =================
+if not get_user(USER_ID).get("onboarding_done"):
     render_onboarding()
 else:
     if st.session_state.get("show_payment"):
