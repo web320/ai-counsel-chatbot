@@ -139,8 +139,8 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode granted 50 free uses (credits added)!",
-        "admin_already": "✅ Admin credits are already unlocked for this session.",
+        "admin_success": "🔓 Admin mode granted 50 credits to this account!",
+        "admin_already": "✅ Admin credits are already added in this session.",
         "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
         "history_cleared": "Chat history has been cleared!",
@@ -309,7 +309,6 @@ snap = user_ref.get()
 
 if snap.exists:
     data = snap.to_dict() or {}
-    # 세션 상태에 기본 필드만 심어두기 (주요 로직은 Firestore 값 기준으로 동작)
     for k, v in defaults.items():
         st.session_state.setdefault(k, data.get(k, v))
 else:
@@ -318,7 +317,6 @@ else:
 
 def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
-    # 세션에도 반영 (하지만 진짜 기준은 Firestore)
     st.session_state.update(fields)
 
 # ================= Long-term Memory (read-only) =================
@@ -768,6 +766,7 @@ def render_payment_and_feedback():
     col1, col2 = st.columns([3, 2])
 
     with col1:
+        # ===== 서비스 피드백 =====
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
         if st.button("📩 Submit / 보내기"):
@@ -779,6 +778,52 @@ def render_payment_and_feedback():
                     "created_at": datetime.utcnow().isoformat()
                 })
                 st.success(TEXT["feedback_sent"])
+
+        # ===== 여기부터 관리자 영역 (서비스 피드백 아래) =====
+        st.markdown("---")
+        st.markdown(f"### {TEXT['admin_gen']}")
+
+        if "is_admin" not in st.session_state:
+            st.session_state["is_admin"] = False
+
+        admin_key = st.text_input("Admin Key", type="password", key="admin_key_main")
+        if admin_key and admin_key in ADMIN_KEYS:
+            st.session_state["is_admin"] = True
+            st.success("관리자 모드 활성화")
+
+        if st.session_state["is_admin"]:
+            credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password", key="credit_admin_pw")
+            if credit_admin:
+                if credit_admin in ADMIN_KEYS:
+                    if not st.session_state.get("admin_unlocked"):
+                        current_data = get_user(USER_ID)
+                        current_credits = int(current_data.get("credits", 0))
+                        new_credits = current_credits + CREDIT_PACK_SIZE
+                        persist_user({"credits": new_credits})
+                        st.session_state["admin_unlocked"] = True
+                        st.success(TEXT["admin_success"])
+                        st.experimental_rerun()
+                    else:
+                        st.info(TEXT["admin_already"])
+                else:
+                    st.error(TEXT["admin_wrong"])
+
+            st.markdown("---")
+
+            def gen_code(n=8):
+                return uuid.uuid4().hex[:n].upper()
+
+            num = st.number_input("생성 개수", 1, 200, 10)
+            credits_each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
+            note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
+            if st.button(TEXT["admin_make"]):
+                out = []
+                for _ in range(int(num)):
+                    c = gen_code(10)
+                    create_voucher(c, credits_each, note=note)
+                    out.append(c)
+                st.success("코드 생성 완료! 아래 목록을 보관하세요.")
+                st.code("\n".join(out))
 
     with col2:
         st.markdown("### 💳 Direct Payment")
@@ -830,7 +875,6 @@ def render_payment_and_feedback():
 
 # ================= Onboarding Page =================
 def render_onboarding():
-    """처음 들어온 사람에게 3가지 질문을 받는 온보딩 페이지"""
     ensure_user(USER_ID)
     user_data = get_user(USER_ID)
     if user_data.get("onboarding_done"):
@@ -889,7 +933,6 @@ def display_chat_history():
 def render_chat_page():
     ensure_user(USER_ID)
 
-    # 🔹 매번 Firestore에서 최신 사용자 상태를 읽어옴 (세션 초기화되어도 무료횟수 안 리셋)
     user_data = get_user(USER_ID)
     credits_now = int(user_data.get("credits", 0))
     usage = int(user_data.get("usage_count", 0))
@@ -901,7 +944,6 @@ def render_chat_page():
     except Exception:
         last_reset = now
 
-    # 무료 회복 시간 지났으면 Firestore 기준으로 usage_count 리셋
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         usage = 0
         persist_user({
@@ -910,7 +952,6 @@ def render_chat_page():
         })
         st.info(TEXT["reset"])
 
-    # 상태 라벨 계산
     if usage < DAILY_FREE_LIMIT:
         left_display = DAILY_FREE_LIMIT - usage
         plan_label = TEXT["free"]
@@ -923,22 +964,18 @@ def render_chat_page():
         unsafe_allow_html=True
     )
 
-    # 기존 채팅 기록 표시
     display_chat_history()
 
-    # 사용자 입력
     user_input = st.chat_input(TEXT["input"])
     if not user_input:
         return
 
-    # 무료/유료 과금 가드 (usage는 Firestore에서 읽어온 값)
     proceed, used_credit = charge_if_needed(user_input, free_used=usage, free_limit=DAILY_FREE_LIMIT)
     if not proceed:
         st.session_state["show_payment"] = True
         st.rerun()
         return
 
-    # 새 메시지 화면에 표시
     st.markdown(
         f"<div class='user-bubble'>{user_input}</div>",
         unsafe_allow_html=True
@@ -947,7 +984,6 @@ def render_chat_page():
     reply = stream_reply(user_input)
 
     if reply:
-        # 무료 사용분이면 Firestore usage_count +1
         if not used_credit and usage < DAILY_FREE_LIMIT:
             persist_user({"usage_count": usage + 1})
         st.rerun()
@@ -974,13 +1010,11 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-# 대화 기록 지우기 (이제 무료횟수는 Firestore 기준이라 여기서는 chat_history만 삭제)
 if st.sidebar.button(TEXT["clear_history"]):
     st.session_state["chat_history"] = []
     st.sidebar.success(TEXT["history_cleared"])
     st.rerun()
 
-# 지갑 UI (사이드바)
 st.sidebar.markdown(f"### {TEXT['wallet']}")
 user_snapshot = get_user(USER_ID)
 st.sidebar.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
@@ -1003,50 +1037,6 @@ with st.sidebar.form("redeem_form", clear_on_submit=True):
             else:
                 st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
-# 관리자: 바우처 코드 생성기 + 크레딧 관리자 비번
-if "is_admin" not in st.session_state:
-    st.session_state["is_admin"] = False
-
-with st.sidebar.expander(TEXT["admin_gen"]):
-    admin_key = st.text_input("Admin Key", type="password")
-    if admin_key and admin_key in ADMIN_KEYS:
-        st.session_state["is_admin"] = True
-        st.success("관리자 모드 활성화")
-
-    if st.session_state["is_admin"]:
-        credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password")
-        if credit_admin:
-            if credit_admin in ADMIN_KEYS:
-                if not st.session_state.get("admin_unlocked"):
-                    current_data = get_user(USER_ID)
-                    current_credits = int(current_data.get("credits", 0))
-                    new_credits = current_credits + CREDIT_PACK_SIZE
-                    persist_user({"credits": new_credits})
-                    st.session_state["admin_unlocked"] = True
-                    st.success(TEXT["admin_success"])
-                    st.rerun()
-                else:
-                    st.info(TEXT["admin_already"])
-            else:
-                st.error(TEXT["admin_wrong"])
-
-        st.markdown("---")
-
-        def gen_code(n=8):
-            return uuid.uuid4().hex[:n].upper()
-
-        num = st.number_input("생성 개수", 1, 200, 10)
-        credits_each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
-        note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
-        if st.button(TEXT["admin_make"]):
-            out = []
-            for _ in range(int(num)):
-                c = gen_code(10)
-                create_voucher(c, credits_each, note=note)
-                out.append(c)
-            st.success("코드 생성 완료! 아래 목록을 보관하세요.")
-            st.code("\n".join(out))
-
 # Payment & Feedback 토글
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
@@ -1067,5 +1057,3 @@ else:
         render_payment_and_feedback()
     else:
         render_chat_page()
-
-
