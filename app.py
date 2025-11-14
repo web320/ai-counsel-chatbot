@@ -571,56 +571,120 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
 # ================= Payment & Feedback =================
 def render_payment_and_feedback():
     st.markdown("---")
-    st.subheader(TEXT["payment_title"])
+    st.markdown("## 💳 결제 안내")
 
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     clicked = intent_ref.get().exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
-    if language == "English 🇺🇸":
-        btn = "💳 $3 for 50 uses — I'm interested"
-        info_done = "💙 You've already registered. Thank you!"
-        success = "We'll notify you first when payments open 💖"
-        caption = f"{total_intents} people have shown interest."
-        plan = "50_uses_$3"
-        payment_notice = (
-            "📸 After payment, send a screenshot:\n"
-            "- Email: newnewtry6@gmail.com\n"
-            "- Instagram: @youtuberhawaiijelly\n"
-            "- KakaoTalk ID: jeuspo\n"
-        )
+    is_en = (language == "English 🇺🇸")
+
+    # ==================== TEXT ====================
+    if is_en:
+        pay_btn_label = "💳 $3 / 50 uses"
+        intent_btn_label = "💙 I'm interested in purchasing"
+        already = "You've already expressed your interest 💙"
+        success_msg = "Thank you! You'll be notified first 💖"
+        count_text = f"{total_intents} people have shown interest."
+        pay_desc_title = "📸 After payment, please send a screenshot to:"
+        pay_notice = """
+- ✉️ **Email:** newnewtry6@gmail.com  
+- 📸 **Instagram:** @youtuberhawaiijelly  
+- 💬 **KakaoTalk ID:** jeuspo  
+"""
     else:
-        btn = "💳 3,000원 / 50회 — 결제 의사 표시"
-        info_done = "이미 눌러주셨어요 💙"
-        success = "결제 열리면 가장 먼저 알려드릴게요 💖"
-        caption = f"{total_intents}명이 결제 의사를 눌렀어요."
-        plan = "50회_3000원"
-        payment_notice = (
-            "📸 결제 후 스크린샷을 보내주세요:\n"
-            "- 이메일: newnewtry6@gmail.com\n"
-            "- 인스타그램: @youtuberhawaiijelly\n"
-            "- 카카오톡: jeuspo\n"
-        )
+        pay_btn_label = "💳 3,000원 / 50회 이용"
+        intent_btn_label = "💙 50회 이용권 결제 의사 표시"
+        already = "이미 결제 의사를 눌러주셨어요 💙"
+        success_msg = "고맙습니다! 결제가 열리면 가장 먼저 알려드릴게요 💖"
+        count_text = f"{total_intents}명이 결제 의사를 표시했어요."
+        pay_desc_title = "📸 결제 후 스크린샷을 아래로 보내주세요:"
+        pay_notice = """
+- ✉️ **이메일:** newnewtry6@gmail.com  
+- 📸 **인스타그램:** @youtuberhawaiijelly  
+- 💬 **카카오톡:** jeuspo  
+"""
+
+    # ================ PAYPAL RAINBOW BUTTON CSS ================
+    st.markdown("""
+    <style>
+    .center-box { text-align:center; }
+
+    .pay-btn {
+        display:inline-block;
+        padding:17px 34px;
+        font-size:22px;
+        font-weight:700;
+        color:white;
+        border-radius:50px;
+        background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
+        background-size:400%;
+        text-shadow:0 0 12px rgba(255,255,255,0.9);
+        animation:rainbowGlow 6s linear infinite, pulse 1.8s ease-in-out infinite;
+        box-shadow:0 0 30px rgba(255,255,255,0.3);
+        text-decoration:none;
+        transition:0.25s ease;
+    }
+    .pay-btn:hover {
+        transform:scale(1.07);
+        box-shadow:0 0 40px rgba(255,255,255,0.8);
+        filter:brightness(1.15);
+    }
+
+    @keyframes rainbowGlow { 0%{background-position:0%} 100%{background-position:400%} }
+    @keyframes pulse {
+        0%,100% { text-shadow:0 0 14px #fff, 0 0 30px #ff00ff; }
+        50%     { text-shadow:0 0 24px #00ffff, 0 0 50px #33ff33; }
+    }
+
+    .screenshot-box {
+        margin-top:18px;
+        padding:18px;
+        border-radius:14px;
+        background:rgba(255,255,255,0.05);
+        border:1px solid rgba(255,255,255,0.15);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ===================== PAYPAL BUTTON =====================
+    paypal_url = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+
+    st.markdown("<div class='center-box'>", unsafe_allow_html=True)
+    st.markdown(
+        f"<a href='{paypal_url}' target='_blank' class='pay-btn'>{pay_btn_label}</a>",
+        unsafe_allow_html=True
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ===================== Screenshot Notice =====================
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"### {pay_desc_title}")
+    st.markdown(f"<div class='screenshot-box'>{pay_notice}</div>", unsafe_allow_html=True)
+
+    # ===================== Purchase Intent Button =====================
+    st.markdown("---")
+    st.markdown("### 🔹 결제 의사 표시 | Purchase Intent")
 
     if clicked:
-        st.info(info_done)
+        st.info(already)
     else:
-        if st.button(btn):
+        if st.button(intent_btn_label, use_container_width=True):
             intent_ref.set({
                 "uid": USER_ID,
-                "plan": plan,
+                "plan": "50_uses",
                 "created_at": datetime.utcnow().isoformat(),
             })
-            st.success(success)
+            st.success(success_msg)
             st.rerun()
 
-    st.caption(caption)
+    st.caption(count_text)
 
-    # Feedback
+    # ====================== Feedback ======================
     st.markdown("---")
-    st.subheader(TEXT["feedback_title"])
-    fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-    if st.button("📩 Submit"):
+    st.markdown(f"### {TEXT['feedback_title']}")
+    fb = st.text_area(" ", placeholder=TEXT['feedback_placeholder'])
+    if st.button("📩 Submit / 보내기", use_container_width=True):
         if fb.strip():
             db.collection("feedbacks").add({
                 "uid": USER_ID,
@@ -632,19 +696,21 @@ def render_payment_and_feedback():
         else:
             st.warning(TEXT["feedback_empty"])
 
-    # Admin
+    # ====================== Admin Section ======================
     st.markdown("---")
     st.markdown(f"### {TEXT['admin_gen']}")
 
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
-    pw = st.text_input("Admin Key", type="password")
-    if pw and pw in ADMIN_KEYS:
+    admin_key = st.text_input("Admin Key", type="password")
+    if admin_key and admin_key in ADMIN_KEYS:
         st.session_state["is_admin"] = True
         st.success("관리자 모드 활성화")
 
     if st.session_state["is_admin"]:
+        st.write("관리자 전용 기능:")
+
         credit_pw = st.text_input("크레딧 비밀번호", type="password")
         if credit_pw and credit_pw in ADMIN_KEYS:
             current = get_user(USER_ID).get("credits", 0)
@@ -653,19 +719,21 @@ def render_payment_and_feedback():
             st.success("50 크레딧 지급 완료!")
             st.rerun()
 
-        # voucher generator
         st.markdown("---")
         st.markdown("#### 바우처 생성")
-        num = st.number_input("개수", 1, 200, 10)
+
+        num = st.number_input("생성 개수", 1, 200, 10)
         each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
 
-        if st.button(TEXT["admin_make"]):
+        if st.button("코드 생성", use_container_width=True):
             out = []
             for _ in range(int(num)):
                 c = uuid.uuid4().hex[:10].upper()
                 create_voucher(c, each)
                 out.append(c)
             st.code("\n".join(out))
+            st.success("코드 생성 완료!")
+
 
 
 # ================= Onboarding =================
