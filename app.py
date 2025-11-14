@@ -1,9 +1,9 @@
 # ==========================================
 # 💙 EOERWAY AI Therapy v2.9 (Complete)
-# Wallet + Voucher + Paywall + Memory + Onboarding
+# Wallet + Voucher + Paywall + Memory
 # Unique Visitor Counter (Fixed)
+# Onboarding Removed (바로 대화 시작)
 # ==========================================
-
 
 import os, uuid, json, time, random
 from datetime import datetime
@@ -61,11 +61,9 @@ if "unique_visitor_id" not in st.session_state:
 
 USER_ID = st.session_state["unique_visitor_id"]
 
-
-
 # ================= Visitor Counter (C 방식: 새로고침 제외, 재방문 +1, 관리자 제외) =================
 
-ADMIN_UID = "My USER_ID: 2d8c06ea-1994-49cd-8d48-ecd9c6d29412"   # 여기에 나중에 관리자 USER_ID 넣어주세요!
+ADMIN_UID = "ADMIN_ONLY_VISITOR_ID"   # 여기에 본인 USER_ID 넣으면 관리자 방문은 카운트 안 됨
 
 def update_visit_stats():
     visitor_id = USER_ID
@@ -100,7 +98,6 @@ def update_visit_stats():
         db.collection("stats").document("total").set({"count": firestore.Increment(1)}, merge=True)
         db.collection("stats").document(today).set({"count": firestore.Increment(1)}, merge=True)
 
-
 def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     total_doc = db.collection("stats").document("total").get()
@@ -110,11 +107,13 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
-# ---- 새로고침 방지용 (유지해도 되고 제거해도 됨 — 유지하는 게 안정적) ----
+# ---- 새로고침 방지용 ----
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
 
+# (디버깅용) 필요 없으면 주석 처리
+# st.write("My USER_ID:", USER_ID)
 
 # ================= Language State =================
 if "lang" not in st.session_state:
@@ -167,28 +166,8 @@ if language == "English 🇺🇸":
         "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 Admin — Generate Voucher Codes",
         "admin_make": "Generate",
-        # Onboarding
-        "ob_title": "💙 Before we start, can you tell me just three things?",
-        "ob_desc": "So I can talk less like a robot and more like a friend.",
-        "ob_q1": "1) What's the area that feels hardest these days?",
-        "ob_q2": "2) Describe your current state in one line:",
-        "ob_q3": "3) What would you like most from today's chat?",
-        "ob_placeholder_q2": "e.g., I feel stuck and stressed about money.",
-        "ob_placeholder_q3": "e.g., I just want comfort and one small next step.",
-        "ob_start_btn": "Start Chat",
-        "ob_required": "Please fill at least one line 💙",
-        "ob_saved": "Got it. I'll remember this during our talks 💙",
     }
 
-    ONBOARDING_TOPICS = [
-        "Money / income",
-        "Work / study / burnout",
-        "Relationships / friends",
-        "Family / romance",
-        "Health / sleep",
-        "Life feels hard in general",
-        "Other (I'll write)",
-    ]
 else:
     TEXT = {
         "title": "❤️ 마음을 기댈 수 있는 따뜻한 AI 친구",
@@ -222,28 +201,7 @@ else:
         "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 관리자 — 바우처 코드 생성",
         "admin_make": "코드 생성",
-        # Onboarding
-        "ob_title": "💙 대화를 시작하기 전에, 딱 세 가지만 알려주세요",
-        "ob_desc": "그렇게 해야 정말 나를 아는 친구처럼 이야기할 수 있어요.",
-        "ob_q1": "1) 요즘 가장 힘든 분야는?",
-        "ob_q2": "2) 지금 내 상태를 한 줄로 표현한다면?",
-        "ob_q3": "3) 오늘 대화에서 가장 얻고 싶은 건?",
-        "ob_placeholder_q2": "예: 돈 걱정 때문에 하루종일 불안해요.",
-        "ob_placeholder_q3": "예: 위로 한 마디와 아주 작은 행동 하나요.",
-        "ob_start_btn": "시작하기",
-        "ob_required": "한 줄이라도 적어주시면 도와드릴 수 있어요 💙",
-        "ob_saved": "기억해 둘게요. 앞으로 참고할게요 💙",
     }
-
-    ONBOARDING_TOPICS = [
-        "돈 / 수입",
-        "일 / 번아웃",
-        "인간관계",
-        "가족 / 연애",
-        "건강 / 수면",
-        "그냥 사는 게 힘들어요",
-        "기타 (직접 적기)",
-    ]
 
 st.title(TEXT["title"])
 
@@ -310,8 +268,8 @@ defaults = {
     "credits": 0,
     "purchased_packs": 0,
     "ad_free": False,
-    # Onboarding
-    "onboarding_done": False,
+    # 온보딩은 이제 쓰지 않지만, 기존 데이터 호환용으로 필드만 남겨둠
+    "onboarding_done": True,
     "ob_topic": "",
     "ob_feeling_line": "",
     "ob_today_goal": "",
@@ -331,6 +289,7 @@ else:
 def persist_user(fields: dict):
     user_ref.set(fields, merge=True)
     st.session_state.update(fields)
+
 # ================= Long-term Memory (read-only) =================
 def _get_user_memory(uid: str) -> str:
     doc = db.collection("users").document(uid).collection("memory").document("profile").get()
@@ -414,7 +373,6 @@ Update in 5–9 lines including:
     except Exception as e:
         print("memory update error:", e)
 
-
 # ================= Wallet / Voucher Helpers =================
 def ensure_user(uid: str):
     ref = db.collection("users").document(uid)
@@ -490,34 +448,77 @@ def decrement_credit(uid: str, amount: int = 1):
     tx = db.transaction()
     return _tx(tx)
 
-
 # ================= AI Response =================
 def stream_reply(user_input: str):
     try:
+        # ===== 새로 바뀐, 아주 깊고 진심 어린 프롬프트 =====
         if language == "English 🇺🇸":
             system_prompt = """
-You're a warm AI friend. Listen gently, acknowledge feelings, avoid generic advice."""
+You are a warm, emotionally attuned AI friend for people who are struggling
+with money stress, loneliness, burnout, and self-doubt.
+
+Goals:
+- Make the user feel *deeply understood*, not judged.
+- Respond as if you truly care about this one person in front of you.
+- Unless the user explicitly asks for something short, write answers that are
+  rich, specific, and at least 8 sentences long.
+
+Style:
+- Very warm, gentle, and conversational — like a close friend who is also wise.
+- First, mirror and name the user's feelings in your own words.
+- Second, validate that those feelings make sense in their situation
+  (no toxic positivity, no “just cheer up”).
+- Third, gently explore what might be happening underneath (fears, beliefs,
+  patterns), using simple, compassionate language.
+- Fourth, offer 1–3 *small, realistic* next steps, clearly numbered or bulleted.
+- Fifth, always end with a short, encouraging closing line that gives hope
+  and a gentle follow-up question that invites them to keep talking.
+
+Rules:
+- Never sound cold, robotic, or purely logical.
+- Do not act as a medical, legal, or financial professional; speak as a
+  supportive friend with life wisdom.
+- Avoid generic clichés; always tie your response to the *specific* story
+  and phrases the user shared.
+"""
         else:
             system_prompt = """
-너는 따뜻한 AI 친구야. 공감 → 지지 → 작은 제안 → 따뜻한 마무리 흐름으로 작성해 줘."""
+너는 돈 걱정, 외로움, 번아웃, 자존감 문제로 힘든 사람을 돕는
+**따뜻한 AI 상담 친구**야.
+
+목표:
+- 사용자가 “드디어 나를 이해해 주는구나…”라고 느끼게 만들기.
+- 판단하거나 훈계하지 말고, 진심으로 걱정해 주는 친구처럼 말하기.
+- 사용자가 특별히 짧게 달라고 하지 않는 한,
+  **최소 8문장 이상** 충분히 길고 풍부하게 답하기.
+
+대화 흐름:
+1) 먼저, 사용자가 느끼는 감정을 너의 말로 다시 정리해 주고
+   (감정에 이름 붙이기: 불안, 좌절, 허탈감, 분노 등).
+2) 그 감정이 충분히 이해된다고, “그럴 수밖에 없는 이유”를 설명하며
+   **정당화·공감**해 주기 (토닥토닥해 주는 느낌).
+3) 그 사람의 상황(과거 경험, 두려움, 패턴 등)을 조심스럽게 추측하며
+   왜 이렇게 힘든지 부드럽게 풀어 보기.
+4) 한 번에 큰 해결책이 아니라, **아주 작지만 현실적인 다음 행동 1~3개**만
+   번호 매겨 제안하기 (오늘/내일 당장 할 수 있는 수준으로).
+5) 마지막은 짧은 위로·응원 한 문장과,
+   편하게 이어서 말하도록 돕는 **부드러운 질문 하나**로 마무리하기.
+
+규칙:
+- 차갑거나 로봇 같거나, “힘내세요~” 같은 빈말만 하지 말 것.
+- 전문의처럼 진단/치료하지 말고,
+  인생 경험이 많은 친한 언니/오빠 같은 톤으로 말할 것.
+- 뻔한 일반론 대신, 사용자가 실제로 쓴 표현과 상황에 꼭 맞게
+  구체적으로 답할 것.
+"""
 
         user_memory = _get_user_memory(USER_ID)
-        user_doc = get_user(USER_ID)
-
-        onboarding_info = ""
-        if user_doc.get("onboarding_done"):
-            lines = []
-            if user_doc.get("ob_topic"): lines.append(f"- Topic: {user_doc['ob_topic']}")
-            if user_doc.get("ob_feeling_line"): lines.append(f"- State: {user_doc['ob_feeling_line']}")
-            if user_doc.get("ob_today_goal"): lines.append(f"- Goal: {user_doc['ob_today_goal']}")
-            onboarding_info = "\n".join(lines)
 
         context_messages = [{"role": "system", "content": system_prompt}]
         if user_memory:
             context_messages.append({"role": "system", "content": f"User memory:\n{user_memory}"})
-        if onboarding_info:
-            context_messages.append({"role": "system", "content": f"Onboarding:\n{onboarding_info}"})
 
+        # 최근 대화 맥락
         recent_history = st.session_state["chat_history"][-10:]
         for msg in recent_history:
             context_messages.append(msg)
@@ -539,7 +540,10 @@ You're a warm AI friend. Listen gently, acknowledge feelings, avoid generic advi
             delta = chunk.choices[0].delta
             if delta.content:
                 full += delta.content
-                placeholder.markdown(f"<div class='bot-bubble'>{full}💫</div>", unsafe_allow_html=True)
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full}💫</div>",
+                    unsafe_allow_html=True
+                )
                 time.sleep(0.03)
 
         reply_text = full.strip()
@@ -565,7 +569,6 @@ You're a warm AI friend. Listen gently, acknowledge feelings, avoid generic advi
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-
 # ================= Paywall =================
 def is_crisis(text: str) -> bool:
     t = (text or "").lower()
@@ -590,7 +593,6 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
     except:
         show_paywall()
         return False, False
-
 
 # ================= Payment & Feedback =================
 def render_payment_and_feedback():
@@ -764,55 +766,6 @@ def render_payment_and_feedback():
         st.markdown("---")
         st.markdown(payment_notice)
 
-# ================= Onboarding Page =================
-def render_onboarding():
-    ensure_user(USER_ID)
-    user_data = get_user(USER_ID)
-
-    # 이미 온보딩 완료면 반환
-    if user_data.get("onboarding_done"):
-        return
-
-    st.markdown("---")
-    st.markdown(f"### {TEXT['ob_title']}")
-    st.write(TEXT["ob_desc"])
-
-    # ⭐ 바로 대화 시작하기 버튼
-    skip = st.button("필요 없어요, 바로 대화 시작할게요 💙")
-    if skip:
-        persist_user({"onboarding_done": True})
-        st.success("바로 대화 화면으로 이동할게요 💙")
-        time.sleep(0.5)
-        st.rerun()
-
-    # -------- 기존 온보딩 폼 --------
-    with st.form("onboarding_form"):
-        topic = st.selectbox(TEXT["ob_q1"], ONBOARDING_TOPICS)
-        other_topic = ""
-        if topic == ONBOARDING_TOPICS[-1]:
-            other_topic = st.text_input(" ", placeholder="직접 적어주세요")
-
-        q2 = st.text_area(TEXT["ob_q2"], placeholder=TEXT["ob_placeholder_q2"])
-        q3 = st.text_area(TEXT["ob_q3"], placeholder=TEXT["ob_placeholder_q3"])
-
-        submitted = st.form_submit_button(TEXT["ob_start_btn"])
-
-    if submitted:
-        final_topic = other_topic.strip() if (topic == ONBOARDING_TOPICS[-1] and other_topic.strip()) else topic
-        if not (final_topic.strip() or q2.strip() or q3.strip()):
-            st.warning(TEXT["ob_required"])
-        else:
-            persist_user({
-                "onboarding_done": True,
-                "ob_topic": final_topic.strip(),
-                "ob_feeling_line": q2.strip(),
-                "ob_today_goal": q3.strip(),
-                "onboarding_at": datetime.utcnow().isoformat(),
-            })
-            st.success(TEXT["ob_saved"])
-            time.sleep(0.7)
-            st.rerun()
-
 # ================= Display Chat History =================
 def display_chat_history():
     for msg in st.session_state["chat_history"]:
@@ -946,14 +899,7 @@ else:
         st.rerun()
 
 # ================= Main Render =================
-onboarding_done = bool(user_snapshot.get("onboarding_done"))
-
-if not onboarding_done:
-    render_onboarding()
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
 else:
-    if st.session_state.get("show_payment"):
-        render_payment_and_feedback()
-    else:
-        render_chat_page()
-
-
+    render_chat_page()
