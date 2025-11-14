@@ -60,25 +60,43 @@ if "unique_visitor_id" not in st.session_state:
 
 USER_ID = st.session_state["unique_visitor_id"]
 
-# ================= Visitor Counter =================
+# ================= Visitor Counter (C 방식: 새로고침 제외, 재방문 +1, 관리자 제외) =================
+
+ADMIN_UID = "ADMIN_ONLY_VISITOR_ID"   # 여기에 나중에 관리자 USER_ID 넣어주세요!
+
 def update_visit_stats():
     visitor_id = USER_ID
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
-    visitor_ref = db.collection("visitors").document(visitor_id)
-    if visitor_ref.get().exists:
+    # ---- 관리자 방문 제외 ----
+    if visitor_id == ADMIN_UID:
         return
 
-    visitor_ref.set({
-        "first_visit": firestore.SERVER_TIMESTAMP,
-        "day": today,
-    })
+    visitor_ref = db.collection("visitors").document(visitor_id)
+    snap = visitor_ref.get()
 
-    total_ref = db.collection("stats").document("total")
-    total_ref.set({"count": firestore.Increment(1)}, merge=True)
+    # ---- 첫 방문 ----
+    if not snap.exists:
+        visitor_ref.set({
+            "first_visit": firestore.SERVER_TIMESTAMP,
+            "last_visit_day": today,
+        })
 
-    daily_ref = db.collection("stats").document(today)
-    daily_ref.set({"count": firestore.Increment(1)}, merge=True)
+        db.collection("stats").document("total").set({"count": firestore.Increment(1)}, merge=True)
+        db.collection("stats").document(today).set({"count": firestore.Increment(1)}, merge=True)
+        return
+
+    # ---- 이미 방문한 유저 ----
+    data = snap.to_dict() or {}
+    last_day = data.get("last_visit_day")
+
+    # ---- 날짜가 바뀌었을 때만 +1 ----
+    if last_day != today:
+        visitor_ref.update({"last_visit_day": today})
+
+        db.collection("stats").document("total").set({"count": firestore.Increment(1)}, merge=True)
+        db.collection("stats").document(today).set({"count": firestore.Increment(1)}, merge=True)
+
 
 def get_visit_counts():
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -89,9 +107,11 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
+# ---- 새로고침 방지용 (유지해도 되고 제거해도 됨 — 유지하는 게 안정적) ----
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
+
 # ================= Language State =================
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
