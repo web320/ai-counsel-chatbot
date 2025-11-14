@@ -56,10 +56,18 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Unique Visitor ID (브라우저 고유값) =================
-if "unique_visitor_id" not in st.session_state:
-    st.session_state["unique_visitor_id"] = str(uuid.uuid4())
+visitor_id_js = """
+var existing = window.localStorage.getItem("visitor_id");
+if (!existing) {
+    existing = self.crypto.randomUUID();
+    window.localStorage.setItem("visitor_id", existing);
+}
+existing;
+"""
 
-USER_ID = st.session_state["unique_visitor_id"]
+uid = st.experimental_js(visitor_id_js)
+USER_ID = uid
+
 
 # ================= Visitor Counter (C 방식: 새로고침 제외, 재방문 +1, 관리자 제외) =================
 
