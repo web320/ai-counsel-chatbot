@@ -112,7 +112,7 @@ def get_visit_counts():
 if "visit_logged" not in st.session_state:
     update_visit_stats()
     st.session_state["visit_logged"] = True
-st.write("My USER_ID:", USER_ID)
+
 
 # ================= Language State =================
 if "lang" not in st.session_state:
