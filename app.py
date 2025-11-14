@@ -63,7 +63,7 @@ USER_ID = st.session_state["unique_visitor_id"]
 
 # ================= Visitor Counter (C 방식: 새로고침 제외, 재방문 +1, 관리자 제외) =================
 
-ADMIN_UID = "ADMIN_ONLY_VISITOR_ID"   # 여기에 나중에 관리자 USER_ID 넣어주세요!
+ADMIN_UID = "My USER_ID: 2d8c06ea-1994-49cd-8d48-ecd9c6d29412"   # 여기에 나중에 관리자 USER_ID 넣어주세요!
 
 def update_visit_stats():
     visitor_id = USER_ID
