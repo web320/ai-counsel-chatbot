@@ -1,6 +1,6 @@
 # ==========================================
 # 💙 EOERWAY AI Therapy v2.9
-# Wallet + Voucher + Paywall + Memory (친구 톤 + 무료횟수 버그 수정)
+# Wallet + Voucher + Paywall + Memory + Onboarding
 # ==========================================
 
 import os, uuid, json, time, random
@@ -139,8 +139,8 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode granted 50 free uses!",
-        "admin_already": "✅ Admin already unlocked.",
+        "admin_success": "🔓 Admin mode granted 50 free uses (credits added)!",
+        "admin_already": "✅ Admin credits are already unlocked for this session.",
         "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
         "history_cleared": "Chat history has been cleared!",
@@ -152,9 +152,30 @@ if language == "English 🇺🇸":
         "voucher_used": "This code was already used.",
         "paywall": "You've used your free limit. Redeem a code to continue.",
         "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
-        "admin_gen": "🔑 Admin — Generate Voucher Codes",
+        "admin_gen": "🔑 Admin — Generate Voucher Codes & Credits",
         "admin_make": "Generate",
+        # Onboarding
+        "ob_title": "💙 Before we start, could you tell me just three things?",
+        "ob_desc": "This helps me give less generic advice and talk more like a real friend who knows you.",
+        "ob_q1": "1) These days, what's the main area that feels hardest?",
+        "ob_q2": "2) If you described your current state in one line, what would you say?",
+        "ob_q3": "3) What would you most like to get from today's chat?",
+        "ob_placeholder_q2": "e.g., I feel stuck and anxious about money all the time.",
+        "ob_placeholder_q3": "e.g., I just want some comfort and one tiny next step.",
+        "ob_start_btn": "Start Chat",
+        "ob_required": "Please fill in at least one line so I can support you better 💙",
+        "ob_saved": "Got it. I'll remember this and keep it in mind during our talks. 💙",
     }
+
+    ONBOARDING_TOPICS = [
+        "Money / income",
+        "Work / study / burnout",
+        "Relationships / friends",
+        "Family / romance",
+        "Health / body / sleep",
+        "Just living itself feels hard",
+        "Other (I'll write it myself)",
+    ]
 else:
     TEXT = {
         "title": "❤️ 마음을 기댈 수 있는 따뜻한 AI 친구",
@@ -173,8 +194,8 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
-        "admin_success": "🔓 관리자 모드가 활성화되어 50회 무료 이용권이 추가되었습니다!",
-        "admin_already": "✅ 이미 관리자 인증이 완료되어 있습니다.",
+        "admin_success": "🔓 관리자 모드로 50회 크레딧이 추가되었습니다!",
+        "admin_already": "✅ 이미 이 세션에서 관리자 크레딧을 추가하셨어요.",
         "admin_wrong": "❌ 관리자 비밀번호가 틀렸습니다.",
         "clear_history": "🗑️ 대화 기록 지우기",
         "history_cleared": "대화 기록이 삭제되었습니다!",
@@ -186,9 +207,30 @@ else:
         "voucher_used": "이미 사용된 코드예요.",
         "paywall": "무료 한도를 모두 사용했어요. 코드를 충전하면 이어서 대화할 수 있어요.",
         "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
-        "admin_gen": "🔑 관리자 — 바우처 코드 생성",
+        "admin_gen": "🔑 관리자 — 바우처 코드 생성 & 크레딧 관리",
         "admin_make": "코드 생성",
+        # Onboarding
+        "ob_title": "💙 대화를 시작하기 전에, 딱 세 가지만 알려주실래요?",
+        "ob_desc": "그래야 뻔한 조언이 아니라, 정말 나를 아는 친구처럼 이야기해 줄 수 있어요.",
+        "ob_q1": "1) 요즘 가장 힘든 분야는 무엇인가요?",
+        "ob_q2": "2) 지금 내 상태를 한 줄로 표현한다면 어떤 말이 떠오르나요?",
+        "ob_q3": "3) 오늘 이 대화에서 가장 얻고 싶은 건 무엇인가요?",
+        "ob_placeholder_q2": "예: 돈 걱정이 너무 커서 숨이 막혀요.",
+        "ob_placeholder_q3": "예: 그냥 위로 한 마디와, 오늘 할 수 있는 아주 작은 행동 하나요.",
+        "ob_start_btn": "시작하기",
+        "ob_required": "짧은 한 줄이라도 적어주시면, 더 잘 도와줄 수 있어요 💙",
+        "ob_saved": "고맙습니다. 이 내용을 기억해 두고 앞으로 대화에 꼭 반영할게요. 💙",
     }
+
+    ONBOARDING_TOPICS = [
+        "돈 / 수입",
+        "일 / 공부 / 번아웃",
+        "인간관계 / 친구",
+        "가족 / 연애",
+        "건강 / 몸 / 수면",
+        "그냥 살아가는 것 자체가 힘들어요",
+        "기타 (직접 적을게요)",
+    ]
 
 st.title(TEXT["title"])
 
@@ -255,6 +297,11 @@ defaults = {
     "credits": 0,
     "purchased_packs": 0,
     "ad_free": False,
+    # 온보딩 기본값
+    "onboarding_done": False,
+    "ob_topic": "",
+    "ob_feeling_line": "",
+    "ob_today_goal": "",
 }
 
 user_ref = db.collection("users").document(USER_ID)
@@ -477,7 +524,13 @@ You're talking to someone who came here because they're hurting. Not as a "thera
 4. If it feels natural, gently offer one tiny thing they could try right now (like 3 slow breaths), but don't force it.
 5. End with warm, human words, not formal advice.
 
-Default to 4–8 sentences, warm and human (not clinical). If the user writes a long message or explicitly asks for depth, go longer (up to ~10–12 sentences). Never diagnose or suggest medication. If they mention self-harm or suicide, gently acknowledge their pain and suggest professional help."""
+Whenever you are given onboarding information or a user profile in system messages, read it carefully
+and use it to make your response feel tailored to this person. Avoid generic, obvious advice they probably
+already know; tie your suggestions directly to their current struggles and to what they said they want from today's chat.
+
+Default to 4–8 sentences, warm and human (not clinical). If the user writes a long message or explicitly asks for depth,
+go longer (up to ~10–12 sentences). Never diagnose or suggest medication. If they mention self-harm or suicide,
+gently acknowledge their pain and suggest professional help."""
         else:
             system_prompt = """
 너는 사용자의 마음을 들어주는 '따뜻한 AI 친구'야.
@@ -500,6 +553,11 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
 5) 마무리는 "오늘 여기까지도 잘 버티셨어요.", "혼자가 아니라는 걸 잊지 않으셨으면 해요."처럼
    따뜻한 한두 문장으로 끝낸다.
 
+- 온보딩에서 사용자가 말해 준 "요즘 가장 힘든 것"과
+  "오늘 이 대화에서 얻고 싶은 것"이 system 메시지로 주어질 수 있어요.
+  이 정보는 꼭 참고해서, 누구에게나 할 수 있는 뻔한 조언 대신
+  이 사람 상황에 맞는 이야기로 답해 주세요.
+
 [질문 사용 가이드]
 - "어떤 일 때문인가요?", "어떤 감정인가요?" 같은 탐색 질문은 꼭 필요할 때만, 부드럽게 한 번만 쓴다.
 - 사용자가 "그냥 감정반응이야", "몰라", "그냥 그래"라고 말하면
@@ -518,12 +576,34 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
         # 🔹 사용자 장기 메모리 읽기
         user_memory = _get_user_memory(USER_ID)
 
-        # 🔹 대화 컨텍스트 구성 (최근 10개 + 메모리)
+        # 🔹 온보딩 정보 읽기
+        user_doc = get_user(USER_ID)
+        onboarding_info = ""
+        if user_doc.get("onboarding_done"):
+            lines = []
+            topic = user_doc.get("ob_topic", "")
+            feel_line = user_doc.get("ob_feeling_line", "")
+            goal_line = user_doc.get("ob_today_goal", "")
+            if topic:
+                lines.append(f"- Main ongoing struggle: {topic}")
+            if feel_line:
+                lines.append(f"- User's one-line description of their recent state: {feel_line}")
+            if goal_line:
+                lines.append(f"- What the user wants from today's chat: {goal_line}")
+            if lines:
+                onboarding_info = "\n".join(lines)
+
+        # 🔹 대화 컨텍스트 구성 (최근 10개 + 메모리 + 온보딩)
         context_messages = [{"role": "system", "content": system_prompt}]
         if user_memory:
             context_messages.append({
                 "role": "system",
                 "content": f"User profile & recurring themes for personalization:\n{user_memory}"
+            })
+        if onboarding_info:
+            context_messages.append({
+                "role": "system",
+                "content": f"Onboarding info about this user:\n{onboarding_info}"
             })
 
         recent_history = st.session_state["chat_history"][-10:]
@@ -700,19 +780,6 @@ def render_payment_and_feedback():
                 })
                 st.success(TEXT["feedback_sent"])
 
-        admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
-        if admin_input:
-            if admin_input in ADMIN_KEYS:
-                if not st.session_state.get("admin_unlocked"):
-                    new_remaining = st.session_state.get("remaining_paid_uses", 0) + 50
-                    persist_user({"is_paid": True, "remaining_paid_uses": new_remaining})
-                    st.session_state["admin_unlocked"] = True
-                    st.success(TEXT["admin_success"])
-                else:
-                    st.info(TEXT["admin_already"])
-            else:
-                st.error(TEXT["admin_wrong"])
-
     with col2:
         st.markdown("### 💳 Direct Payment")
 
@@ -760,6 +827,49 @@ def render_payment_and_feedback():
 
         st.markdown("---")
         st.markdown(payment_notice)
+
+# ================= Onboarding Page =================
+def render_onboarding():
+    """처음 들어온 사람에게 3가지 질문을 받는 온보딩 페이지"""
+    ensure_user(USER_ID)
+    user_data = get_user(USER_ID)
+    if user_data.get("onboarding_done"):
+        return
+
+    st.markdown("---")
+    st.markdown(f"### {TEXT['ob_title']}")
+    st.write(TEXT["ob_desc"])
+
+    with st.form("onboarding_form"):
+        topic = st.selectbox(TEXT["ob_q1"], ONBOARDING_TOPICS)
+        other_topic = ""
+        if topic == ONBOARDING_TOPICS[-1]:
+            if language == "English 🇺🇸":
+                other_placeholder = "Write a few words about what's hardest lately."
+            else:
+                other_placeholder = "요즘 어떤 점이 가장 힘든지 짧게 적어주세요."
+            other_topic = st.text_input(" ", placeholder=other_placeholder)
+
+        q2 = st.text_area(TEXT["ob_q2"], placeholder=TEXT["ob_placeholder_q2"])
+        q3 = st.text_area(TEXT["ob_q3"], placeholder=TEXT["ob_placeholder_q3"])
+
+        submitted = st.form_submit_button(TEXT["ob_start_btn"])
+
+    if submitted:
+        final_topic = other_topic.strip() if (topic == ONBOARDING_TOPICS[-1] and other_topic.strip()) else topic
+        if not (final_topic.strip() or q2.strip() or q3.strip()):
+            st.warning(TEXT["ob_required"])
+        else:
+            persist_user({
+                "onboarding_done": True,
+                "ob_topic": final_topic.strip(),
+                "ob_feeling_line": q2.strip(),
+                "ob_today_goal": q3.strip(),
+                "onboarding_at": datetime.utcnow().isoformat(),
+            })
+            st.success(TEXT["ob_saved"])
+            time.sleep(0.7)
+            st.rerun()
 
 # ================= Display Chat History =================
 def display_chat_history():
@@ -893,7 +1003,7 @@ with st.sidebar.form("redeem_form", clear_on_submit=True):
             else:
                 st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
-# 관리자: 바우처 코드 생성기
+# 관리자: 바우처 코드 생성기 + 크레딧 관리자 비번
 if "is_admin" not in st.session_state:
     st.session_state["is_admin"] = False
 
@@ -904,6 +1014,24 @@ with st.sidebar.expander(TEXT["admin_gen"]):
         st.success("관리자 모드 활성화")
 
     if st.session_state["is_admin"]:
+        credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password")
+        if credit_admin:
+            if credit_admin in ADMIN_KEYS:
+                if not st.session_state.get("admin_unlocked"):
+                    current_data = get_user(USER_ID)
+                    current_credits = int(current_data.get("credits", 0))
+                    new_credits = current_credits + CREDIT_PACK_SIZE
+                    persist_user({"credits": new_credits})
+                    st.session_state["admin_unlocked"] = True
+                    st.success(TEXT["admin_success"])
+                    st.rerun()
+                else:
+                    st.info(TEXT["admin_already"])
+            else:
+                st.error(TEXT["admin_wrong"])
+
+        st.markdown("---")
+
         def gen_code(n=8):
             return uuid.uuid4().hex[:n].upper()
 
@@ -930,8 +1058,14 @@ else:
         st.rerun()
 
 # ================= Main Render =================
-if st.session_state.get("show_payment"):
-    render_payment_and_feedback()
+onboarding_done = bool(user_snapshot.get("onboarding_done"))
+
+if not onboarding_done:
+    render_onboarding()
 else:
-    render_chat_page()
+    if st.session_state.get("show_payment"):
+        render_payment_and_feedback()
+    else:
+        render_chat_page()
+
 
