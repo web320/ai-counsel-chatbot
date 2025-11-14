@@ -571,173 +571,178 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
 # ================= Payment & Feedback =================
 def render_payment_and_feedback():
     st.markdown("---")
-    st.markdown("## 💳 결제 안내")
+    st.subheader(TEXT["payment_title"])
 
     intent_ref = db.collection("purchase_intent").document(USER_ID)
-    clicked = intent_ref.get().exists
+    intent_doc = intent_ref.get()
+    clicked = intent_doc.exists
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
     is_en = (language == "English 🇺🇸")
-
-    # ==================== TEXT ====================
     if is_en:
-        pay_btn_label = "💳 $3 / 50 uses"
-        intent_btn_label = "💙 I'm interested in purchasing"
-        already = "You've already expressed your interest 💙"
-        success_msg = "Thank you! You'll be notified first 💖"
-        count_text = f"{total_intents} people have shown interest."
-        pay_desc_title = "📸 After payment, please send a screenshot to:"
-        pay_notice = """
-- ✉️ **Email:** newnewtry6@gmail.com  
-- 📸 **Instagram:** @youtuberhawaiijelly  
-- 💬 **KakaoTalk ID:** jeuspo  
-"""
+        title_line = "#### 50 uses for **$3** — Purchase intent"
+        btn_label = "💳 $3 for 50 uses — I'm interested"
+        info_already = "💙 You've already registered your interest. Thank you!"
+        success_msg = "We'll notify you first when payments open 💖"
+        caption_text = f"So far, **{total_intents}** people have shown interest."
+        plan_value = "50_uses_$3"
+        help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
+        payment_notice = (
+            "📸 **After completing payment, please take a screenshot and send it to:**\n"
+            "- ✉️ **newnewtry6@gmail.com**\n"
+            "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
+            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
+            "✅ When the developer confirms your message, "
+            "**the voucher code will be sent immediately.** 💙\n"
+        )
     else:
-        pay_btn_label = "💳 3,000원 / 50회 이용"
-        intent_btn_label = "💙 50회 이용권 결제 의사 표시"
-        already = "이미 결제 의사를 눌러주셨어요 💙"
-        success_msg = "고맙습니다! 결제가 열리면 가장 먼저 알려드릴게요 💖"
-        count_text = f"{total_intents}명이 결제 의사를 표시했어요."
-        pay_desc_title = "📸 결제 후 스크린샷을 아래로 보내주세요:"
-        pay_notice = """
-- ✉️ **이메일:** newnewtry6@gmail.com  
-- 📸 **인스타그램:** @youtuberhawaiijelly  
-- 💬 **카카오톡:** jeuspo  
-"""
+        title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
+        btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
+        info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
+        success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
+        caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
+        plan_value = "50회_3000원"
+        help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
+        payment_notice = (
+            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**\n"
+            "- ✉️ **newnewtry6@gmail.com**\n"
+            "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
+            "- 💬 카카오톡 아이디 **jeuspo**\n\n"
+            "✅ 개발자가 문자를 확인하면 **즉시 코드를 발송해드립니다** 💙\n"
+        )
 
-    # ================ PAYPAL RAINBOW BUTTON CSS ================
-    st.markdown("""
-    <style>
-    .center-box { text-align:center; }
-
-    .pay-btn {
-        display:inline-block;
-        padding:17px 34px;
-        font-size:22px;
-        font-weight:700;
-        color:white;
-        border-radius:50px;
-        background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
-        background-size:400%;
-        text-shadow:0 0 12px rgba(255,255,255,0.9);
-        animation:rainbowGlow 6s linear infinite, pulse 1.8s ease-in-out infinite;
-        box-shadow:0 0 30px rgba(255,255,255,0.3);
-        text-decoration:none;
-        transition:0.25s ease;
-    }
-    .pay-btn:hover {
-        transform:scale(1.07);
-        box-shadow:0 0 40px rgba(255,255,255,0.8);
-        filter:brightness(1.15);
-    }
-
-    @keyframes rainbowGlow { 0%{background-position:0%} 100%{background-position:400%} }
-    @keyframes pulse {
-        0%,100% { text-shadow:0 0 14px #fff, 0 0 30px #ff00ff; }
-        50%     { text-shadow:0 0 24px #00ffff, 0 0 50px #33ff33; }
-    }
-
-    .screenshot-box {
-        margin-top:18px;
-        padding:18px;
-        border-radius:14px;
-        background:rgba(255,255,255,0.05);
-        border:1px solid rgba(255,255,255,0.15);
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ===================== PAYPAL BUTTON =====================
-    paypal_url = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-
-    st.markdown("<div class='center-box'>", unsafe_allow_html=True)
-    st.markdown(
-        f"<a href='{paypal_url}' target='_blank' class='pay-btn'>{pay_btn_label}</a>",
-        unsafe_allow_html=True
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ===================== Screenshot Notice =====================
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"### {pay_desc_title}")
-    st.markdown(f"<div class='screenshot-box'>{pay_notice}</div>", unsafe_allow_html=True)
-
-    # ===================== Purchase Intent Button =====================
-    st.markdown("---")
-    st.markdown("### 🔹 결제 의사 표시 | Purchase Intent")
+    st.markdown(title_line)
 
     if clicked:
-        st.info(already)
+        st.info(info_already)
     else:
-        if st.button(intent_btn_label, use_container_width=True):
+        if st.button(btn_label):
             intent_ref.set({
                 "uid": USER_ID,
-                "plan": "50_uses",
+                "plan": plan_value,
                 "created_at": datetime.utcnow().isoformat(),
             })
             st.success(success_msg)
             st.rerun()
 
-    st.caption(count_text)
+    st.caption(caption_text)
+    st.info(help_text)
 
-    # ====================== Feedback ======================
     st.markdown("---")
-    st.markdown(f"### {TEXT['feedback_title']}")
-    fb = st.text_area(" ", placeholder=TEXT['feedback_placeholder'])
-    if st.button("📩 Submit / 보내기", use_container_width=True):
-        if fb.strip():
-            db.collection("feedbacks").add({
-                "uid": USER_ID,
-                "feedback": fb,
-                "lang": language,
-                "created_at": datetime.utcnow().isoformat()
-            })
-            st.success(TEXT["feedback_sent"])
-        else:
-            st.warning(TEXT["feedback_empty"])
 
-    # ====================== Admin Section ======================
-    st.markdown("---")
-    st.markdown(f"### {TEXT['admin_gen']}")
+    col1, col2 = st.columns([3, 2])
 
-    if "is_admin" not in st.session_state:
-        st.session_state["is_admin"] = False
+    with col1:
+        # ===== 서비스 피드백 =====
+        st.subheader(TEXT["feedback_title"])
+        fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
+        if st.button("📩 Submit / 보내기"):
+            if not fb.strip():
+                st.warning(TEXT["feedback_empty"])
+            else:
+                db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                    "uid": USER_ID, "feedback": fb, "lang": language,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                st.success(TEXT["feedback_sent"])
 
-    admin_key = st.text_input("Admin Key", type="password")
-    if admin_key and admin_key in ADMIN_KEYS:
-        st.session_state["is_admin"] = True
-        st.success("관리자 모드 활성화")
+        # ===== 여기부터 관리자 영역 (서비스 피드백 아래) =====
+        st.markdown("---")
+        st.markdown(f"### {TEXT['admin_gen']}")
 
-    if st.session_state["is_admin"]:
-        st.write("관리자 전용 기능:")
+        if "is_admin" not in st.session_state:
+            st.session_state["is_admin"] = False
 
-        credit_pw = st.text_input("크레딧 비밀번호", type="password")
-        if credit_pw and credit_pw in ADMIN_KEYS:
-            current = get_user(USER_ID).get("credits", 0)
-            new = current + CREDIT_PACK_SIZE
-            persist_user({"credits": new})
-            st.success("50 크레딧 지급 완료!")
-            st.rerun()
+        admin_key = st.text_input("Admin Key", type="password", key="admin_key_main")
+        if admin_key and admin_key in ADMIN_KEYS:
+            st.session_state["is_admin"] = True
+            st.success("관리자 모드 활성화")
+
+        if st.session_state["is_admin"]:
+            credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password", key="credit_admin_pw")
+            if credit_admin:
+                if credit_admin in ADMIN_KEYS:
+                    if not st.session_state.get("admin_unlocked"):
+                        current_data = get_user(USER_ID)
+                        current_credits = int(current_data.get("credits", 0))
+                        new_credits = current_credits + CREDIT_PACK_SIZE
+                        persist_user({"credits": new_credits})
+                        st.session_state["admin_unlocked"] = True
+                        st.success(TEXT["admin_success"])
+                        st.experimental_rerun()
+                    else:
+                        st.info(TEXT["admin_already"])
+                else:
+                    st.error(TEXT["admin_wrong"])
+
+            st.markdown("---")
+
+            def gen_code(n=8):
+                return uuid.uuid4().hex[:n].upper()
+
+            num = st.number_input("생성 개수", 1, 200, 10)
+            credits_each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
+            note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
+            if st.button(TEXT["admin_make"]):
+                out = []
+                for _ in range(int(num)):
+                    c = gen_code(10)
+                    create_voucher(c, credits_each, note=note)
+                    out.append(c)
+                st.success("코드 생성 완료! 아래 목록을 보관하세요.")
+                st.code("\n".join(out))
+
+    with col2:
+        st.markdown("### 💳 Direct Payment")
+
+        st.markdown("""
+        <style>
+        .rainbow-btn {
+            display:inline-block;
+            padding:14px 28px;
+            font-size:18px;
+            font-weight:bold;
+            text-transform:uppercase;
+            color:white;
+            background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
+            background-size:400%;
+            border:none;
+            border-radius:50px;
+            text-shadow:0 0 10px rgba(255,255,255,0.7);
+            box-shadow:0 0 25px rgba(255,255,255,0.3);
+            cursor:pointer;
+            animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
+            transition:transform 0.25s, box-shadow 0.25s;
+            text-decoration:none;
+        }
+        .rainbow-btn:hover {
+            transform:scale(1.08);
+            box-shadow:0 0 40px rgba(255,255,255,0.9);
+            filter:brightness(1.2);
+        }
+        @keyframes rainbowGlow {
+            0% {background-position:0%;}
+            100% {background-position:400%;}
+        }
+        @keyframes neonPulse {
+            0%,100% {text-shadow:0 0 10px #fff, 0 0 20px #ff00ff;}
+            50% {text-shadow:0 0 20px #00ffff, 0 0 40px #33ff33;}
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+        btn_text = "💳 3달러 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
+        st.markdown(f"""
+        <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
+        """, unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("#### 바우처 생성")
+        st.markdown(payment_notice)
 
-        num = st.number_input("생성 개수", 1, 200, 10)
-        each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
-
-        if st.button("코드 생성", use_container_width=True):
-            out = []
-            for _ in range(int(num)):
-                c = uuid.uuid4().hex[:10].upper()
-                create_voucher(c, each)
-                out.append(c)
-            st.code("\n".join(out))
-            st.success("코드 생성 완료!")
-
-
-
-# ================= Onboarding =================
+# ================= Onboarding Page =================
 def render_onboarding():
+    ensure_user(USER_ID)
     user_data = get_user(USER_ID)
     if user_data.get("onboarding_done"):
         return
@@ -748,63 +753,83 @@ def render_onboarding():
 
     with st.form("onboarding_form"):
         topic = st.selectbox(TEXT["ob_q1"], ONBOARDING_TOPICS)
-        other = ""
+        other_topic = ""
         if topic == ONBOARDING_TOPICS[-1]:
-            other = st.text_input(" ", placeholder="내용 입력")
+            if language == "English 🇺🇸":
+                other_placeholder = "Write a few words about what's hardest lately."
+            else:
+                other_placeholder = "요즘 어떤 점이 가장 힘든지 짧게 적어주세요."
+            other_topic = st.text_input(" ", placeholder=other_placeholder)
 
         q2 = st.text_area(TEXT["ob_q2"], placeholder=TEXT["ob_placeholder_q2"])
         q3 = st.text_area(TEXT["ob_q3"], placeholder=TEXT["ob_placeholder_q3"])
 
-        ok = st.form_submit_button(TEXT["ob_start_btn"])
+        submitted = st.form_submit_button(TEXT["ob_start_btn"])
 
-    if ok:
-        final_topic = other.strip() if topic == ONBOARDING_TOPICS[-1] and other else topic
-
-        if not (final_topic or q2.strip() or q3.strip()):
+    if submitted:
+        final_topic = other_topic.strip() if (topic == ONBOARDING_TOPICS[-1] and other_topic.strip()) else topic
+        if not (final_topic.strip() or q2.strip() or q3.strip()):
             st.warning(TEXT["ob_required"])
         else:
             persist_user({
                 "onboarding_done": True,
-                "ob_topic": final_topic,
+                "ob_topic": final_topic.strip(),
                 "ob_feeling_line": q2.strip(),
                 "ob_today_goal": q3.strip(),
+                "onboarding_at": datetime.utcnow().isoformat(),
             })
             st.success(TEXT["ob_saved"])
             time.sleep(0.7)
             st.rerun()
 
-
-# ================= Chat History =================
+# ================= Display Chat History =================
 def display_chat_history():
     for msg in st.session_state["chat_history"]:
         if msg["role"] == "user":
-            st.markdown(f"<div class='user-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='user-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
         else:
-            st.markdown(f"<div class='bot-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='bot-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
 
-
-# ================= Chat Page =================
+# ================= Chat Main Page =================
 def render_chat_page():
-    user_data = get_user(USER_ID)
+    ensure_user(USER_ID)
 
-    credits = int(user_data.get("credits", 0))
+    user_data = get_user(USER_ID)
+    credits_now = int(user_data.get("credits", 0))
     usage = int(user_data.get("usage_count", 0))
-    last_reset = datetime.fromisoformat(user_data.get("last_reset"))
+    last_reset_str = user_data.get("last_reset") or datetime.utcnow().isoformat()
 
     now = datetime.utcnow()
-    if (now - last_reset).total_seconds() >= RESET_INTERVAL_HOURS * 3600:
-        persist_user({"usage_count": 0, "last_reset": now.isoformat()})
+    try:
+        last_reset = datetime.fromisoformat(last_reset_str)
+    except Exception:
+        last_reset = now
+
+    if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         usage = 0
+        persist_user({
+            "usage_count": 0,
+            "last_reset": now.isoformat()
+        })
         st.info(TEXT["reset"])
 
     if usage < DAILY_FREE_LIMIT:
-        left = DAILY_FREE_LIMIT - usage
-        plan = TEXT["free"]
+        left_display = DAILY_FREE_LIMIT - usage
+        plan_label = TEXT["free"]
     else:
-        left = credits
-        plan = TEXT["paid"] if credits > 0 else TEXT["free"]
+        left_display = credits_now
+        plan_label = TEXT["paid"] if credits_now > 0 else TEXT["free"]
 
-    st.markdown(f"<div class='status'>{plan} — {TEXT['status_left']} {left}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='status'>{plan_label} — {TEXT['status_left']} {max(left_display,0)}회</div>",
+        unsafe_allow_html=True
+    )
 
     display_chat_history()
 
@@ -812,21 +837,23 @@ def render_chat_page():
     if not user_input:
         return
 
-    proceed, used_credit = charge_if_needed(user_input, usage, DAILY_FREE_LIMIT)
+    proceed, used_credit = charge_if_needed(user_input, free_used=usage, free_limit=DAILY_FREE_LIMIT)
     if not proceed:
         st.session_state["show_payment"] = True
         st.rerun()
         return
 
-    st.markdown(f"<div class='user-bubble'>{user_input}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='user-bubble'>{user_input}</div>",
+        unsafe_allow_html=True
+    )
 
     reply = stream_reply(user_input)
 
-    if reply and not used_credit and usage < DAILY_FREE_LIMIT:
-        persist_user({"usage_count": usage + 1})
-
-    st.rerun()
-
+    if reply:
+        if not used_credit and usage < DAILY_FREE_LIMIT:
+            persist_user({"usage_count": usage + 1})
+        st.rerun()
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -835,13 +862,16 @@ total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
     <div style="
-        margin-top:10px;
-        padding:8px;
-        border-radius:8px;
-        background:rgba(255,255,255,0.05);
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
     ">
-        🌍 Total: <b>{total_visits:,}</b><br>
-        ☀️ Today: <b>{daily_visits:,}</b>
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
     </div>
     """,
     unsafe_allow_html=True
@@ -853,25 +883,28 @@ if st.sidebar.button(TEXT["clear_history"]):
     st.rerun()
 
 st.sidebar.markdown(f"### {TEXT['wallet']}")
-info = get_user(USER_ID)
-st.sidebar.metric("Credits", int(info.get("credits", 0)))
+user_snapshot = get_user(USER_ID)
+st.sidebar.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
 st.sidebar.caption(TEXT["voucher_tip"])
 
 with st.sidebar.form("redeem_form", clear_on_submit=True):
-    code = st.text_input(" ", placeholder=TEXT["wallet_help"])
+    code_input = st.text_input(" ", placeholder=TEXT["wallet_help"])
     ok = st.form_submit_button(TEXT["redeem"])
-    if ok and code.strip():
+    if ok and code_input.strip():
         try:
-            bal = redeem_voucher(code.strip(), USER_ID)
-            persist_user({"credits": bal})
-            st.success(TEXT["voucher_ok"] + str(bal))
+            new_balance = redeem_voucher(code_input.strip(), USER_ID)
+            persist_user({"credits": int(new_balance)})
+            st.success(TEXT["voucher_ok"] + str(new_balance))
             st.rerun()
         except ValueError as e:
             if str(e) == "INVALID_CODE":
                 st.error(TEXT["voucher_bad"])
             elif str(e) == "ALREADY_USED":
                 st.error(TEXT["voucher_used"])
+            else:
+                st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
+# Payment & Feedback 토글
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
@@ -881,12 +914,15 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
+# ================= Main Render =================
+onboarding_done = bool(user_snapshot.get("onboarding_done"))
 
-# ================= Main =================
-if not get_user(USER_ID).get("onboarding_done"):
+if not onboarding_done:
     render_onboarding()
 else:
     if st.session_state.get("show_payment"):
         render_payment_and_feedback()
     else:
         render_chat_page()
+
+
