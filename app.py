@@ -3,7 +3,7 @@
 # Wallet + Voucher + Paywall + Memory + Onboarding
 # Unique Visitor Counter (Fixed)
 # ==========================================
-st.write("My USER_ID:", USER_ID)
+
 
 import os, uuid, json, time, random
 from datetime import datetime
