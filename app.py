@@ -210,42 +210,47 @@ st.markdown("""
 <style>
 /* 🔹 ChatInput 바 전체를 조금 위로 올리기 */
 div[data-testid="stChatInput"] {
-    position: relative;      /* 레이아웃은 유지, 위치만 살짝 위로 */
-    bottom: 60px;            /* 더 위로 올리고 싶으면 32, 40으로 조정 */
+    position: relative;
+    bottom: 24px;            /* 더 위로 올리고 싶으면 32, 40으로 조정 */
 }
 
-/* 🔹 바깥 컨테이너(회색/빨간 테두리 느낌 나는 껍데기) 제거 + 가운데 정렬 */
+/* 🔹 바깥 컨테이너 제거 + 가운데 정렬 */
 div[data-testid="stChatInput"] > div {
-    max-width: 900px;        /* 너무 넓어지지 않게 최대 폭 제한 */
-    margin: 0 auto;          /* 가운데 정렬 */
+    max-width: 900px;
+    margin: 0 auto;
     padding: 0 !important;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
 }
 
-/* 🔹 실제 입력창: 진한 초록 네온 바 */
+/* 🔹 실제 입력창: 기본 상태 진한 초록 네온 */
 div[data-testid="stChatInput"] textarea {
     background: #050505;
-    border: 3px solid #00ffcc;   /* 테두리 두껍고 진하게 */
+    border: 3px solid #00ffcc;   /* 항상 이 초록색 유지 */
     border-radius: 18px;
-    color: #eafff1;
+    color: #f7fff9;
     padding: 14px 18px;
     font-size: 17px;
     box-shadow:
         0 0 16px rgba(0, 255, 204, 1),
-        0 0 32px rgba(0, 255, 204, 0.8);   /* 네온 두 겹 */
+        0 0 32px rgba(0, 255, 204, 0.7);
     resize: none;
     transition: 0.25s ease;
 }
 
-/* 🔹 포커스 시 네온 더 강하게 */
+/* 🔹 placeholder 글자색 (조금 연한 초록) */
+div[data-testid="stChatInput"] textarea::placeholder {
+    color: #b9fff0;
+}
+
+/* 🔹 포커스 시에도 같은 초록 테두리 유지 + 네온만 살짝 강화 */
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
-    border-color: #aaffee;
+    border-color: #00ffcc !important;   /* 연한 흰색으로 안 바뀌게 고정 */
     box-shadow:
-        0 0 20px rgba(170, 255, 238, 1),
-        0 0 40px rgba(0, 255, 204, 1);
+        0 0 20px rgba(0, 255, 204, 1),
+        0 0 40px rgba(0, 255, 204, 0.9);
 }
 
 /* 🔹 전송 버튼 (>) 네온 스타일 */
@@ -267,12 +272,13 @@ div[data-testid="stChatInput"] button:hover {
     transform: translateY(-1px);
 }
 
-/* 🔹 입력창 때문에 내용이 가려지지 않게 아래 여백 추가 */
+/* 🔹 아래 내용 가려지지 않게 여백 */
 .block-container {
     padding-bottom: 110px !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # ================= Chat History =================
