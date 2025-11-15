@@ -208,10 +208,10 @@ st.title(TEXT["title"])
 # ================= CSS =================
 st.markdown("""
 <style>
-/* 🔹 ChatInput 바 전체를 조금 위로 올리기 */
+/* 🔹 ChatInput 바 전체를 조금 더 위로 올리기 */
 div[data-testid="stChatInput"] {
     position: relative;
-    bottom: 80px;            /* 더 위로 올리고 싶으면 32, 40으로 조정 */
+    bottom: 80px;            /* 천만유튜버님이 마음에 든 값 유지 💚 */
 }
 
 /* 🔹 바깥 컨테이너 제거 + 가운데 정렬 */
@@ -224,12 +224,12 @@ div[data-testid="stChatInput"] > div {
     box-shadow: none !important;
 }
 
-/* 🔹 실제 입력창: 기본 상태 진한 초록 네온 */
+/* 🔹 실제 입력창: 초록 네온 테두리 + 안쪽 글씨는 흰색 */
 div[data-testid="stChatInput"] textarea {
     background: #050505;
-    border: 3px solid #00ffcc;   /* 항상 이 초록색 유지 */
+    border: 3px solid #00ffcc;          /* 테두리 초록 */
     border-radius: 18px;
-    color: #f7fff9;
+    color: #f5f5f5;                     /* 입력 글씨: 밝은 회색/흰색 */
     padding: 14px 18px;
     font-size: 17px;
     box-shadow:
@@ -239,15 +239,15 @@ div[data-testid="stChatInput"] textarea {
     transition: 0.25s ease;
 }
 
-/* 🔹 placeholder 글자색 (조금 연한 초록) */
+/* 🔹 placeholder 글자색: 은은한 회색 (눈에 안 튀게) */
 div[data-testid="stChatInput"] textarea::placeholder {
-    color: #b9fff0;
+    color: #9ea3ad;
 }
 
-/* 🔹 포커스 시에도 같은 초록 테두리 유지 + 네온만 살짝 강화 */
+/* 🔹 포커스 시에도 테두리는 그대로 초록, 네온만 살짝 강화 */
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
-    border-color: #00ffcc !important;   /* 연한 흰색으로 안 바뀌게 고정 */
+    border-color: #00ffcc !important;
     box-shadow:
         0 0 20px rgba(0, 255, 204, 1),
         0 0 40px rgba(0, 255, 204, 0.9);
@@ -278,7 +278,6 @@ div[data-testid="stChatInput"] button:hover {
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 
 # ================= Chat History =================
