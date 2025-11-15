@@ -208,24 +208,21 @@ st.title(TEXT["title"])
 # ================= CSS =================
 st.markdown("""
 <style>
-/* 🔹 채팅 입력 컨테이너: 화면 가운데 + 아래에서 살짝 위로 띄우기 */
-.stChatInputContainer,
+/* 1) 채팅 입력 줄 전체를 살짝 위로 올리기 + 가운데 정렬 */
+
+/* ChatInput 바깥 컨테이너 자체를 위로 살짝 올리기 */
 div[data-testid="stChatInput"] {
-    position: fixed;
-    bottom: 60px;                      /* 숫자 키우면 더 위로 올라감 (예: 60px) */
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(900px, 90%);            /* 최대 900px, 모바일은 90% */
-    z-index: 999;
+    position: relative;      /* 기본 flow 유지하면서 위치만 살짝 이동 */
+    bottom: 24px;            /* 숫자 키우면 더 위로 올라감 (예: 40) */
 }
 
-/* 본문이 입력창 뒤에 가려지지 않게 아래 여백 추가 */
-.block-container {
-    padding-bottom: 130px !important;
+/* 실제 입력줄(텍스트박스+버튼) 폭을 줄이고 가운데로 모으기 */
+div[data-testid="stChatInput"] > div {
+    max-width: 900px;        /* 최대 폭 */
+    margin: 0 auto;          /* 가운데 정렬 */
 }
 
-/* 🔹 채팅 입력창 textarea 네온 스타일 */
-.stChatInputContainer textarea,
+/* 2) 채팅 입력창 텍스트 박스 초록 네온 스타일 */
 div[data-testid="stChatInput"] textarea {
     background: #050505;
     border: 2px solid #00ff9d;
@@ -239,15 +236,13 @@ div[data-testid="stChatInput"] textarea {
 }
 
 /* 포커스 시 네온 강화 */
-.stChatInputContainer textarea:focus,
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
     border-color: #33ffbf;
     box-shadow: 0 0 20px rgba(51, 255, 191, 0.95);
 }
 
-/* 🔹 전송 버튼 (>) 네온 스타일 */
-.stChatInputContainer button,
+/* 3) 전송 버튼 (>) 네온 스타일 */
 div[data-testid="stChatInput"] button {
     background: #00ff9d !important;
     border-radius: 16px !important;
@@ -257,7 +252,6 @@ div[data-testid="stChatInput"] button {
 }
 
 /* 버튼 호버 효과 */
-.stChatInputContainer button:hover,
 div[data-testid="stChatInput"] button:hover {
     background: #55ffc8 !important;
     box-shadow: 0 0 22px rgba(85, 255, 200, 1);
