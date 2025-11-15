@@ -206,45 +206,60 @@ else:
 st.title(TEXT["title"])
 
 # ================= CSS =================
+st.markdown("""
 <style>
-/* 채팅 입력창 자체 */
-.stChatInputContainer {
-    margin-bottom: 40px !important;   /* 아래 공간 줄이기 */
-    margin-top: -20px !important;     /* 위로 살짝 올리기 */
+/* ✅ 채팅 입력 영역 전체: 화면 아래에서 조금 위로 떠 있게 + 가운데 정렬 */
+div[data-testid="stChatInput"] {
+    position: fixed;
+    bottom: 32px;                 /* 숫자 줄이면 더 내려가고, 늘리면 더 위로 올라감 */
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(900px, 90%);
+    z-index: 999;
 }
 
-/* 입력창 텍스트 박스 */
-.stTextInput>div>div>input {
-    background: #0f0f0f;
+/* ✅ 본문이 입력창 뒤에 가려지지 않도록 추가 여백 */
+.block-container {
+    padding-bottom: 120px !important;
+}
+
+/* ✅ 채팅 입력창 텍스트 박스 (초록 네온) */
+div[data-testid="stChatInput"] textarea {
+    background: #050505;
     border: 2px solid #00ff9d;
-    border-radius: 14px;
+    border-radius: 16px;
     color: #eafff1;
     padding: 14px 16px;
     font-size: 17px;
-    box-shadow: 0 0 12px #00ff9d;
+    box-shadow: 0 0 14px rgba(0, 255, 157, 0.8);
+    resize: none;
     transition: 0.25s ease;
 }
 
-/* 입력창 포커스될 때(클릭했을 때) 네온 강화 */
-.stTextInput>div>div>input:focus {
+/* 포커스 시 네온 강화 */
+div[data-testid="stChatInput"] textarea:focus {
+    outline: none;
     border-color: #33ffbf;
-    box-shadow: 0 0 18px #33ffbf;
+    box-shadow: 0 0 20px rgba(51, 255, 191, 0.95);
 }
 
-/* 버튼 (>) */
-.stChatInputContainer button {
+/* ✅ 전송 버튼 (>) 초록 네온 */
+div[data-testid="stChatInput"] button {
     background: #00ff9d !important;
-    border-radius: 14px !important;
+    border-radius: 16px !important;
     border: none !important;
-    box-shadow: 0 0 12px #00ff9d;
+    box-shadow: 0 0 14px rgba(0, 255, 157, 0.9);
     transition: 0.25s ease;
 }
 
-.stChatInputContainer button:hover {
+/* 버튼 호버 효과 */
+div[data-testid="stChatInput"] button:hover {
     background: #55ffc8 !important;
-    box-shadow: 0 0 20px #55ffc8;
+    box-shadow: 0 0 22px rgba(85, 255, 200, 1);
+    transform: translateY(-1px);
 }
 </style>
+""", unsafe_allow_html=True)
 
 # ================= Chat History =================
 if "chat_history" not in st.session_state:
@@ -894,3 +909,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
