@@ -206,54 +206,45 @@ else:
 st.title(TEXT["title"])
 
 # ================= CSS =================
-st.markdown(
-    """
 <style>
-html, body, [class*="css"] { font-size: 18px; }
-
-.user-bubble {
-  background:#b91c1c;
-  color:#fff;
-  border-radius:14px;
-  padding:10px 18px;
-  margin:8px 0;
-  display:inline-block;
-  box-shadow:0 0 10px rgba(255,0,0,0.3);
+/* 채팅 입력창 자체 */
+.stChatInputContainer {
+    margin-bottom: 40px !important;   /* 아래 공간 줄이기 */
+    margin-top: -20px !important;     /* 위로 살짝 올리기 */
 }
 
-.bot-bubble {
-  font-size:21px;
-  line-height:1.8;
-  border-radius:16px;
-  padding:16px 20px;
-  margin:10px 0;
-  background:rgba(15,15,30,.85);
-  color:#fff;
-  border:2px solid transparent;
-  border-image:linear-gradient(90deg,#ff8800,#ffaa00,#ff8800) 1;
-  box-shadow:0 0 12px #ffaa00;
-  animation:neon 1.6s ease-in-out infinite alternate;
-  word-break:break-word;
-  white-space:pre-wrap;
+/* 입력창 텍스트 박스 */
+.stTextInput>div>div>input {
+    background: #0f0f0f;
+    border: 2px solid #00ff9d;
+    border-radius: 14px;
+    color: #eafff1;
+    padding: 14px 16px;
+    font-size: 17px;
+    box-shadow: 0 0 12px #00ff9d;
+    transition: 0.25s ease;
 }
 
-@keyframes neon {
-  from { box-shadow:0 0 8px #ffaa00; }
-  to   { box-shadow:0 0 22px #ffcc33; }
+/* 입력창 포커스될 때(클릭했을 때) 네온 강화 */
+.stTextInput>div>div>input:focus {
+    border-color: #33ffbf;
+    box-shadow: 0 0 18px #33ffbf;
 }
 
-.status {
-  font-size:15px;
-  padding:8px 12px;
-  border-radius:10px;
-  display:inline-block;
-  margin-bottom:8px;
-  background:rgba(255,255,255,.06);
+/* 버튼 (>) */
+.stChatInputContainer button {
+    background: #00ff9d !important;
+    border-radius: 14px !important;
+    border: none !important;
+    box-shadow: 0 0 12px #00ff9d;
+    transition: 0.25s ease;
+}
+
+.stChatInputContainer button:hover {
+    background: #55ffc8 !important;
+    box-shadow: 0 0 20px #55ffc8;
 }
 </style>
-""",
-    unsafe_allow_html=True
-)
 
 # ================= Chat History =================
 if "chat_history" not in st.session_state:
