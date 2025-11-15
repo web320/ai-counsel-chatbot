@@ -208,22 +208,24 @@ st.title(TEXT["title"])
 # ================= CSS =================
 st.markdown("""
 <style>
-/* ✅ 채팅 입력 영역 전체: 화면 아래에서 조금 위로 떠 있게 + 가운데 정렬 */
+/* 🔹 채팅 입력 컨테이너: 화면 가운데 + 아래에서 살짝 위로 띄우기 */
+.stChatInputContainer,
 div[data-testid="stChatInput"] {
     position: fixed;
-    bottom: 32px;                 /* 숫자 줄이면 더 내려가고, 늘리면 더 위로 올라감 */
+    bottom: 32px;                      /* 숫자 키우면 더 위로 올라감 (예: 60px) */
     left: 50%;
     transform: translateX(-50%);
-    width: min(900px, 90%);
+    width: min(900px, 90%);            /* 최대 900px, 모바일은 90% */
     z-index: 999;
 }
 
-/* ✅ 본문이 입력창 뒤에 가려지지 않도록 추가 여백 */
+/* 본문이 입력창 뒤에 가려지지 않게 아래 여백 추가 */
 .block-container {
-    padding-bottom: 120px !important;
+    padding-bottom: 130px !important;
 }
 
-/* ✅ 채팅 입력창 텍스트 박스 (초록 네온) */
+/* 🔹 채팅 입력창 textarea 네온 스타일 */
+.stChatInputContainer textarea,
 div[data-testid="stChatInput"] textarea {
     background: #050505;
     border: 2px solid #00ff9d;
@@ -237,13 +239,15 @@ div[data-testid="stChatInput"] textarea {
 }
 
 /* 포커스 시 네온 강화 */
+.stChatInputContainer textarea:focus,
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
     border-color: #33ffbf;
     box-shadow: 0 0 20px rgba(51, 255, 191, 0.95);
 }
 
-/* ✅ 전송 버튼 (>) 초록 네온 */
+/* 🔹 전송 버튼 (>) 네온 스타일 */
+.stChatInputContainer button,
 div[data-testid="stChatInput"] button {
     background: #00ff9d !important;
     border-radius: 16px !important;
@@ -253,6 +257,7 @@ div[data-testid="stChatInput"] button {
 }
 
 /* 버튼 호버 효과 */
+.stChatInputContainer button:hover,
 div[data-testid="stChatInput"] button:hover {
     background: #55ffc8 !important;
     box-shadow: 0 0 22px rgba(85, 255, 200, 1);
@@ -260,6 +265,7 @@ div[data-testid="stChatInput"] button:hover {
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ================= Chat History =================
 if "chat_history" not in st.session_state:
