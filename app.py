@@ -213,7 +213,7 @@ st.markdown("""
 /* ChatInput 바깥 컨테이너 자체를 위로 살짝 올리기 */
 div[data-testid="stChatInput"] {
     position: relative;      /* 기본 flow 유지하면서 위치만 살짝 이동 */
-    bottom: 24px;            /* 숫자 키우면 더 위로 올라감 (예: 40) */
+    bottom: 60px;            /* 숫자 키우면 더 위로 올라감 (예: 40) */
 }
 
 /* 실제 입력줄(텍스트박스+버튼) 폭을 줄이고 가운데로 모으기 */
