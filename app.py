@@ -205,10 +205,29 @@ else:
 
 st.title(TEXT["title"])
 
-/* 🔹 입력창 테두리 + 네온 강하게 */
+# ================= CSS =================
+st.markdown("""
+<style>
+/* 🔹 ChatInput 바 전체를 조금 위로 올리기 */
+div[data-testid="stChatInput"] {
+    position: relative;      /* 레이아웃은 유지, 위치만 살짝 위로 */
+    bottom: 24px;            /* 더 위로 올리고 싶으면 32, 40으로 조정 */
+}
+
+/* 🔹 바깥 컨테이너(회색/빨간 테두리 느낌 나는 껍데기) 제거 + 가운데 정렬 */
+div[data-testid="stChatInput"] > div {
+    max-width: 900px;        /* 너무 넓어지지 않게 최대 폭 제한 */
+    margin: 0 auto;          /* 가운데 정렬 */
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* 🔹 실제 입력창: 진한 초록 네온 바 */
 div[data-testid="stChatInput"] textarea {
     background: #050505;
-    border: 3px solid #00ffcc;   /* 2px → 3px, 색 더 진하게 */
+    border: 3px solid #00ffcc;   /* 테두리 두껍고 진하게 */
     border-radius: 18px;
     color: #eafff1;
     padding: 14px 18px;
@@ -220,7 +239,7 @@ div[data-testid="stChatInput"] textarea {
     transition: 0.25s ease;
 }
 
-/* 포커스 시 더 번쩍 */
+/* 🔹 포커스 시 네온 더 강하게 */
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
     border-color: #aaffee;
@@ -229,7 +248,7 @@ div[data-testid="stChatInput"] textarea:focus {
         0 0 40px rgba(0, 255, 204, 1);
 }
 
-/* 🔹 전송 버튼도 진한 네온 */
+/* 🔹 전송 버튼 (>) 네온 스타일 */
 div[data-testid="stChatInput"] button {
     background: #00ff9d !important;
     border-radius: 18px !important;
@@ -240,6 +259,20 @@ div[data-testid="stChatInput"] button {
     transition: 0.25s ease;
 }
 
+/* 버튼 호버 효과 */
+div[data-testid="stChatInput"] button:hover {
+    background: #55ffc8 !important;
+    box-shadow:
+        0 0 22px rgba(85, 255, 200, 1);
+    transform: translateY(-1px);
+}
+
+/* 🔹 입력창 때문에 내용이 가려지지 않게 아래 여백 추가 */
+.block-container {
+    padding-bottom: 110px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 # ================= Chat History =================
