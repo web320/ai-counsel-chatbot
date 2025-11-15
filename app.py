@@ -212,7 +212,7 @@ st.markdown("""
 .stChatInputContainer,
 div[data-testid="stChatInput"] {
     position: fixed;
-    bottom: 32px;                      /* 숫자 키우면 더 위로 올라감 (예: 60px) */
+    bottom: 60px;                      /* 숫자 키우면 더 위로 올라감 (예: 60px) */
     left: 50%;
     transform: translateX(-50%);
     width: min(900px, 90%);            /* 최대 900px, 모바일은 90% */
