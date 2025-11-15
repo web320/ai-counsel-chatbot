@@ -208,21 +208,23 @@ st.title(TEXT["title"])
 # ================= CSS =================
 st.markdown("""
 <style>
-/* 1) 채팅 입력 줄 전체를 살짝 위로 올리기 + 가운데 정렬 */
-
-/* ChatInput 바깥 컨테이너 자체를 위로 살짝 올리기 */
+/* 🔹 ChatInput 전체를 살짝 위로 올리기 */
 div[data-testid="stChatInput"] {
-    position: relative;      /* 기본 flow 유지하면서 위치만 살짝 이동 */
-    bottom: 60px;            /* 숫자 키우면 더 위로 올라감 (예: 40) */
+    position: relative;      /* 레이아웃은 그대로 두고 위치만 조정 */
+    bottom: 24px;            /* 더 위로 올리고 싶으면 32, 40 이런 식으로 */
 }
 
-/* 실제 입력줄(텍스트박스+버튼) 폭을 줄이고 가운데로 모으기 */
+/* 🔹 바깥 컨테이너(회색/빨간 테두리처럼 보이는 부분) 제거 + 가운데 정렬 */
 div[data-testid="stChatInput"] > div {
-    max-width: 900px;        /* 최대 폭 */
+    max-width: 900px;        /* 너무 넓지 않게 */
     margin: 0 auto;          /* 가운데 정렬 */
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
-/* 2) 채팅 입력창 텍스트 박스 초록 네온 스타일 */
+/* 🔹 실제 텍스트 입력창: 초록 네온 바 */
 div[data-testid="stChatInput"] textarea {
     background: #050505;
     border: 2px solid #00ff9d;
@@ -235,14 +237,14 @@ div[data-testid="stChatInput"] textarea {
     transition: 0.25s ease;
 }
 
-/* 포커스 시 네온 강화 */
+/* 포커스 시 네온 강조 */
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
     border-color: #33ffbf;
     box-shadow: 0 0 20px rgba(51, 255, 191, 0.95);
 }
 
-/* 3) 전송 버튼 (>) 네온 스타일 */
+/* 🔹 전송 버튼 (>) 네온 */
 div[data-testid="stChatInput"] button {
     background: #00ff9d !important;
     border-radius: 16px !important;
@@ -257,8 +259,14 @@ div[data-testid="stChatInput"] button:hover {
     box-shadow: 0 0 22px rgba(85, 255, 200, 1);
     transform: translateY(-1px);
 }
+
+/* 🔹 아래가 너무 허전하지 않게 살짝 여백 */
+.block-container {
+    padding-bottom: 110px !important;
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # ================= Chat History =================
