@@ -211,7 +211,7 @@ st.markdown("""
 /* 🔹 ChatInput 바 전체를 조금 위로 올리기 */
 div[data-testid="stChatInput"] {
     position: relative;
-    bottom: 24px;            /* 더 위로 올리고 싶으면 32, 40으로 조정 */
+    bottom: 80px;            /* 더 위로 올리고 싶으면 32, 40으로 조정 */
 }
 
 /* 🔹 바깥 컨테이너 제거 + 가운데 정렬 */
