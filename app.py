@@ -205,67 +205,40 @@ else:
 
 st.title(TEXT["title"])
 
-# ================= CSS =================
-st.markdown("""
-<style>
-/* 🔹 ChatInput 전체를 살짝 위로 올리기 */
-div[data-testid="stChatInput"] {
-    position: relative;      /* 레이아웃은 그대로 두고 위치만 조정 */
-    bottom: 24px;            /* 더 위로 올리고 싶으면 32, 40 이런 식으로 */
-}
-
-/* 🔹 바깥 컨테이너(회색/빨간 테두리처럼 보이는 부분) 제거 + 가운데 정렬 */
-div[data-testid="stChatInput"] > div {
-    max-width: 900px;        /* 너무 넓지 않게 */
-    margin: 0 auto;          /* 가운데 정렬 */
-    padding: 0 !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-/* 🔹 실제 텍스트 입력창: 초록 네온 바 */
+/* 🔹 입력창 테두리 + 네온 강하게 */
 div[data-testid="stChatInput"] textarea {
     background: #050505;
-    border: 2px solid #00ff9d;
-    border-radius: 16px;
+    border: 3px solid #00ffcc;   /* 2px → 3px, 색 더 진하게 */
+    border-radius: 18px;
     color: #eafff1;
-    padding: 14px 16px;
+    padding: 14px 18px;
     font-size: 17px;
-    box-shadow: 0 0 14px rgba(0, 255, 157, 0.8);
+    box-shadow:
+        0 0 16px rgba(0, 255, 204, 1),
+        0 0 32px rgba(0, 255, 204, 0.8);   /* 네온 두 겹 */
     resize: none;
     transition: 0.25s ease;
 }
 
-/* 포커스 시 네온 강조 */
+/* 포커스 시 더 번쩍 */
 div[data-testid="stChatInput"] textarea:focus {
     outline: none;
-    border-color: #33ffbf;
-    box-shadow: 0 0 20px rgba(51, 255, 191, 0.95);
+    border-color: #aaffee;
+    box-shadow:
+        0 0 20px rgba(170, 255, 238, 1),
+        0 0 40px rgba(0, 255, 204, 1);
 }
 
-/* 🔹 전송 버튼 (>) 네온 */
+/* 🔹 전송 버튼도 진한 네온 */
 div[data-testid="stChatInput"] button {
     background: #00ff9d !important;
-    border-radius: 16px !important;
-    border: none !important;
-    box-shadow: 0 0 14px rgba(0, 255, 157, 0.9);
+    border-radius: 18px !important;
+    border: 2px solid #00ffcc !important;
+    box-shadow:
+        0 0 16px rgba(0, 255, 180, 1),
+        0 0 32px rgba(0, 255, 180, 0.8);
     transition: 0.25s ease;
 }
-
-/* 버튼 호버 효과 */
-div[data-testid="stChatInput"] button:hover {
-    background: #55ffc8 !important;
-    box-shadow: 0 0 22px rgba(85, 255, 200, 1);
-    transform: translateY(-1px);
-}
-
-/* 🔹 아래가 너무 허전하지 않게 살짝 여백 */
-.block-container {
-    padding-bottom: 110px !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
 
 
