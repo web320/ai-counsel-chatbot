@@ -556,6 +556,7 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
 
 
 # ================= Payment & Feedback =================
+
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
@@ -566,6 +567,7 @@ def render_payment_and_feedback():
     total_intents = len(list(db.collection("purchase_intent").stream()))
 
     is_en = (language == "English 🇺🇸")
+
     if is_en:
         title_line = "#### 50 uses for **$3** — Purchase intent"
         btn_label = "💳 $3 for 50 uses — I'm interested"
@@ -574,13 +576,17 @@ def render_payment_and_feedback():
         caption_text = f"So far, **{total_intents}** people have shown interest."
         plan_value = "50_uses_$3"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
+        # ⬇⬇⬇ 스크린샷 안내 (영어 + 이모지 강화)
         payment_notice = (
-            "📸 **After completing payment, please take a screenshot and send it to:**\n"
-            "- ✉️ **newnewtry6@gmail.com**\n"
-            "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
-            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n\n"
-            "✅ When the developer confirms your message, "
-            "**the voucher code will be sent immediately.** 💙\n"
+            "📸✨ **How to receive your voucher code**\n"
+            "1️⃣ Use the neon button on the right to complete your payment.\n"
+            "2️⃣ 📷 Take a screenshot of the payment confirmation page.\n"
+            "3️⃣ 💌 Send the screenshot to one of these channels:\n"
+            "   - ✉️ Email: **newnewtry6@gmail.com**\n"
+            "   - 📸 Instagram: **@youtuberhawaiijelly** (Youtuber Hawaiijelly)\n"
+            "   - 💬 KakaoTalk ID: **jeuspo** (Korea only)\n\n"
+            "✅ Once the developer checks your message, "
+            "**your 50-use voucher code will be sent right away.** 💙\n"
         )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
@@ -590,12 +596,17 @@ def render_payment_and_feedback():
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
         plan_value = "50회_3000원"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
+        # ⬇⬇⬇ 스크린샷 안내 (한국어 + 이모지 강화)
         payment_notice = (
-            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**\n"
-            "- ✉️ **newnewtry6@gmail.com**\n"
-            "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
-            "- 💬 카카오톡 아이디 **jeuspo**\n\n"
-            "✅ 개발자가 문자를 확인하면 **즉시 코드를 발송해드립니다** 💙\n"
+            "📸✨ **바우처 코드를 받는 방법**\n"
+            "1️⃣ 오른쪽 네온 버튼으로 결제를 완료해 주세요.\n"
+            "2️⃣ 📷 결제 완료 화면(영수증)이 보이면 스크린샷을 찍어 주세요.\n"
+            "3️⃣ 💌 아래 중 한 곳으로 스크린샷을 보내 주세요.\n"
+            "   - ✉️ 이메일: **newnewtry6@gmail.com**\n"
+            "   - 📸 인스타그램: **@youtuberhawaiijelly** (유튜버 하와이 젤리)\n"
+            "   - 💬 카카오톡 아이디: **jeuspo**\n\n"
+            "✅ 개발자가 메시지를 확인하면 "
+            "**50회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
     st.markdown(title_line)
@@ -619,8 +630,8 @@ def render_payment_and_feedback():
 
     col1, col2 = st.columns([3, 2])
 
+    # ========== 왼쪽: 피드백 + 관리자 영역 ==========
     with col1:
-        # ===== 서비스 피드백 =====
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
         if st.button("📩 Submit / 보내기"):
@@ -633,7 +644,6 @@ def render_payment_and_feedback():
                 })
                 st.success(TEXT["feedback_sent"])
 
-        # ===== 여기부터 관리자 영역 (서비스 피드백 아래) =====
         st.markdown("---")
         st.markdown(f"### {TEXT['admin_gen']}")
 
@@ -679,27 +689,45 @@ def render_payment_and_feedback():
                 st.success("코드 생성 완료! 아래 목록을 보관하세요.")
                 st.code("\n".join(out))
 
+    # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
     with col2:
-        st.markdown("### 💳 Direct Payment")
+        # 제목도 언어별로
+        if is_en:
+            st.markdown("### 💳 Direct Payment")
+        else:
+            st.markdown("### 💳 바로 결제하기")
 
-        st.markdown(
-            """
+        if is_en:
+            card_html = """
             <div class="pay-card">
-                <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                    50회 상담 이용권을 한 번에 충전할 수 있어요.
-                </p>
-                <ul style="font-size:14px; opacity:0.9; margin-top:0;">
-                    <li>도움이 될 때마다 편하게 사용</li>
-                    <li>위기문구(자살·극단적 표현)는 항상 무료</li>
-                    <li>결제 후 바우처 코드로 자동 충전</li>
-                </ul>
-                <div style="margin-top:14px; text-align:center;">
-            """,
-            unsafe_allow_html=True
-        )
+              <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
+                You can top up <b>50 therapy sessions</b> at once.
+              </p>
+              <ul style="font-size:14px; opacity:0.9; margin-top:0;">
+                <li>Use it whenever you need emotional support</li>
+                <li>Crisis messages (suicide / self-harm) are always free</li>
+                <li>After payment, you'll receive a voucher code to recharge</li>
+              </ul>
+              <div style="margin-top:14px; text-align:center;">
+            """
+        else:
+            card_html = """
+            <div class="pay-card">
+              <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
+                50회 상담 이용권을 한 번에 충전할 수 있어요.
+              </p>
+              <ul style="font-size:14px; opacity:0.9; margin-top:0;">
+                <li>도움이 필요할 때마다 편하게 사용</li>
+                <li>위기 문구(자살·극단적 표현)는 항상 무료</li>
+                <li>결제 후 바우처 코드로 간편 충전</li>
+              </ul>
+              <div style="margin-top:14px; text-align:center;">
+            """
+
+        st.markdown(card_html, unsafe_allow_html=True)
 
         paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 3달러 / 50회 이용" if language == "한국어 🇰🇷" else "💳 Pay $3 / 50 uses"
+        btn_text = "💳 3달러 / 50회 이용" if not is_en else "💳 Pay $3 / 50 uses"
 
         st.markdown(
             f"""
@@ -712,6 +740,7 @@ def render_payment_and_feedback():
 
         st.markdown("---")
         st.markdown(payment_notice)
+
 
 # ================= Display Chat History =================
 def display_chat_history():
