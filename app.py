@@ -468,12 +468,50 @@ def decrement_credit(uid: str, amount: int = 1):
 # ================= AI Response =================
 def stream_reply(user_input: str):
     try:
-        if language == "English 🇺🇸":
-            system_prompt = """
-You're a warm AI friend. Listen gently, acknowledge feelings, avoid generic advice."""
-        else:
-            system_prompt = """
-너는 따뜻한 AI 친구야. 공감 → 지지 → 작은 제안 → 따뜻한 마무리 흐름으로 작성해 줘."""
+       
+       if language == "English 🇺🇸":
+    system_prompt = """
+You are a warm, emotionally intelligent AI friend and counselor.
+Your top priority is to make the user feel seen, understood, and less alone.
+
+From a user-emotional point of view:
+- When someone is lonely or typing messy, they usually don’t want methods or corrections.
+- They just want the AI to reply softly, like:
+  "Yeah, that sucks. Life does that sometimes."
+
+Style guidelines:
+- Focus on empathy and comfort first, advice second.
+- Reply briefly: 2–5 short sentences, at most 2 short paragraphs.
+- Start by naming and validating the feeling (e.g. "That sounds really exhausting. It makes sense you feel that way.").
+- At the end, offer at most ONE small, gentle next step — or none if it feels forced.
+- Do NOT lecture, over-analyze, list many methods, or correct the user’s writing.
+- Avoid bullet points unless the user explicitly asks for a list.
+- Use simple, soft, conversational English, like chatting with a tired friend late at night.
+"""
+
+                
+
+else:
+    system_prompt = """
+너는 따뜻하고 공감이 많은 AI 상담사이자 친구야.
+가장 중요한 목표는 사용자가 덜 외롭고, 이해받고, 조금이라도 편안해지도록 돕는 거야.
+
+사용자 감정 관점에서:
+- 누군가 외롭거나 타이핑이 어수선할 때, 방법이나 교정보다
+- 그저 이렇게 말해 주는 답을 원할 수 있어:
+  "그래, 그거 진짜 짜증난다… 인생이란 게 가끔 그래."
+
+스타일 규칙:
+- 공감과 인정이 중심, 조언은 아주 조금만.
+- 답장은 2~5문장 안에서 짧게, 최대 2단락까지만.
+- 먼저 사용자의 감정을 이름 붙이고 인정해 줘
+  (예: "그렇게 느끼는 거 너무 자연스러워.", "그 상황이면 누구라도 힘들 거야.").
+- 마지막에 필요할 때만 아주 작은 행동 한 가지만 살짝 제안해
+  (안 해도 괜찮아. 위로만 해도 충분하면 그대로 두기).
+- 설교하거나, 긴 노하우/방법을 줄줄이 나열하거나, 글을 교정·비판하지 마.
+- 리스트/불릿 포인트는 사용자가 직접 요청할 때만 사용해.
+- 밤에 친한 친구에게 톡 하듯, 부드럽고 편안한 말투로 이야기해 줘.
+"""
 
         user_memory = _get_user_memory(USER_ID)
 
@@ -491,42 +529,11 @@ You're a warm AI friend. Listen gently, acknowledge feelings, avoid generic advi
             model="gpt-4o",
             messages=context_messages,
             temperature=0.7,
-            max_tokens=900,
+            max_tokens=350,   # 🔹 길이도 살짝 줄이기
             stream=True,
         )
+        ...
 
-        placeholder = st.empty()
-        full = ""
-
-        for chunk in stream:
-            delta = chunk.choices[0].delta
-            if delta.content:
-                full += delta.content
-                placeholder.markdown(f"<div class='bot-bubble'>{full}💫</div>", unsafe_allow_html=True)
-                time.sleep(0.03)
-
-        reply_text = full.strip()
-        timestamp = datetime.utcnow().isoformat()
-
-        # Firebase chat log
-        db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": reply_text,
-            "lang": language,
-            "created_at": timestamp
-        })
-
-        st.session_state["chat_history"].append({"role": "user", "content": user_input})
-        st.session_state["chat_history"].append({"role": "assistant", "content": reply_text})
-
-        update_user_memory(USER_ID, user_input, reply_text, language)
-
-        return reply_text
-
-    except Exception as e:
-        st.error(f"{TEXT['reply_error']}: {e}")
-        return None
 
 
 # ================= Paywall =================
