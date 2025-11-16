@@ -400,7 +400,7 @@ Default to 4–8 sentences, warm and human (not clinical). If the user writes a 
 [대화 가이드 — 권장(강제 아님)]
 - 상황과 맥락에 맞게 자연스럽게 대화하세요. 아래는 참고용 예시일 뿐, 반드시 따를 필요는 없습니다.
 - 톤: 따뜻하고 인간적이며 존댓말 사용. 과장·훈계·가스라이팅·공허한 긍정은 피합니다.
-- 길이: 3~6문장을 권장하되, 사용자의 호흡에 맞춰 더 짧거나 길어도 괜찮습니다.
+- 길이: 기본 4~8문장. 사용자가 긴 글을 쓰거나 깊이를 원하면 8~12문장까지 확장해도 좋습니다. 너무 짧지 않게, 호흡에 맞춰 충분히 작성하세요.
 - 제안은 선택지처럼 1가지만, “원하시면 시도해볼 수 있어요” 식으로 부드럽게.
 
 [우선순위]
@@ -592,12 +592,6 @@ def render_payment_and_feedback():
         caption_text = f"So far, **{total_intents}** people have shown interest."
         plan_value = "50_uses_$3"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
-        payment_notice = (
-            "📸 **After completing payment, please take a screenshot and send it to:**\n"
-            "- ✉️ **newnewtry6@gmail.com**\n"
-            "- 📸 Instagram **“Youtuber Hawaiijelly” (@youtuberhawaiijelly)**\n"
-            "- 💬 KakaoTalk ID **jeuspo** (Korea only)\n"
-        )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
         btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
@@ -606,12 +600,6 @@ def render_payment_and_feedback():
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
         plan_value = "50회_3000원"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
-        payment_notice = (
-            "📸 **결제 완료 후 스크린샷을 찍어 아래 중 한 곳으로 보내주세요.**\n"
-            "- ✉️ **newnewtry6@gmail.com**\n"
-            "- 📸 인스타그램 **“유튜버 하와이 젤리” (@youtuberhawaiijelly)**\n"
-            "- 💬 카카오톡 아이디 **jeuspo**\n"
-        )
 
     st.markdown(title_line)
 
@@ -631,8 +619,6 @@ def render_payment_and_feedback():
     st.info(help_text)
 
     st.markdown("---")
-
-    # ✨ 결제 의사(좌) / 결제 안내 + PayPal(우)
     col1, col2 = st.columns([3, 2])
 
     with col1:
@@ -648,6 +634,8 @@ def render_payment_and_feedback():
                 })
                 st.success(TEXT["feedback_sent"])
 
+    with col2:
+        # (관리자 비밀번호 → 디버그용 유지)
         admin_input = st.text_input("🔑 관리자 비밀번호 입력", type="password", key="admin_pw_input")
         if admin_input:
             if admin_input in ADMIN_KEYS:
@@ -660,12 +648,6 @@ def render_payment_and_feedback():
                     st.info(TEXT["admin_already"])
             else:
                 st.error(TEXT["admin_wrong"])
-
-    with col2:
-        st.markdown("### 💳 Direct Payment")
-        st.link_button("💳 PayPal ($3 / 50 uses)", "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG")
-        st.markdown("---")
-        st.markdown(payment_notice)
 
 
 # ================= Display Chat History =================
@@ -838,7 +820,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
-
 
