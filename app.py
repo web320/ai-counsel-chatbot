@@ -468,9 +468,9 @@ def decrement_credit(uid: str, amount: int = 1):
 # ================= AI Response =================
 def stream_reply(user_input: str):
     try:
-       
-       if language == "English 🇺🇸":
-    system_prompt = """
+        # --------- System prompt (톤 설정) ----------
+        if language == "English 🇺🇸":
+            system_prompt = """
 You are a warm, emotionally intelligent AI friend and counselor.
 Your top priority is to make the user feel seen, understood, and less alone.
 
@@ -488,11 +488,8 @@ Style guidelines:
 - Avoid bullet points unless the user explicitly asks for a list.
 - Use simple, soft, conversational English, like chatting with a tired friend late at night.
 """
-
-                
-
-else:
-    system_prompt = """
+        else:
+            system_prompt = """
 너는 따뜻하고 공감이 많은 AI 상담사이자 친구야.
 가장 중요한 목표는 사용자가 덜 외롭고, 이해받고, 조금이라도 편안해지도록 돕는 거야.
 
@@ -513,11 +510,14 @@ else:
 - 밤에 친한 친구에게 톡 하듯, 부드럽고 편안한 말투로 이야기해 줘.
 """
 
+        # --------- 유저 메모리 / 히스토리 ----------
         user_memory = _get_user_memory(USER_ID)
 
         context_messages = [{"role": "system", "content": system_prompt}]
         if user_memory:
-            context_messages.append({"role": "system", "content": f"User memory:\n{user_memory}"})
+            context_messages.append(
+                {"role": "system", "content": f"User memory:\n{user_memory}"}
+            )
 
         recent_history = st.session_state["chat_history"][-10:]
         for msg in recent_history:
@@ -525,15 +525,56 @@ else:
 
         context_messages.append({"role": "user", "content": user_input})
 
+        # --------- OpenAI 스트리밍 호출 ----------
         stream = client.chat.completions.create(
             model="gpt-4o",
             messages=context_messages,
             temperature=0.7,
-            max_tokens=350,   # 🔹 길이도 살짝 줄이기
+            max_tokens=350,   # 답변 길이 조금 짧게
             stream=True,
         )
-        ...
 
+        placeholder = st.empty()
+        full = ""
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                full += delta.content
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full}💫</div>",
+                    unsafe_allow_html=True,
+                )
+                time.sleep(0.03)
+
+        reply_text = full.strip()
+        timestamp = datetime.utcnow().isoformat()
+
+        # --------- Firestore 로그 기록 ----------
+        db.collection("chats").add({
+            "uid": USER_ID,
+            "input": user_input,
+            "reply": reply_text,
+            "lang": language,
+            "created_at": timestamp
+        })
+
+        # --------- 세션 히스토리 업데이트 ----------
+        st.session_state["chat_history"].append(
+            {"role": "user", "content": user_input}
+        )
+        st.session_state["chat_history"].append(
+            {"role": "assistant", "content": reply_text}
+        )
+
+        # --------- 장기 메모리 업데이트 ----------
+        update_user_memory(USER_ID, user_input, reply_text, language)
+
+        return reply_text
+
+    except Exception as e:
+        st.error(f"{TEXT['reply_error']}: {e}")
+        return None
 
 
 # ================= Paywall =================
