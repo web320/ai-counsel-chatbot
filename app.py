@@ -397,9 +397,11 @@ def ensure_user(uid: str):
         ref.set(defaults, merge=True)
     return ref
 
+
 def get_user(uid: str) -> dict:
     doc = db.collection("users").document(uid).get()
     return doc.to_dict() or {}
+
 
 def create_voucher(code: str, credits: int, note: str = "", created_by: str = "admin"):
     db.collection("vouchers").document(code).set({
@@ -412,6 +414,7 @@ def create_voucher(code: str, credits: int, note: str = "", created_by: str = "a
         "note": note,
         "created_at": firestore.SERVER_TIMESTAMP,
     })
+
 
 def redeem_voucher(code: str, uid: str):
     voucher_ref = db.collection("vouchers").document(code)
@@ -447,7 +450,9 @@ def redeem_voucher(code: str, uid: str):
 
     transaction = db.transaction()
     return _tx(transaction)
- def decrement_credit(uid: str, amount: int = 1):
+
+
+def decrement_credit(uid: str, amount: int = 1):
     user_ref = db.collection("users").document(uid)
 
     @firestore.transactional
