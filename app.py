@@ -447,8 +447,7 @@ def redeem_voucher(code: str, uid: str):
 
     transaction = db.transaction()
     return _tx(transaction)
-
-def decrement_credit(uid: str, amount: int = 1):
+ def decrement_credit(uid: str, amount: int = 1):
     user_ref = db.collection("users").document(uid)
 
     @firestore.transactional
@@ -464,11 +463,8 @@ def decrement_credit(uid: str, amount: int = 1):
     tx = db.transaction()
     return _tx(tx)
 
-
-
-
-
-    def stream_reply(user_input: str):
+# ================= AI Response =================
+def stream_reply(user_input: str):
     try:
         # --------- System prompt (톤 설정) ----------
         if language == "English 🇺🇸":
