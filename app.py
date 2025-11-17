@@ -465,13 +465,14 @@ def decrement_credit(uid: str, amount: int = 1):
     return _tx(tx)
 
 
-# ================= AI Response =================
+
+
+   # ================= AI Response =================
 def stream_reply(user_input: str):
     try:
         # --------- System prompt (톤 설정) ----------
         if language == "English 🇺🇸":
             system_prompt = """
-system_prompt_en = """
 You are an AI friend who gently soothes the user's painful feelings.
 
 Principles:
@@ -510,8 +511,6 @@ The fear that "maybe I’m falling behind everyone" keeps chasing your mind.
 Not finding a big solution right now doesn’t mean there is anything lacking in you.
 Let your body rest for a bit, and later, when you regain even a tiny bit of strength, you can think about taking one small step again. ✨
 """
-
-"""
         else:
             system_prompt = """
 너는 사용자의 힘든 마음을 다정하게 달래주는 친구 같은 AI야.
@@ -528,6 +527,7 @@ Let your body rest for a bit, and later, when you regain even a tiny bit of stre
    - 작고 구체적인 위로나 시각을 한두 개 제안한다.
 4. 답변은 3–6문장 정도로 짧게, 따뜻하게 쓴다.
 5. 상담 센터/서비스 느낌의 말투(“도움을 드리겠습니다”, “이용해주셔서 감사합니다”)는 쓰지 않는다.
+
 예시 ① 사용자: 그냥 그래
 
 그런 날 있지. 특별히 큰일이 없는데도 마음이 조금 멍하고 힘 빠지는 날.
@@ -547,7 +547,6 @@ Let your body rest for a bit, and later, when you regain even a tiny bit of stre
 “내가 뒤처지는 건 아닐까” 하는 불안이 마음을 계속 쫓게 만들고.
 지금 당장 큰 해결책을 못 찾았다고 해서 네가 부족한 사람이 되는 건 아니야.
 잠깐이라도 몸을 쉬게 해주고 나서, 나중에 아주 작은 한 걸음씩만 다시 생각해도 늦지 않아. ✨
-
 """
 
         # --------- 유저 메모리 / 히스토리 ----------
