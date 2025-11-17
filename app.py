@@ -467,11 +467,8 @@ def decrement_credit(uid: str, amount: int = 1):
 
 
 
-   # ================= AI Response =================
-def stream_reply(user_input: str):
-    try:
-        # --------- System prompt (톤 설정) ----------
-        if language == "English 🇺🇸":
+
+      if language == "English 🇺🇸":
             system_prompt = system_prompt_en = """
 You are an AI friend who gently soothes the user's painful feelings,
 and at the same time a quiet coach who thinks about realistic next steps with them.
