@@ -182,6 +182,15 @@ else:
 
 st.title(TEXT["title"])
 
+# === Trust Anchor (English only) ===
+if language == "English 🇺🇸":
+    st.markdown(
+        "<div style='margin-top:-14px; font-size:18px; opacity:0.85;'>"
+        "Trained exclusively to listen, validate, and guide — not to judge."
+        "</div>",
+        unsafe_allow_html=True
+    )
+
 # ================= CSS =================
 st.markdown(
     """
@@ -643,8 +652,6 @@ On nights like that, it can help to have a tiny ritual just for you — a playli
             context_messages.append(msg)
 
         context_messages.append({"role": "user", "content": user_input})
-
-        # 이하 기존 코드 그대로...
 
         # --------- OpenAI 스트리밍 호출 ----------
         stream = client.chat.completions.create(
