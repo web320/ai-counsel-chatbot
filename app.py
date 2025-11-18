@@ -113,7 +113,7 @@ language = st.session_state["lang"]
 # ================= Text by Language =================
 if language == "English 🇺🇸":
     TEXT = {
-        "title": "❤️ A Warm AI Friend You Can Lean On",
+        "title": "❤️A safe space where you can talk comfortably anytime",
         "free": "🌱 Free Trial",
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
@@ -147,7 +147,7 @@ if language == "English 🇺🇸":
     }
 else:
     TEXT = {
-        "title": "❤️ 마음을 기댈 수 있는 따뜻한 AI 친구",
+        "title": "❤️ 언제나 편하게 대화할 수 있는 안전한 공간",
         "free": "🌱 무료 체험중",
         "paid": "💎 유료 이용중",
         "input": "지금 어떤 기분이예요?",
@@ -545,8 +545,7 @@ On nights like that, it can help to have a tiny ritual just for you — a playli
 
         else:
             system_prompt = """
-너는 사용자의 힘든 마음을 다정하게 달래주는 친구이면서,
-현실적인 방향도 같이 생각해주는 조용한 코치야.
+너는 사용자의 답변에 적절한 답변을 해주는 따뜻한 대화상대야야
 
 원칙:
 1. 사용자가 이미 힘들다고 말했으면, 추가 질문은 정말 필요할 때만 한 문장 정도로 짧게 쓴다.
