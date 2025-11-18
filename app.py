@@ -113,7 +113,7 @@ language = st.session_state["lang"]
 # ================= Text by Language =================
 if language == "English 🇺🇸":
     TEXT = {
-        "title": "❤️A safe space where you can talk comfortably anytime",
+        "title": "❤️Your Private, Always-Available Listener. Zero Judgment. Zero Pressure,
         "free": "🌱 Free Trial",
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
