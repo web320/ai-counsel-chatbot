@@ -996,6 +996,110 @@ def render_chat_page():
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
+# 🔮 Rainbow Neon Payment card (added above visitor stats)
+paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+if language == "English 🇺🇸":
+    pay_title = "☕ 50 safe talks for the price of one coffee"
+    pay_line1 = "Beta offer: $3 → 50 credits"
+    pay_line2 = "That's about $0.06 per talk."
+    pay_privacy = "Your conversations stay private — not shared with anyone, including the operator."
+    pay_button = "💳 Pay $3 for 50 talks"
+else:
+    pay_title = "☕ 카페 라테 한 잔 값으로, 50번 마음 털어놓기"
+    pay_line1 = "베타 기간 가격: 3달러 → 50 크레딧"
+    pay_line2 = "한 번 대화당 약 70원 정도예요."
+    pay_privacy = "여기에서 나눈 대화는 공개되지 않아요. 운영자를 포함한 누구와도 공유되지 않습니다."
+    pay_button = "💳 3달러로 50회 채우기"
+
+st.sidebar.markdown(
+    f"""
+<div class="sidebar-rainbow-card">
+  <div class="sidebar-rainbow-inner">
+    <div style="font-size:14px; font-weight:600; margin-bottom:4px;">{pay_title}</div>
+    <div style="font-size:12px; opacity:0.9;">{pay_line1}</div>
+    <div style="font-size:12px; opacity:0.9; margin-bottom:8px;">{pay_line2}</div>
+    <a href="{paypal_link}" target="_blank" class="sidebar-rainbow-btn">{pay_button}</a>
+    <div style="font-size:11px; opacity:0.75; margin-top:6px; line-height:1.4;">
+      {pay_privacy}
+    </div>
+  </div>
+</div>
+
+<style>
+.sidebar-rainbow-card {{
+  position: relative;
+  margin-top: 6px;
+  margin-bottom: 14px;
+  border-radius: 18px;
+  padding: 2px;
+  background: rgba(255,255,255,0.06);
+  box-shadow: 0 0 18px rgba(255,255,255,0.35);
+  overflow: hidden;
+}}
+.sidebar-rainbow-card::before {{
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    #ff00cc, #3333ff, #00ffff,
+    #33ff33, #ffff00, #ff6600, #ff0066, #ff00cc
+  );
+  animation: sidebarBorderSpin 7s linear infinite;
+  opacity: 0.95;
+}}
+.sidebar-rainbow-inner {{
+  position: relative;
+  z-index: 1;
+  border-radius: 16px;
+  padding: 10px 12px 12px 12px;
+  background: rgba(10,10,20,0.96);
+  color: #ffffff;
+}}
+.sidebar-rainbow-btn {{
+  display:block;
+  width:100%;
+  margin-top:6px;
+  padding:9px 0;
+  text-align:center;
+  border-radius: 999px;
+  font-size:13px;
+  font-weight:700;
+  text-decoration:none;
+  color:#ffffff;
+  background: linear-gradient(
+    90deg,
+    #ff00cc, #3333ff, #00ffff,
+    #33ff33, #ffff00, #ff6600, #ff0066, #ff00cc
+  );
+  background-size: 300% 300%;
+  box-shadow: 0 0 22px rgba(255,255,255,0.4);
+  animation: sidebarBtnShift 5s linear infinite,
+             sidebarBtnGlow 1.6s ease-in-out infinite;
+}}
+.sidebar-rainbow-btn:hover {{
+  filter: brightness(1.2);
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px rgba(255,255,255,0.9);
+}}
+@keyframes sidebarBorderSpin {{
+  0% {{ transform: rotate(0deg); }}
+  100% {{ transform: rotate(360deg); }}
+}}
+@keyframes sidebarBtnShift {{
+  0% {{ background-position: 0% 50%; }}
+  100% {{ background-position: 300% 50%; }}
+}}
+@keyframes sidebarBtnGlow {{
+  0%,100% {{ box-shadow: 0 0 14px rgba(255,255,255,0.4); }}
+  50% {{ box-shadow: 0 0 30px rgba(255,255,255,0.9); }}
+}}
+</style>
+""",
+    unsafe_allow_html=True
+)
+
 total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
