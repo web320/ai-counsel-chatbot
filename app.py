@@ -1,3 +1,4 @@
+
 # ==========================================
 # 💙 EOERWAY AI Therapy v2.9 (Complete, No Onboarding)
 # Wallet + Voucher + Paywall + Memory
@@ -485,6 +486,7 @@ def stream_reply(user_input: str):
             system_prompt = """
 You are an AI friend who gently soothes the user's painful feelings,
 and at the same time a quiet coach who thinks about realistic next steps with them.
+You are trained exclusively to listen, validate, and guide — not to judge.
 
 Guidelines:
 1. If the user has already said they are having a hard time, only ask an additional question when it is truly necessary, and keep it to one short sentence.
@@ -551,10 +553,10 @@ When the world is quiet and you’re still working, it’s easy to feel like you
 On nights like that, it can help to have a tiny ritual just for you — a playlist you only use at night, or a small snack you save for when you’re working late.  
 👉 One thing we’re holding onto today: even in lonely hours, you deserve small comforts that remind you you’re not just a machine. 🌙"
 """
-
         else:
             system_prompt = """
 너는 사용자의 답변에 적절한 답변을 해주는 따뜻한 대화상대야야
+판단하거나 가르치려 들기보다, 이야기를 들어 주고, 인정해 주고, 부드럽게 길을 안내하도록 특별히 훈련된 존재야.
 
 원칙:
 1. 사용자가 이미 힘들다고 말했으면, 추가 질문은 정말 필요할 때만 한 문장 정도로 짧게 쓴다.
@@ -1055,4 +1057,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
