@@ -1,4 +1,3 @@
-
 # ==========================================
 # 💙 EOERWAY AI Therapy v2.9 (Complete, No Onboarding)
 # Wallet + Voucher + Paywall + Memory
@@ -795,13 +794,13 @@ def render_payment_and_feedback():
     is_en = (language == "English 🇺🇸")
 
     if is_en:
-       # title_line = "#### 50 uses for **$3** — Purchase intent"
-        #btn_label = "💳 $3 for 50 uses — I'm interested"
-      #  info_already = "💙 You've already registered your interest. Thank you!"
-       # success_msg = "We'll notify you first when payments open 💖"
-      #  caption_text = f"So far, **{total_intents}** people have shown interest."
-      #  plan_value = "50_uses_$3"
-      #  help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
+        title_line = "#### 50 uses for **$3** — Purchase intent"
+        btn_label = "💳 $3 for 50 uses — I'm interested"
+        info_already = "💙 You've already registered your interest. Thank you!"
+        success_msg = "We'll notify you first when payments open 💖"
+        caption_text = f"So far, **{total_intents}** people have shown interest."
+        plan_value = "50_uses_$3"
+        help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
         # ⬇⬇⬇ 스크린샷 안내 (영어 + 이모지 강화)
         payment_notice = (
             "📸✨ **How to receive your voucher code**\n"
@@ -815,13 +814,13 @@ def render_payment_and_feedback():
             "**your 50-use voucher code will be sent right away.** 💙\n"
         )
     else:
-       # title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
-       # btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
-        #info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
-       # success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
-       # caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
-       # plan_value = "50회_3000원"
-       # help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
+        title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
+        btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
+        info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
+        success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
+        caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
+        plan_value = "50회_3000원"
+        help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
         # ⬇⬇⬇ 스크린샷 안내 (한국어 + 이모지 강화)
         payment_notice = (
             "📸✨ **바우처 코드를 받는 방법**\n"
@@ -835,21 +834,24 @@ def render_payment_and_feedback():
             "**50회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
-    st.markdown(title_line)
+    # === Purchase Intent UI Disabled (KR + EN) ===
+    # st.markdown(title_line)
+    #
+    # if clicked:
+    #     st.info(info_already)
+    # else:
+    #     if st.button(btn_label):
+    #         intent_ref.set({
+    #             "uid": USER_ID,
+    #             "plan": plan_value,
+    #             "created_at": datetime.utcnow().isoformat(),
+    #         })
+    #         st.success(success_msg)
+    #         st.rerun()
+    #
+    # st.caption(caption_text)
+    # ============================================
 
-    #if clicked:
-     #   st.info(info_already)
-  #  else:
-      #  if st.button(btn_label):
-        #    intent_ref.set({
-        #        "uid": USER_ID,
-         #       "plan": plan_value,
-         #       "created_at": datetime.utcnow().isoformat(),
-         #   })
-         #   st.success(success_msg)
-         #   st.rerun()
-
-   # st.caption(caption_text)
     st.info(help_text)
 
     st.markdown("---")
