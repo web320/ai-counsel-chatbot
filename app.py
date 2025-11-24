@@ -1049,7 +1049,7 @@ def render_payment_and_feedback():
 
         st.markdown(card_html, unsafe_allow_html=True)
 
-        paypal_link = "https://www.paypal.com/ncp/payment/69G27SPFPDELW"
+        paypal_link = "https://www.paypal.com/ncp/payment/RCB927U97CD7Q"
         btn_text = "💳 1달러 / 15회 이용" if not is_en else "💳 Pay $1 / 15 uses"
 
         st.markdown(
