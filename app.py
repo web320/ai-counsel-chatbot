@@ -22,8 +22,8 @@ RESET_INTERVAL_HOURS = 4
 BASIC_LIMIT = 50
 ADMIN_KEYS = ["2356"]
 
-CREDIT_PACK_SIZE = 50
-CREDIT_PACK_PRICE_USD = 3
+CREDIT_PACK_SIZE = 15
+CREDIT_PACK_PRICE_USD = 1
 
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
@@ -893,7 +893,7 @@ def render_payment_and_feedback():
         info_already = "💙 You've already registered your interest. Thank you!"
         success_msg = "We'll notify you first when payments open 💖"
         caption_text = f"So far, **{total_intents}** people have shown interest."
-        plan_value = "50_uses_$3"
+        plan_value = "15_uses_$1"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
         # ⬇⬇⬇ 스크린샷 안내 (영어 + 이모지 강화)
         payment_notice = (
@@ -909,11 +909,11 @@ def render_payment_and_feedback():
         )
     else:
         title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
-        btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
+        btn_label = "💳 1달러에 15회 이용권, 결제 의사가 있으신가요?"
         info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
         success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
-        plan_value = "50회_3000원"
+        plan_value = "15회_1달러"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
         # ⬇⬇⬇ 스크린샷 안내 (한국어 + 이모지 강화)
         payment_notice = (
@@ -1048,8 +1048,8 @@ def render_payment_and_feedback():
 
         st.markdown(card_html, unsafe_allow_html=True)
 
-        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 3달러 / 50회 이용" if not is_en else "💳 Pay $3 / 50 uses"
+        paypal_link = "https://www.paypal.com/ncp/payment/69G27SPFPDELW"
+        btn_text = "💳 1달러 / 15회 이용" if not is_en else "💳 Pay $1 / 15 uses"
 
         st.markdown(
             f"""
@@ -1143,17 +1143,17 @@ st.sidebar.header("📜 History / 대화 기록")
 # 🔮 Rainbow Neon Payment card (added above visitor stats)
 paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 if language == "English 🇺🇸":
-    pay_title = "☕ 50 safe talks for the price of one coffee"
-    pay_line1 = "Beta offer: $3 → 50 credits"
-    pay_line2 = "That's about $0.06 per talk."
-    pay_privacy = "Your conversations stay private — not shared with anyone, including the operator."
-    pay_button = "💳 Pay $3 for 50 talks"
+    pay_title = "☕ 16 safe talks for $1"
+pay_line1 = "Beta offer: $1 → 16 credits"
+pay_line2 = "That's about $0.06 per talk."
+pay_button = "💳 Pay $1 for 16 talks"
+
 else:
-    pay_title = "☕ 카페 라테 한 잔 값으로, 50번 마음 털어놓기"
-    pay_line1 = "베타 기간 가격: 3달러 → 50 크레딧"
-    pay_line2 = "한 번 대화당 약 70원 정도예요."
-    pay_privacy = "여기에서 나눈 대화는 공개되지 않아요. 운영자를 포함한 누구와도 공유되지 않습니다."
-    pay_button = "💳 3달러로 50회 채우기"
+   pay_title = "☕ 단 1달러로 16번 마음 털어놓기"
+pay_line1 = "베타 가격: 1달러 → 16 크레딧"
+pay_line2 = "한 번 대화당 약 80원 정도예요."
+pay_button = "💳 1달러로 16회 채우기"
+
 
 st.sidebar.markdown(
     f"""
