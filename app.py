@@ -1142,7 +1142,7 @@ def render_chat_page():
 st.sidebar.header("📜 History / 대화 기록")
 
 # 🔮 Rainbow Neon Payment card (added above visitor stats)
-paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+paypal_link = "https://www.paypal.com/ncp/payment/RCB927U97CD7Q"
 if language == "English 🇺🇸":
     pay_title = "☕ 15 safe talks for $1"
     pay_line1 = "Beta offer: $1 → 15 credits"
