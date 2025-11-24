@@ -22,8 +22,9 @@ RESET_INTERVAL_HOURS = 4
 BASIC_LIMIT = 50
 ADMIN_KEYS = ["2356"]
 
-CREDIT_PACK_SIZE = 15
-CREDIT_PACK_PRICE_USD = 1
+# 💳 ============ 1달러에 15회 ============ 
+CREDIT_PACK_SIZE = 15       # 크레딧 15회
+CREDIT_PACK_PRICE_USD = 1   # 가격 1달러
 
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
@@ -129,7 +130,7 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode granted 50 credits!",
+        "admin_success": "🔓 Admin mode granted 15 credits!",
         "admin_already": "✅ Already added in this session.",
         "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
@@ -163,7 +164,7 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
-        "admin_success": "🔓 관리자 모드로 50회 충전됨!",
+        "admin_success": "🔓 관리자 모드로 15회 충전됨!",
         "admin_already": "✅ 이미 추가되었습니다",
         "admin_wrong": "❌ 관리자 비밀번호가 틀렸어요",
         "clear_history": "🗑️ 대화 기록 지우기",
@@ -262,7 +263,7 @@ html, body, [class*="css"] { font-size: 18px; }
   text-shadow:0 0 10px rgba(255,255,255,0.7);
   box-shadow:0 0 25px rgba(255,255,255,0.3);
   cursor:pointer;
-  animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
+  animation:rainbowGlow 6s linear infinite, neonPulse 1.6s ease-in-out infinite;
   transition:transform 0.25s, box-shadow 0.25s;
   text-decoration:none;
 }
@@ -888,8 +889,8 @@ def render_payment_and_feedback():
     is_en = (language == "English 🇺🇸")
 
     if is_en:
-        title_line = "#### 50 uses for **$3** — Purchase intent"
-        btn_label = "💳 $3 for 50 uses — I'm interested"
+        title_line = "#### 15 uses for **$1** — Purchase intent"
+        btn_label = "💳 $1 for 15 uses — I'm interested"
         info_already = "💙 You've already registered your interest. Thank you!"
         success_msg = "We'll notify you first when payments open 💖"
         caption_text = f"So far, **{total_intents}** people have shown interest."
@@ -905,10 +906,10 @@ def render_payment_and_feedback():
             "   - 📸 Instagram: **@youtuberhawaiijelly** (Youtuber Hawaiijelly)\n"
             "   - 💬 KakaoTalk ID: **jeuspo** (Korea only)\n\n"
             "✅ Once the developer checks your message, "
-            "**your 50-use voucher code will be sent right away.** 💙\n"
+            "**your 15-use voucher code will be sent right away.** 💙\n"
         )
     else:
-        title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
+        title_line = "#### 15회 이용권 1달러 결제 의사 확인"
         btn_label = "💳 1달러에 15회 이용권, 결제 의사가 있으신가요?"
         info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
         success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
@@ -925,7 +926,7 @@ def render_payment_and_feedback():
             "   - 📸 인스타그램: **@youtuberhawaiijelly** (유튜버 하와이 젤리)\n"
             "   - 💬 카카오톡 아이디: **jeuspo**\n\n"
             "✅ 개발자가 메시지를 확인하면 "
-            "**50회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
+            "**15회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
     # === Purchase Intent UI Disabled (KR + EN) ===
@@ -1023,7 +1024,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                You can top up <b>50 therapy sessions</b> at once.
+                You can top up <b>15 therapy sessions</b> at once.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>Use it whenever you need emotional support</li>
@@ -1036,7 +1037,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                50회 상담 이용권을 한 번에 충전할 수 있어요.
+                15회 상담 이용권을 한 번에 충전할 수 있어요.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>도움이 필요할 때마다 편하게 사용</li>
@@ -1143,17 +1144,17 @@ st.sidebar.header("📜 History / 대화 기록")
 # 🔮 Rainbow Neon Payment card (added above visitor stats)
 paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 if language == "English 🇺🇸":
-    pay_title = "☕ 16 safe talks for $1"
-pay_line1 = "Beta offer: $1 → 16 credits"
-pay_line2 = "That's about $0.06 per talk."
-pay_button = "💳 Pay $1 for 16 talks"
-
+    pay_title = "☕ 15 safe talks for $1"
+    pay_line1 = "Beta offer: $1 → 15 credits"
+    pay_line2 = "That's about $0.07 per talk."
+    pay_button = "💳 Pay $1 for 15 talks"
+    pay_privacy = "Payment is safely handled by PayPal. Your card details are not stored here."
 else:
-   pay_title = "☕ 단 1달러로 16번 마음 털어놓기"
-pay_line1 = "베타 가격: 1달러 → 16 크레딧"
-pay_line2 = "한 번 대화당 약 80원 정도예요."
-pay_button = "💳 1달러로 16회 채우기"
-
+    pay_title = "☕ 단 1달러로 15번 마음 털어놓기"
+    pay_line1 = "베타 가격: 1달러 → 15 크레딧"
+    pay_line2 = "한 번 대화당 약 90원 정도예요."
+    pay_button = "💳 1달러로 15회 채우기"
+    pay_privacy = "결제는 PayPal에서 안전하게 처리되고, 카드 정보는 우리에게 저장되지 않아요."
 
 st.sidebar.markdown(
     f"""
