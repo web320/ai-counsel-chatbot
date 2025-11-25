@@ -210,10 +210,10 @@ html, body, [class*="css"] { font-size: 18px; }
 
 .bot-bubble {
   font-size:21px;
-  line-height:1.5;
+  line-height:1.45;   /* 🔥 핵심: 줄 간격 줄임 */
   border-radius:16px;
   padding:16px 20px;
-  margin:6px 0;
+  margin:6px 0;       /* 🔥 핵심: 상하 간격 줄임 */
   background:rgba(15,15,30,.85);
   color:#fff;
   border:2px solid transparent;
@@ -223,6 +223,7 @@ html, body, [class*="css"] { font-size: 18px; }
   word-break:break-word;
   white-space:pre-wrap;
 }
+
 
 @keyframes neon {
   from { box-shadow:0 0 8px #ffaa00; }
