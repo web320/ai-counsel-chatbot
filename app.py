@@ -979,6 +979,161 @@ def render_payment_and_feedback():
             "**50회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
+    # (결제 의사 버튼은 비활성화 상태로 그대로 둠)
+    # st.markdown(title_line)
+    # if clicked:
+    #     st.info(info_already)
+    # else:
+    #     if st.button(btn_label):
+    #         intent_ref.set({
+    #             "uid": USER_ID,
+    #             "plan": plan_value,
+    #             "created_at": datetime.utcnow().isoformat(),
+    #         })
+    #         st.success(success_msg)
+    #         st.rerun()
+    # st.caption(caption_text)
+
+    st.info(help_text)
+
+    st.markdown("---")
+
+    col1, col2 = st.columns([3, 2])
+
+    # ========== 왼쪽: 피드백 + 관리자 영역 + My Wallet ==========
+    with col1:
+        # 💌 서비스 피드백
+        st.subheader(TEXT["feedback_title"])
+        fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
+        if st.button("📩 Submit / 보내기"):
+            if not fb.strip():
+                st.warning(TEXT["feedback_empty"])
+            else:
+                db.collection("feedbacks").document(str(uuid.uuid4())).set({
+                    "uid": USER_ID, "feedback": fb, "lang": language,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                st.success(TEXT["feedback_sent"])
+
+        st.markdown("---")
+        st.markdown(f"### {TEXT['admin_gen']}")
+
+        # 🔑 관리자 영역
+        if "is_admin" not in st.session_state:
+            st.session_state["is_admin"] = False
+
+        admin_key = st.text_input("Admin Key", type="password", key="admin_key_main")
+        if admin_key and admin_key in ADMIN_KEYS:
+            st.session_state["is_admin"] = True
+            st.success("관리자 모드 활성화")
+
+        if st.session_state["is_admin"]:
+            credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password", key="credit_admin_pw")
+            if credit_admin:
+                if credit_admin in ADMIN_KEYS:
+                    if not st.session_state.get("admin_unlocked"):
+                        current_data = get_user(USER_ID)
+                        current_credits = int(current_data.get("credits", 0))
+                        new_credits = current_credits + CREDIT_PACK_SIZE
+                        persist_user({"credits": new_credits})
+                        st.session_state["admin_unlocked"] = True
+                        st.success(TEXT["admin_success"])
+                        st.rerun()
+                    else:
+                        st.info(TEXT["admin_already"])
+                else:
+                    st.error(TEXT["admin_wrong"])
+
+            st.markdown("---")
+
+            def gen_code(n=8):
+                return uuid.uuid4().hex[:n].upper()
+
+            num = st.number_input("생성 개수", 1, 200, 10)
+            credits_each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
+            note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
+            if st.button(TEXT["admin_make"]):
+                out = []
+                for _ in range(int(num)):
+                    c = gen_code(10)
+                    create_voucher(c, credits_each, note=note)
+                    out.append(c)
+                st.success("코드 생성 완료! 아래 목록을 보관하세요.")
+                st.code("\n".join(out))
+
+        # 💙 여기부터 My Wallet (Admin 아래에 위치)
+        st.markdown("---")
+        st.markdown(f"### {TEXT['wallet']}")
+        user_snapshot = get_user(USER_ID)
+        st.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
+        st.caption(TEXT["voucher_tip"])
+
+        with st.form("redeem_form_main", clear_on_submit=True):
+            code_input = st.text_input(" ", placeholder=TEXT["wallet_help"])
+            ok = st.form_submit_button(TEXT["redeem"])
+            if ok and code_input.strip():
+                try:
+                    new_balance = redeem_voucher(code_input.strip(), USER_ID)
+                    persist_user({"credits": int(new_balance)})
+                    st.success(TEXT["voucher_ok"] + str(new_balance))
+                    st.rerun()
+                except ValueError as e:
+                    if str(e) == "INVALID_CODE":
+                        st.error(TEXT["voucher_bad"])
+                    elif str(e) == "ALREADY_USED":
+                        st.error(TEXT["voucher_used"])
+                    else:
+                        st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
+
+    # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
+    with col2:
+        if is_en:
+            st.markdown("### 💳 Direct Payment")
+            card_html = """
+            <div class="pay-card">
+              <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
+                You can top up <b>50 therapy sessions</b> at once.
+              </p>
+              <ul style="font-size:14px; opacity:0.9; margin-top:0;">
+                <li>Use it whenever you need emotional support</li>
+                <li>Crisis messages (suicide / self-harm) are always free</li>
+                <li>After payment, you'll receive a voucher code to recharge</li>
+              </ul>
+              <div style="margin-top:14px; text-align:center;">
+            """
+        else:
+            st.markdown("### 💳 바로 결제하기")
+            card_html = """
+            <div class="pay-card">
+              <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
+                50회 상담 이용권을 한 번에 충전할 수 있어요.
+              </p>
+              <ul style="font-size:14px; opacity:0.9; margin-top:0;">
+                <li>도움이 필요할 때마다 편하게 사용</li>
+                <li>위기 문구(자살·극단적 표현)는 항상 무료</li>
+                <li>결제 후 바우처 코드로 간편 충전</li>
+              </ul>
+              <div style="margin-top:14px; text-align:center;">
+            """
+
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+        btn_text = "💳 3달러 / 50회 이용" if not is_en else "💳 Pay $3 / 50 uses"
+
+        st.markdown(
+            f"""
+            <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown("---")
+        st.markdown(payment_notice)
+
+
     # 결제 의사 버튼은 비활성화 (코멘트만 남김)
     # st.markdown(title_line)
     # if clicked:
