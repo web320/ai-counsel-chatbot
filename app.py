@@ -22,8 +22,9 @@ RESET_INTERVAL_HOURS = 4
 BASIC_LIMIT = 50
 ADMIN_KEYS = ["2356"]
 
-CREDIT_PACK_SIZE = 50
-CREDIT_PACK_PRICE_USD = 3
+# 🔄 패키지: 1달러 = 15회
+CREDIT_PACK_SIZE = 15
+CREDIT_PACK_PRICE_USD = 1
 
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
@@ -55,14 +56,10 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Unique Visitor ID (브라우저 고유값) =================
-# 👉 URL의 ?uid=... 를 이용해서 새로고침해도 같은 USER_ID 유지
-params = st.query_params
-if "uid" in params and params["uid"]:
-    USER_ID = params["uid"]
-else:
-    new_uid = str(uuid.uuid4())
-    params["uid"] = new_uid
-    USER_ID = new_uid
+if "unique_visitor_id" not in st.session_state:
+    st.session_state["unique_visitor_id"] = str(uuid.uuid4())
+
+USER_ID = st.session_state["unique_visitor_id"]
 
 # ================= Visitor Counter =================
 def update_visit_stats():
@@ -133,7 +130,7 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode granted 50 credits!",
+        "admin_success": "🔓 Admin mode granted 15 credits!",
         "admin_already": "✅ Already added in this session.",
         "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
@@ -145,8 +142,7 @@ if language == "English 🇺🇸":
         "voucher_bad": "Invalid code.",
         "voucher_used": "This code was already used.",
         "paywall": "You've used all free limits. Redeem a code to continue.",
-        # ✨ 여기서 50회/$3 + 15회/$1 둘 다 안내
-        "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD} · Mini pack: 15 uses / $1",
+        "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 Admin — Generate Voucher Codes",
         "admin_make": "Generate",
     }
@@ -168,7 +164,7 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
-        "admin_success": "🔓 관리자 모드로 50회 충전됨!",
+        "admin_success": "🔓 관리자 모드로 15회 충전됨!",
         "admin_already": "✅ 이미 추가되었습니다",
         "admin_wrong": "❌ 관리자 비밀번호가 틀렸어요",
         "clear_history": "🗑️ 대화 기록 지우기",
@@ -180,8 +176,7 @@ else:
         "voucher_bad": "코드가 올바르지 않아요",
         "voucher_used": "이미 사용된 코드예요",
         "paywall": "무료 한도를 모두 사용했어요. 코드를 충전해 주세요",
-        # ✨ 여기서도 50회/3달러 + 15회/1달러 둘 다 안내
-        "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD} · 미니팩: 15회 / $1",
+        "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 관리자 — 바우처 코드 생성",
         "admin_make": "코드 생성",
     }
@@ -290,37 +285,9 @@ html, body, [class*="css"] { font-size: 18px; }
     unsafe_allow_html=True
 )
 
-# ================= Chat History (Session + Firestore) =================
+# ================= Chat History =================
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
-
-def load_chat_history_from_db(uid: str):
-    """처음 접속 시 Firestore에서 이전 대화를 읽어와서 자동 복원."""
-    if st.session_state.get("chat_loaded_from_db"):
-        return
-    try:
-        docs = list(db.collection("chats").where("uid", "==", uid).stream())
-        # created_at 기준으로 정렬 (문자열이지만 ISO라 정렬 가능)
-        sorted_docs = sorted(
-            docs,
-            key=lambda d: (d.to_dict() or {}).get("created_at", "")
-        )
-        history = []
-        for doc in sorted_docs:
-            d = doc.to_dict() or {}
-            u = d.get("input")
-            r = d.get("reply")
-            if u:
-                history.append({"role": "user", "content": u})
-            if r:
-                history.append({"role": "assistant", "content": r})
-        if history:
-            st.session_state["chat_history"] = history
-        st.session_state["chat_loaded_from_db"] = True
-    except Exception as e:
-        print("chat history load error:", e)
-
-load_chat_history_from_db(USER_ID)
 
 # ================= Firestore Defaults / User State =================
 defaults = {
@@ -461,7 +428,7 @@ def create_voucher(code: str, credits: int, note: str = "", created_by: str = "a
 
 def redeem_voucher(code: str, uid: str):
     voucher_ref = db.collection("vouchers").document(code)
-    user_ref2 = db.collection("users").document(uid)
+    user_ref = db.collection("users").document(uid)
 
     @firestore.transactional
     def _tx(transaction):
@@ -473,13 +440,13 @@ def redeem_voucher(code: str, uid: str):
         if v.get("used_by"):
             raise ValueError("ALREADY_USED")
 
-        u_snap = user_ref2.get(transaction=transaction)
+        u_snap = user_ref.get(transaction=transaction)
         u = u_snap.to_dict() if u_snap.exists else defaults
 
         new_credits = int(u.get("credits", 0)) + int(v.get("credits", 0))
         new_packs = int(u.get("purchased_packs", 0)) + 1
 
-        transaction.update(user_ref2, {
+        transaction.update(user_ref, {
             "credits": new_credits,
             "purchased_packs": new_packs,
             "last_reset": u.get("last_reset"),
@@ -496,16 +463,16 @@ def redeem_voucher(code: str, uid: str):
 
 
 def decrement_credit(uid: str, amount: int = 1):
-    user_ref2 = db.collection("users").document(uid)
+    user_ref = db.collection("users").document(uid)
 
     @firestore.transactional
     def _tx(transaction):
-        snap = user_ref2.get(transaction=transaction)
+        snap = user_ref.get(transaction=transaction)
         data = snap.to_dict() or {}
         curr = int(data.get("credits", 0))
         if curr < amount:
             raise ValueError("NO_CREDIT")
-        transaction.update(user_ref2, {"credits": curr - amount})
+        transaction.update(user_ref, {"credits": curr - amount})
         return curr - amount
 
     tx = db.transaction()
@@ -835,7 +802,7 @@ Always keep a warm, gentle, human-like tone so the user feels
             model="gpt-4o",
             messages=context_messages,
             temperature=0.7,
-            max_tokens=350,   # 답변 길이 조금 짧게
+            max_tokens=350,
             stream=True,
         )
 
@@ -889,7 +856,7 @@ def is_crisis(text: str) -> bool:
 
 def show_paywall():
     st.warning(TEXT["paywall"])
-    st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD} (mini 15 uses / $1)")
+    st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD}")
 
 def charge_if_needed(user_input: str, free_used: int, free_limit: int):
     if is_crisis(user_input):
@@ -909,7 +876,6 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
 
 
 # ================= Payment & Feedback =================
-
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
@@ -922,13 +888,13 @@ def render_payment_and_feedback():
     is_en = (language == "English 🇺🇸")
 
     if is_en:
-        title_line = "#### 50 uses for **$3** (or 15 uses for $1) — Purchase intent"
-        btn_label = "💳 $3 for 50 uses — I'm interested"
+        title_line = "#### 15 sessions for **$1** — Mini pack"
+        btn_label = "💳 $1 for 15 uses — I'm interested"
         info_already = "💙 You've already registered your interest. Thank you!"
         success_msg = "We'll notify you first when payments open 💖"
         caption_text = f"So far, **{total_intents}** people have shown interest."
-        plan_value = "50_uses_$3"
-        help_text = "To continue now, redeem a voucher code in **My Wallet** below."
+        plan_value = "15_uses_$1"
+        help_text = "To continue now, redeem a voucher code in the wallet section below."
         payment_notice = (
             "📸✨ **How to receive your voucher code**\n"
             "1️⃣ Use the neon button on the right to complete your payment.\n"
@@ -938,16 +904,16 @@ def render_payment_and_feedback():
             "   - 📸 Instagram: **@youtuberhawaiijelly** (Youtuber Hawaiijelly)\n"
             "   - 💬 KakaoTalk ID: **jeuspo** (Korea only)\n\n"
             "✅ Once the developer checks your message, "
-            "**your voucher code (50 uses / $3 or 15 uses / $1) will be sent.** 💙\n"
+            "**your 15-use voucher code will be sent right away.** 💙\n"
         )
     else:
-        title_line = "#### 50회 이용권 3달러 (또는 15회 1달러 미니팩) 결제 의사 확인"
-        btn_label = "💳 3달러에 50회 이용권, 결제 의사가 있으신가요?"
+        title_line = "#### 15회 이용권 1,000원(1달러) 미니팩"
+        btn_label = "💳 1달러에 15회 이용권, 결제 의사가 있으신가요?"
         info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
         success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
-        plan_value = "50회_3000원"
-        help_text = "지금 바로 이용하려면 아래 **내 지갑**에서 코드를 충전하세요."
+        plan_value = "15회_1달러"
+        help_text = "지금 바로 이용하려면 아래 지갑에서 코드를 충전해 주세요."
         payment_notice = (
             "📸✨ **바우처 코드를 받는 방법**\n"
             "1️⃣ 오른쪽 네온 버튼으로 결제를 완료해 주세요.\n"
@@ -957,16 +923,16 @@ def render_payment_and_feedback():
             "   - 📸 인스타그램: **@youtuberhawaiijelly** (유튜버 하와이 젤리)\n"
             "   - 💬 카카오톡 아이디: **jeuspo**\n\n"
             "✅ 개발자가 메시지를 확인하면 "
-            "**50회 / 3달러 또는 15회 / 1달러 코드가 발송됩니다.** 💙\n"
+            "**15회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
-    # (현재 purchase intent UI는 숨김)
+    # (구매 의사 UI는 그대로 비활성화)
     st.info(help_text)
     st.markdown("---")
 
     col1, col2 = st.columns([3, 2])
 
-    # ========== 왼쪽: 피드백 + 관리자 + 내 지갑 ==========#
+    # ========== 왼쪽: 피드백 + 관리자 + 지갑 ==========
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
@@ -1025,7 +991,7 @@ def render_payment_and_feedback():
                 st.success("코드 생성 완료! 아래 목록을 보관하세요.")
                 st.code("\n".join(out))
 
-        # ---- 내 지갑 (여기에서 바우처 충전) ----
+        # === My Wallet (Admin 아래) ===
         st.markdown("---")
         st.markdown(f"### {TEXT['wallet']}")
         user_snapshot = get_user(USER_ID)
@@ -1040,7 +1006,7 @@ def render_payment_and_feedback():
                     new_balance = redeem_voucher(code_input.strip(), USER_ID)
                     persist_user({"credits": int(new_balance)})
                     st.success(TEXT["voucher_ok"] + str(new_balance))
-                    st.rerun()
+                    st.experimental_rerun()
                 except ValueError as e:
                     if str(e) == "INVALID_CODE":
                         st.error(TEXT["voucher_bad"])
@@ -1056,8 +1022,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                You can top up <b>50 therapy sessions</b> at once
-                (or choose a mini pack of <b>15 sessions for $1</b>).
+                You can top up <b>15 therapy sessions</b> for just <b>$1</b>.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>Use it whenever you need emotional support</li>
@@ -1071,8 +1036,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                50회 상담 이용권(3달러)을 한 번에 충전하거나,
-                <b>15회 1달러 미니팩</b>을 선택할 수 있어요.
+                1달러로 <b>15회 상담 이용권</b>을 한 번에 충전할 수 있어요.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>도움이 필요할 때마다 편하게 사용</li>
@@ -1084,8 +1048,9 @@ def render_payment_and_feedback():
 
         st.markdown(card_html, unsafe_allow_html=True)
 
-        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 Pay $3 / 50 uses (15 uses / $1 mini pack)" if is_en else "💳 3달러 50회 · 1달러 15회"
+        # 🔗 새 PayPal 링크 (1달러 / 15회)
+        paypal_link = "https://www.paypal.com/ncp/payment/XATLMXETSMRFS"
+        btn_text = "💳 Pay $1 / 15 uses" if is_en else "💳 1달러 / 15회 이용"
 
         st.markdown(
             f"""
@@ -1129,7 +1094,6 @@ def render_chat_page():
     except Exception:
         last_reset = now
 
-    # 무료 횟수는 RESET_INTERVAL_HOURS 단위로만 초기화
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         usage = 0
         persist_user({
@@ -1159,7 +1123,7 @@ def render_chat_page():
     proceed, used_credit = charge_if_needed(user_input, free_used=usage, free_limit=DAILY_FREE_LIMIT)
     if not proceed:
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
         return
 
     st.markdown(
@@ -1172,7 +1136,7 @@ def render_chat_page():
     if reply:
         if not used_credit and usage < DAILY_FREE_LIMIT:
             persist_user({"usage_count": usage + 1})
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
@@ -1181,8 +1145,8 @@ total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
     <div style="
-        margin-top: 8px;
-        margin-bottom: 12px;
+        margin-top: 12px;
+        margin-bottom: 16px;
         padding: 8px 10px;
         border-radius: 10px;
         background: rgba(255,255,255,0.03);
@@ -1199,17 +1163,17 @@ st.sidebar.markdown(
 if st.sidebar.button(TEXT["clear_history"]):
     st.session_state["chat_history"] = []
     st.sidebar.success(TEXT["history_cleared"])
-    st.rerun()
+    st.experimental_rerun()
 
 # Payment & Feedback 토글
 if st.session_state.get("show_payment"):
     if st.sidebar.button(TEXT["chat_return"]):
         st.session_state["show_payment"] = False
-        st.rerun()
+        st.experimental_rerun()
 else:
     if st.sidebar.button(TEXT["chat_button"]):
         st.session_state["show_payment"] = True
-        st.rerun()
+        st.experimental_rerun()
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
