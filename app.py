@@ -22,8 +22,9 @@ RESET_INTERVAL_HOURS = 4
 BASIC_LIMIT = 50
 ADMIN_KEYS = ["2356"]
 
-CREDIT_PACK_SIZE = 50
-CREDIT_PACK_PRICE_USD = 3
+# 🔁 결제 / 크레딧 기본 단위: 1달러 = 15회
+CREDIT_PACK_SIZE = 15
+CREDIT_PACK_PRICE_USD = 1
 
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
@@ -129,7 +130,8 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        "admin_success": "🔓 Admin mode granted 50 credits!",
+        # 🔁 관리자 충전 문구도 pack 사이즈에 맞게
+        "admin_success": f"🔓 Admin mode granted {CREDIT_PACK_SIZE} credits!",
         "admin_already": "✅ Already added in this session.",
         "admin_wrong": "❌ Wrong admin password.",
         "clear_history": "🗑️ Clear Chat History",
@@ -163,7 +165,8 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
-        "admin_success": "🔓 관리자 모드로 50회 충전됨!",
+        # 🔁 관리자 충전 문구도 pack 사이즈에 맞게
+        "admin_success": f"🔓 관리자 모드로 {CREDIT_PACK_SIZE}회 충전됨!",
         "admin_already": "✅ 이미 추가되었습니다",
         "admin_wrong": "❌ 관리자 비밀번호가 틀렸어요",
         "clear_history": "🗑️ 대화 기록 지우기",
@@ -330,6 +333,7 @@ def update_user_memory(uid: str, user_input: str, reply: str, language: str):
         if prev_doc.exists:
             prev_text = (prev_doc.to_dict() or {}).get("text", "")
 
+        # ⚠️ 프롬프트는 절대 수정 안 함
         if language == "English 🇺🇸":
             system_prompt = """
 You maintain a short, evolving psychological + contextual profile of this user.
@@ -481,6 +485,7 @@ def decrement_credit(uid: str, amount: int = 1):
 def stream_reply(user_input: str):
     try:
         # --------- System prompt (톤 설정) ----------
+        # ⚠️ 여기부터 프롬프트 부분은 전혀 수정하지 않음
         if language == "English 🇺🇸":
             system_prompt = """
 You are an AI friend who gently soothes the user's painful feelings,
@@ -781,7 +786,6 @@ Always keep a warm, gentle, human-like tone so the user feels
 말투는 늘 따뜻하고 다정하게,
 사용자가 **“나한테 진짜로 답을 준 느낌”**을 받을 수 있도록 말해줘.
 """
-
         # --------- 유저 메모리 / 히스토리 ----------
         user_memory = _get_user_memory(USER_ID)
         context_messages = [{"role": "system", "content": system_prompt}]
@@ -855,6 +859,7 @@ def is_crisis(text: str) -> bool:
 
 def show_paywall():
     st.warning(TEXT["paywall"])
+    # 🔁 여기 메시지도 15회 / 1달러로 자동 반영
     st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD}")
 
 def charge_if_needed(user_input: str, free_used: int, free_limit: int):
@@ -888,12 +893,13 @@ def render_payment_and_feedback():
     is_en = (language == "English 🇺🇸")
 
     if is_en:
-        title_line = "#### 50 uses for **$3** — Purchase intent"
-        btn_label = "💳 $3 for 50 uses — I'm interested"
+        # 🔁 안내 문구: 15 uses / $1
+        title_line = "#### 15 uses for **$1** — Purchase intent"
+        btn_label = "💳 $1 for 15 uses — I'm interested"
         info_already = "💙 You've already registered your interest. Thank you!"
         success_msg = "We'll notify you first when payments open 💖"
         caption_text = f"So far, **{total_intents}** people have shown interest."
-        plan_value = "50_uses_$3"
+        plan_value = "15_uses_$1"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
         # ⬇⬇⬇ 스크린샷 안내 (영어 + 이모지 강화)
         payment_notice = (
@@ -905,15 +911,16 @@ def render_payment_and_feedback():
             "   - 📸 Instagram: **@youtuberhawaiijelly** (Youtuber Hawaiijelly)\n"
             "   - 💬 KakaoTalk ID: **jeuspo** (Korea only)\n\n"
             "✅ Once the developer checks your message, "
-            "**your 50-use voucher code will be sent right away.** 💙\n"
+            "**your 15-use voucher code will be sent right away.** 💙\n"
         )
     else:
-        title_line = "#### 50회 이용권 3,000원 결제 의사 확인"
-        btn_label = "💳 3,000원에 50회 이용권, 결제 의사가 있으신가요?"
+        # 🔁 안내 문구: 15회 / 1달러
+        title_line = "#### 15회 이용권 1달러 결제 의사 확인"
+        btn_label = "💳 1달러에 15회 이용권, 결제 의사가 있으신가요?"
         info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
         success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
-        plan_value = "50회_3000원"
+        plan_value = "15회_1달러"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
         # ⬇⬇⬇ 스크린샷 안내 (한국어 + 이모지 강화)
         payment_notice = (
@@ -925,7 +932,7 @@ def render_payment_and_feedback():
             "   - 📸 인스타그램: **@youtuberhawaiijelly** (유튜버 하와이 젤리)\n"
             "   - 💬 카카오톡 아이디: **jeuspo**\n\n"
             "✅ 개발자가 메시지를 확인하면 "
-            "**50회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
+            "**15회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
     # === Purchase Intent UI Disabled (KR + EN) ===
@@ -1023,7 +1030,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                You can top up <b>50 therapy sessions</b> at once.
+                You can top up <b>15 therapy sessions</b> at once.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>Use it whenever you need emotional support</li>
@@ -1036,7 +1043,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                50회 상담 이용권을 한 번에 충전할 수 있어요.
+                15회 상담 이용권을 한 번에 충전할 수 있어요.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>도움이 필요할 때마다 편하게 사용</li>
@@ -1048,8 +1055,9 @@ def render_payment_and_feedback():
 
         st.markdown(card_html, unsafe_allow_html=True)
 
-        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 3달러 / 50회 이용" if not is_en else "💳 Pay $3 / 50 uses"
+        # 🔁 새 페이팔 링크 & 가격/횟수 텍스트
+        paypal_link = "https://www.paypal.com/ncp/payment/32BZVWVT2KSDS"
+        btn_text = "💳 1달러 / 15회 이용" if not is_en else "💳 Pay $1 / 15 uses"
 
         st.markdown(
             f"""
@@ -1141,19 +1149,19 @@ def render_chat_page():
 st.sidebar.header("📜 History / 대화 기록")
 
 # 🔮 Rainbow Neon Payment card (added above visitor stats)
-paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
+paypal_link = "https://www.paypal.com/ncp/payment/32BZVWVT2KSDS"
 if language == "English 🇺🇸":
-    pay_title = "☕ 50 safe talks for the price of one coffee"
-    pay_line1 = "Beta offer: $3 → 50 credits"
-    pay_line2 = "That's about $0.06 per talk."
+    pay_title = "☕ 15 safe talks for the price of one coffee"
+    pay_line1 = "Beta offer: $1 → 15 credits"
+    pay_line2 = "That's about $0.07 per talk."
     pay_privacy = "Your conversations stay private — not shared with anyone, including the operator."
-    pay_button = "💳 Pay $3 for 50 talks"
+    pay_button = "💳 Pay $1 for 15 talks"
 else:
-    pay_title = "☕ 카페 라테 한 잔 값으로, 50번 마음 털어놓기"
-    pay_line1 = "베타 기간 가격: 3달러 → 50 크레딧"
-    pay_line2 = "한 번 대화당 약 70원 정도예요."
+    pay_title = "☕ 카페 라테 한 잔 값으로, 15번 마음 털어놓기"
+    pay_line1 = "베타 기간 가격: 1달러 → 15 크레딧"
+    pay_line2 = "한 번 대화당 약 90원 정도예요."
     pay_privacy = "여기에서 나눈 대화는 공개되지 않아요. 운영자를 포함한 누구와도 공유되지 않습니다."
-    pay_button = "💳 3달러로 50회 채우기"
+    pay_button = "💳 1달러로 15회 채우기"
 
 st.sidebar.markdown(
     f"""
@@ -1305,4 +1313,5 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
 
