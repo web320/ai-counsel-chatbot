@@ -1200,9 +1200,32 @@ def render_payment_and_feedback():
 if "show_payment" not in st.session_state:
     st.session_state["show_payment"] = False
 
+# 1) 🔝 방문자 수를 가장 위에 표시
+total_visits, daily_visits = get_visit_counts()
+st.sidebar.markdown(
+    f"""
+    <div style="
+        margin-top: 12px;
+        margin-bottom: 16px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.sidebar.markdown("---")
+
+# 2) 📚 Saved Chats / 저장된 대화 섹션
 st.sidebar.header(TEXT["saved_title"])
 
-# 💾 1) 현재 대화 저장하기 버튼
+# 💾 현재 대화 저장하기 버튼
 if st.sidebar.button(TEXT["save_chat"], key="save_current_chat"):
     if st.session_state.get("chat_history"):
         save_current_conversation(USER_ID, st.session_state["chat_history"])
@@ -1216,7 +1239,7 @@ if st.session_state.get("chat_history"):
 else:
     st.sidebar.write(TEXT["saved_empty"])
 
-# 📚 2) 저장된 대화 목록 + 불러오기
+# 📂 저장된 대화 목록 + 불러오기
 saved_chats = list(
     db.collection("users")
     .document(USER_ID)
@@ -1250,11 +1273,11 @@ if saved_chats:
         msgs = chosen.get("messages", [])
         if msgs:
             st.session_state["chat_history"] = msgs
-            save_chat_history(USER_ID, msgs)  # current로도 덮어쓰기
+            save_chat_history(USER_ID, msgs)  # current도 같이 덮어쓰기
             st.sidebar.success(TEXT["load_chat_button"])
             st.rerun()
 
-# 🗑️ 3) 대화 기록 삭제 (current만)
+# 🗑️ 대화 기록 삭제 (current만)
 if st.sidebar.button(TEXT["clear_history"], key="clear_history_btn"):
     st.session_state["chat_history"] = []
     try:
@@ -1263,26 +1286,6 @@ if st.sidebar.button(TEXT["clear_history"], key="clear_history_btn"):
         print("chat delete error:", e)
     st.sidebar.success(TEXT["history_cleared"])
     st.rerun()
-
-# 방문자 수
-total_visits, daily_visits = get_visit_counts()
-st.sidebar.markdown(
-    f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        🌍 <b>Total {total_visits:,}명</b><br>
-        ☀️ <b>Today {daily_visits:,}명</b>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 
 st.sidebar.markdown("---")
 
@@ -1295,6 +1298,7 @@ else:
     if st.sidebar.button(TEXT["chat_button"], key="open_payment_btn"):
         st.session_state["show_payment"] = True
         st.rerun()
+
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
