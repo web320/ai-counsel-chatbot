@@ -1491,16 +1491,6 @@ with st.sidebar.form("redeem_form", clear_on_submit=True):
             else:
                 st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
-# Payment & Feedback 토글
-if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
-        st.session_state["show_payment"] = False
-        st.rerun()
-else:
-    if st.sidebar.button(TEXT["chat_button"]):
-        st.session_state["show_payment"] = True
-        st.rerun()
-
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
