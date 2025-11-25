@@ -210,7 +210,7 @@ html, body, [class*="css"] { font-size: 18px; }
 
 .bot-bubble {
   font-size:21px;
-  line-height:1.45;
+  line-height:1.2;
   border-radius:16px;
   padding:16px 20px;
   margin:10px 0;
