@@ -54,33 +54,18 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Unique Visitor ID (브라우저 고유값 고정) =================
-def get_or_create_uid():
-    """URL 쿼리파라미터(uid)에 고정해서 새로고침해도 같은 USER_ID 사용"""
-    try:
-        params = st.query_params
-    except Exception:
-        params = {}
+# ================= Persistent USER_ID via query params =================
+qp = st.query_params
+if "uid" in qp:
+    uid_val = qp["uid"]
+    # Streamlit 새 API에서 리스트일 수 있음
+    if isinstance(uid_val, list):
+        uid_val = uid_val[0]
+else:
+    uid_val = str(uuid.uuid4())
+    qp["uid"] = uid_val
 
-    # 이미 uid가 있으면 그대로 사용
-    if "uid" in params and params["uid"]:
-        return params["uid"]
-
-    # 없으면 새 uid 생성 후 URL에 세팅
-    new_uid = str(uuid.uuid4())
-    try:
-        base = params.to_dict() if hasattr(params, "to_dict") else dict(params)
-        base["uid"] = new_uid
-        st.query_params = base  # URL 업데이트 → 자동 rerun
-    except Exception:
-        try:
-            st.experimental_set_query_params(uid=new_uid)
-        except Exception:
-            pass
-    return new_uid
-
-USER_ID = get_or_create_uid()
-st.session_state["unique_visitor_id"] = USER_ID  # 혹시 다른 곳에서 쓸 수도 있으니 유지
+USER_ID = uid_val
 
 # ================= Visitor Counter =================
 def update_visit_stats():
@@ -111,13 +96,17 @@ def get_visit_counts():
     daily = daily_doc.to_dict().get("count", 0) if daily_doc.exists else 0
     return total, daily
 
-if "visit_logged" not in st.session_state:
+# 같은 USER_ID에 대해 한 번만 방문자 카운트 증가
+if st.session_state.get("visit_logged_for") != USER_ID:
     update_visit_stats()
-    st.session_state["visit_logged"] = True
+    st.session_state["visit_logged_for"] = USER_ID
 
 # ================= Language State =================
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English 🇺🇸"
+
+if "show_payment" not in st.session_state:
+    st.session_state["show_payment"] = False
 
 col1, col2 = st.columns([5, 1])
 with col2:
@@ -166,6 +155,8 @@ if language == "English 🇺🇸":
         "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 Admin — Generate Voucher Codes",
         "admin_make": "Generate",
+        "save_chat": "💾 Save current conversation",
+        "saved_none": "No saved conversations yet.",
     }
 else:
     TEXT = {
@@ -200,6 +191,8 @@ else:
         "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 관리자 — 바우처 코드 생성",
         "admin_make": "코드 생성",
+        "save_chat": "💾 현재 대화 저장",
+        "saved_none": "아직 저장된 대화가 없어요.",
     }
 
 st.title(TEXT["title"])
@@ -490,15 +483,14 @@ def decrement_credit(uid: str, amount: int = 1):
     tx = db.transaction()
     return _tx(tx)
 
-# ================= Chat History Load / Clear (Firestore) =================
+# ================= Chat History Helpers (Firestore) =================
 def load_chat_history(uid: str, limit: int = 50):
-    """Firestore에서 이 유저의 과거 대화를 불러와 chat_history로 쓰기"""
+    """Firestore에서 최근 대화를 불러와 세션에 복원."""
     docs = db.collection("chats").where("uid", "==", uid).stream()
     items = []
     for d in docs:
         doc = d.to_dict() or {}
         items.append(doc)
-    # created_at 기준 정렬 (문자열 ISO라서 그대로 정렬해도 시간순)
     items.sort(key=lambda x: x.get("created_at", ""))
     if len(items) > limit:
         items = items[-limit:]
@@ -514,23 +506,62 @@ def load_chat_history(uid: str, limit: int = 50):
     return history
 
 def clear_user_history(uid: str):
-    """Firestore에서 이 유저의 전체 대화 삭제"""
+    """Firestore에서 이 유저의 전체 대화 로그 삭제."""
     chats_ref = db.collection("chats").where("uid", "==", uid).stream()
     batch = db.batch()
     count = 0
     for doc in chats_ref:
         batch.delete(doc.reference)
         count += 1
-        if count >= 400:  # Firestore batch limit 대비
+        if count >= 400:
             batch.commit()
             batch = db.batch()
             count = 0
     if count:
         batch.commit()
 
+def save_current_chat(uid: str):
+    """현재 세션의 chat_history를 저장된 대화로 저장."""
+    messages = st.session_state.get("chat_history", [])
+    if not messages:
+        return False
+
+    # 제목: 첫 번째 유저 메시지 또는 시간
+    title_source = ""
+    for m in messages:
+        if m.get("role") == "user" and m.get("content"):
+            title_source = m["content"].strip().replace("\n", " ")
+            break
+
+    if title_source:
+        if len(title_source) > 30:
+            title = title_source[:30] + "…"
+        else:
+            title = title_source
+    else:
+        title = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+
+    db.collection("saved_chats").add({
+        "uid": uid,
+        "title": title,
+        "messages": messages,
+        "created_at": datetime.utcnow().isoformat(),
+    })
+    return True
+
+def load_saved_chats(uid: str, limit: int = 20):
+    """저장된 대화 목록 불러오기."""
+    docs = db.collection("saved_chats").where("uid", "==", uid).stream()
+    items = []
+    for d in docs:
+        data = d.to_dict() or {}
+        data["id"] = d.id
+        items.append(data)
+    items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return items[:limit]
+
 # ================= Chat History (session) =================
 if "chat_history" not in st.session_state:
-    # 앱 처음 열었을 때 Firestore 로그에서 자동으로 복원
     st.session_state["chat_history"] = load_chat_history(USER_ID)
 
 # ================= AI Response =================
@@ -837,7 +868,6 @@ Always keep a warm, gentle, human-like tone so the user feels
 말투는 늘 따뜻하고 다정하게,
 사용자가 **“나한테 진짜로 답을 준 느낌”**을 받을 수 있도록 말해줘.
 """
-
         # --------- 유저 메모리 / 히스토리 ----------
         user_memory = _get_user_memory(USER_ID)
         context_messages = [{"role": "system", "content": system_prompt}]
@@ -857,7 +887,7 @@ Always keep a warm, gentle, human-like tone so the user feels
             model="gpt-4o",
             messages=context_messages,
             temperature=0.7,
-            max_tokens=350,   # 답변 길이 조금 짧게
+            max_tokens=350,
             stream=True,
         )
 
@@ -947,7 +977,7 @@ def render_payment_and_feedback():
         success_msg = "We'll notify you first when payments open 💖"
         caption_text = f"So far, **{total_intents}** people have shown interest."
         plan_value = "50_uses_$3"
-        help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
+        help_text = "To continue now, redeem a voucher code in the My Wallet section below."
         payment_notice = (
             "📸✨ **How to receive your voucher code**\n"
             "1️⃣ Use the neon button on the right to complete your payment.\n"
@@ -966,7 +996,7 @@ def render_payment_and_feedback():
         success_msg = "결제 기능이 열리면 가장 먼저 알려드릴게요 💖"
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
         plan_value = "50회_3000원"
-        help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
+        help_text = "지금 바로 이용하려면 아래 '내 지갑(My Wallet)'에서 코드를 충전하세요."
         payment_notice = (
             "📸✨ **바우처 코드를 받는 방법**\n"
             "1️⃣ 오른쪽 네온 버튼으로 결제를 완료해 주세요.\n"
@@ -979,7 +1009,7 @@ def render_payment_and_feedback():
             "**50회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
-    # (결제 의사 버튼은 비활성화 상태로 그대로 둠)
+    # (결제 의사 버튼은 비활성화 상태로 유지)
     # st.markdown(title_line)
     # if clicked:
     #     st.info(info_already)
@@ -1002,7 +1032,6 @@ def render_payment_and_feedback():
 
     # ========== 왼쪽: 피드백 + 관리자 영역 + My Wallet ==========
     with col1:
-        # 💌 서비스 피드백
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
         if st.button("📩 Submit / 보내기"):
@@ -1018,7 +1047,6 @@ def render_payment_and_feedback():
         st.markdown("---")
         st.markdown(f"### {TEXT['admin_gen']}")
 
-        # 🔑 관리자 영역
         if "is_admin" not in st.session_state:
             st.session_state["is_admin"] = False
 
@@ -1061,7 +1089,7 @@ def render_payment_and_feedback():
                 st.success("코드 생성 완료! 아래 목록을 보관하세요.")
                 st.code("\n".join(out))
 
-        # 💙 여기부터 My Wallet (Admin 아래에 위치)
+        # 💙 My Wallet (Admin 아래)
         st.markdown("---")
         st.markdown(f"### {TEXT['wallet']}")
         user_snapshot = get_user(USER_ID)
@@ -1084,135 +1112,6 @@ def render_payment_and_feedback():
                         st.error(TEXT["voucher_used"])
                     else:
                         st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
-
-    # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
-    with col2:
-        if is_en:
-            st.markdown("### 💳 Direct Payment")
-            card_html = """
-            <div class="pay-card">
-              <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                You can top up <b>50 therapy sessions</b> at once.
-              </p>
-              <ul style="font-size:14px; opacity:0.9; margin-top:0;">
-                <li>Use it whenever you need emotional support</li>
-                <li>Crisis messages (suicide / self-harm) are always free</li>
-                <li>After payment, you'll receive a voucher code to recharge</li>
-              </ul>
-              <div style="margin-top:14px; text-align:center;">
-            """
-        else:
-            st.markdown("### 💳 바로 결제하기")
-            card_html = """
-            <div class="pay-card">
-              <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                50회 상담 이용권을 한 번에 충전할 수 있어요.
-              </p>
-              <ul style="font-size:14px; opacity:0.9; margin-top:0;">
-                <li>도움이 필요할 때마다 편하게 사용</li>
-                <li>위기 문구(자살·극단적 표현)는 항상 무료</li>
-                <li>결제 후 바우처 코드로 간편 충전</li>
-              </ul>
-              <div style="margin-top:14px; text-align:center;">
-            """
-
-        st.markdown(card_html, unsafe_allow_html=True)
-
-        paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
-        btn_text = "💳 3달러 / 50회 이용" if not is_en else "💳 Pay $3 / 50 uses"
-
-        st.markdown(
-            f"""
-            <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
-            </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown("---")
-        st.markdown(payment_notice)
-
-
-    # 결제 의사 버튼은 비활성화 (코멘트만 남김)
-    # st.markdown(title_line)
-    # if clicked:
-    #     st.info(info_already)
-    # else:
-    #     if st.button(btn_label):
-    #         intent_ref.set({
-    #             "uid": USER_ID,
-    #             "plan": plan_value,
-    #             "created_at": datetime.utcnow().isoformat(),
-    #         })
-    #         st.success(success_msg)
-    #         st.rerun()
-    # st.caption(caption_text)
-
-    st.info(help_text)
-
-    st.markdown("---")
-
-    col1, col2 = st.columns([3, 2])
-
-    # ========== 왼쪽: 피드백 + 관리자 영역 ==========
-    with col1:
-        st.subheader(TEXT["feedback_title"])
-        fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
-        if st.button("📩 Submit / 보내기"):
-            if not fb.strip():
-                st.warning(TEXT["feedback_empty"])
-            else:
-                db.collection("feedbacks").document(str(uuid.uuid4())).set({
-                    "uid": USER_ID, "feedback": fb, "lang": language,
-                    "created_at": datetime.utcnow().isoformat()
-                })
-                st.success(TEXT["feedback_sent"])
-
-        st.markdown("---")
-        st.markdown(f"### {TEXT['admin_gen']}")
-
-        if "is_admin" not in st.session_state:
-            st.session_state["is_admin"] = False
-
-        admin_key = st.text_input("Admin Key", type="password", key="admin_key_main")
-        if admin_key and admin_key in ADMIN_KEYS:
-            st.session_state["is_admin"] = True
-            st.success("관리자 모드 활성화")
-
-        if st.session_state["is_admin"]:
-            credit_admin = st.text_input("크레딧 관리자 비밀번호", type="password", key="credit_admin_pw")
-            if credit_admin:
-                if credit_admin in ADMIN_KEYS:
-                    if not st.session_state.get("admin_unlocked"):
-                        current_data = get_user(USER_ID)
-                        current_credits = int(current_data.get("credits", 0))
-                        new_credits = current_credits + CREDIT_PACK_SIZE
-                        persist_user({"credits": new_credits})
-                        st.session_state["admin_unlocked"] = True
-                        st.success(TEXT["admin_success"])
-                        st.rerun()
-                    else:
-                        st.info(TEXT["admin_already"])
-                else:
-                    st.error(TEXT["admin_wrong"])
-
-            st.markdown("---")
-
-            def gen_code(n=8):
-                return uuid.uuid4().hex[:n].upper()
-
-            num = st.number_input("생성 개수", 1, 200, 10)
-            credits_each = st.number_input("코드당 크레딧", 1, 1000, CREDIT_PACK_SIZE)
-            note = st.text_input("메모(선택)", f"{CREDIT_PACK_SIZE}회/${CREDIT_PACK_PRICE_USD}")
-            if st.button(TEXT["admin_make"]):
-                out = []
-                for _ in range(int(num)):
-                    c = gen_code(10)
-                    create_voucher(c, credits_each, note=note)
-                    out.append(c)
-                st.success("코드 생성 완료! 아래 목록을 보관하세요.")
-                st.code("\n".join(out))
 
     # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
     with col2:
@@ -1291,6 +1190,7 @@ def render_chat_page():
     except Exception:
         last_reset = now
 
+    # 🔁 무료 이용 횟수는 RESET_INTERVAL_HOURS마다 Firestore에서 리셋
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         usage = 0
         persist_user({
@@ -1310,6 +1210,15 @@ def render_chat_page():
         f"<div class='status'>{plan_label} — {TEXT['status_left']} {max(left_display,0)}회</div>",
         unsafe_allow_html=True
     )
+
+    # 💾 현재 대화 저장 버튼 (저장된 대화용)
+    if st.button(TEXT["save_chat"], key="save_chat_button"):
+        if st.session_state.get("chat_history"):
+            if save_current_chat(USER_ID):
+                st.success("대화를 저장했어요. 왼쪽 Saved Chats에서 다시 불러올 수 있어요.")
+                st.rerun()
+        else:
+            st.info("저장할 대화가 아직 거의 없어요.")
 
     display_chat_history()
 
@@ -1335,10 +1244,57 @@ def render_chat_page():
             persist_user({"usage_count": usage + 1})
         st.rerun()
 
-# ================= Sidebar =================
-st.sidebar.header("📜 History / 대화 기록")
+# ================= Main Render (Center) =================
+if st.session_state.get("show_payment"):
+    render_payment_and_feedback()
+else:
+    render_chat_page()
 
-# 🔮 Rainbow Neon Payment card (added above visitor stats)
+# ================= Sidebar =================
+# Saved Chats / 대화 기록 목록
+st.sidebar.header("📚 Saved Chats / 저장된 대화")
+
+saved = load_saved_chats(USER_ID)
+if not saved:
+    st.sidebar.caption(TEXT["saved_none"])
+else:
+    for chat in saved:
+        title = chat.get("title", "(no title)")
+        if st.sidebar.button(f"💬 {title}", key=f"saved_{chat['id']}"):
+            st.session_state["chat_history"] = chat.get("messages", [])
+            st.session_state["current_chat_id"] = chat["id"]
+            st.rerun()
+
+st.sidebar.markdown("---")
+
+# 🔢 방문자 카운트
+total_visits, daily_visits = get_visit_counts()
+st.sidebar.markdown(
+    f"""
+    <div style="
+        margin-top: 4px;
+        margin-bottom: 12px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        font-size: 13px;
+        color: rgba(255,255,255,0.85);
+    ">
+        🌍 <b>Total {total_visits:,}명</b><br>
+        ☀️ <b>Today {daily_visits:,}명</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# 🗑️ 대화 기록 삭제 (세션 + Firestore 로그)
+if st.sidebar.button(TEXT["clear_history"]):
+    st.session_state["chat_history"] = []
+    clear_user_history(USER_ID)
+    st.sidebar.success(TEXT["history_cleared"])
+    st.rerun()
+
+# 🔮 Rainbow Neon Payment card
 paypal_link = "https://www.paypal.com/ncp/payment/W6UUT2A8RXZSG"
 if language == "English 🇺🇸":
     pay_title = "☕ 50 safe talks for the price of one coffee"
@@ -1442,35 +1398,13 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-total_visits, daily_visits = get_visit_counts()
-st.sidebar.markdown(
-    f"""
-    <div style="
-        margin-top: 12px;
-        margin-bottom: 16px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.03);
-        font-size: 13px;
-        color: rgba(255,255,255,0.85);
-    ">
-        🌍 <b>Total {total_visits:,}명</b><br>
-        ☀️ <b>Today {daily_visits:,}명</b>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-# 🗑️ 대화 기록 삭제 (세션 + Firestore 둘 다)
-if st.sidebar.button(TEXT["clear_history"]):
-    st.session_state["chat_history"] = []
-    clear_user_history(USER_ID)
-    st.sidebar.success(TEXT["history_cleared"])
-    st.rerun()
-
-
-# ================= Main Render =================
+# Payment & Feedback 토글 (사이드바)
 if st.session_state.get("show_payment"):
-    render_payment_and_feedback()
+    if st.sidebar.button(TEXT["chat_return"]):
+        st.session_state["show_payment"] = False
+        st.rerun()
 else:
-    render_chat_page()
+    if st.sidebar.button(TEXT["chat_button"]):
+        st.session_state["show_payment"] = True
+        st.rerun()
+
