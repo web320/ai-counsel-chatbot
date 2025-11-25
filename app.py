@@ -210,7 +210,7 @@ html, body, [class*="css"] { font-size: 18px; }
 
 .bot-bubble {
   font-size:21px;
-  line-height:1.8;
+  line-height:1.45;
   border-radius:16px;
   padding:16px 20px;
   margin:10px 0;
@@ -284,16 +284,6 @@ html, body, [class*="css"] { font-size: 18px; }
 """,
     unsafe_allow_html=True
 )
-/* AI 답변 줄 간격 줄이기 */
-.chat-message p {
-    line-height: 1.45 !important;
-    margin-bottom: 8px !important;
-}
-
-/* 문단 간 간격 축소 */
-.chat-message {
-    margin-bottom: 12px !important;
-}
 
 # ================= Chat History =================
 if "chat_history" not in st.session_state:
