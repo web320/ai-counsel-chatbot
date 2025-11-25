@@ -213,7 +213,7 @@ html, body, [class*="css"] { font-size: 18px; }
   line-height:1.5;
   border-radius:16px;
   padding:16px 20px;
-  margin:10px 0;
+  margin:6px 0;
   background:rgba(15,15,30,.85);
   color:#fff;
   border:2px solid transparent;
