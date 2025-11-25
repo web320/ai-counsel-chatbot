@@ -1113,7 +1113,7 @@ def render_payment_and_feedback():
                     else:
                         st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
-    # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
+       # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
     with col2:
         if is_en:
             st.markdown("### 💳 Direct Payment")
@@ -1152,6 +1152,17 @@ def render_payment_and_feedback():
         st.markdown(
             f"""
             <a href="{paypal_link}" target="_blank" class="rainbow-btn">{btn_text}</a>
+            </div>
+            <br>
+            <div style="margin-top:16px; text-align:left; font-size:14px; opacity:0.9;">
+              <b>☕ 카페 라테 한 잔 값으로, 50번 마음 털어놓기</b><br>
+              <span style="font-size:13px; opacity:0.8;">
+                베타 기간 가격: 3달러 → 50 크레딧<br>
+                한 번 대화당 약 70원 정도예요.<br><br>
+                💡 여기에서 나눈 대화는 공개되지 않아요.<br>
+                운영자를 포함한 누구와도 공유되지 않습니다.
+              </span><br><br>
+              <a href="{paypal_link}" target="_blank" class="rainbow-btn" style="font-size:15px;">💳 3달러로 50회 채우기</a>
             </div>
             </div>
             """,
