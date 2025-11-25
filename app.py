@@ -55,9 +55,18 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# ================= Unique Visitor ID (브라우저 고유값) =================
+# ================= Unique Visitor ID (브라우저 고유값, 새로고침에도 유지) =================
+# URL의 ?uid=... 쿼리파라미터를 사용해서 같은 브라우저에서는
+# 새로고침해도 항상 같은 USER_ID가 유지되도록 합니다.
 if "unique_visitor_id" not in st.session_state:
-    st.session_state["unique_visitor_id"] = str(uuid.uuid4())
+    if "uid" in st.query_params:
+        # 이미 URL에 저장된 uid가 있으면 그대로 사용
+        st.session_state["unique_visitor_id"] = st.query_params["uid"]
+    else:
+        # 처음 방문이면 새 uid를 만들고 URL에 저장
+        new_uid = str(uuid.uuid4())
+        st.session_state["unique_visitor_id"] = new_uid
+        st.query_params["uid"] = new_uid
 
 USER_ID = st.session_state["unique_visitor_id"]
 
@@ -714,6 +723,7 @@ Always keep a warm, gentle, human-like tone so the user feels
 오늘 안에 끝낼 수 있는 아주 작은 목표 하나만 정해서 '그래, 이것까진 했다'라고 스스로에게 말해주는 것도 좋고.  
 
 
+
 [예시 6] 사용자: "재미나이로 바꿔주세요. 당신 싫어요"
 
 답변:
@@ -748,6 +758,8 @@ Always keep a warm, gentle, human-like tone so the user feels
 “지금 너무 힘들다는 게 느껴져요.
 내가 계속 곁에 있을 테지만, 동시에 당신이 안전하길 바라요.
 가까운 사람이나 전문 상담사와 연결되는 것도 큰 도움이 될 수 있어요.”
+
+
 처럼 AI가 모든 책임을 지는 말은 피하고,
 안정과 안전을 함께 안내한다.
 
@@ -1014,6 +1026,8 @@ def render_payment_and_feedback():
     col1, col2 = st.columns([3, 2])
 
     # ========== 왼쪽: 피드백 + 관리자 + 월렛 ==========
+
+
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
