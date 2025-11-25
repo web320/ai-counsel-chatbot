@@ -2,6 +2,7 @@
 # 💙 EOERWAY AI Therapy v2.9 (Complete, No Onboarding)
 # Wallet + Voucher + Paywall + Memory
 # Unique Visitor Counter + Beautiful Payment UI
+# 1 dollar = 15 uses
 # ==========================================
 
 import os, uuid, json, time, random
@@ -22,7 +23,7 @@ RESET_INTERVAL_HOURS = 4
 BASIC_LIMIT = 50
 ADMIN_KEYS = ["2356"]
 
-# 🔁 결제 / 크레딧 기본 단위: 1달러 = 15회
+# 🔁 결제 단위: 1달러 = 15회
 CREDIT_PACK_SIZE = 15
 CREDIT_PACK_PRICE_USD = 1
 
@@ -130,7 +131,6 @@ if language == "English 🇺🇸":
         "chat_return": "💬 Back to Chat",
         "chat_button": "💳 Open Payment & Feedback",
         "status_left": "remaining",
-        # 🔁 관리자 충전 문구도 pack 사이즈에 맞게
         "admin_success": f"🔓 Admin mode granted {CREDIT_PACK_SIZE} credits!",
         "admin_already": "✅ Already added in this session.",
         "admin_wrong": "❌ Wrong admin password.",
@@ -165,7 +165,6 @@ else:
         "chat_return": "💬 대화창으로 돌아가기",
         "chat_button": "💳 결제 및 피드백 열기",
         "status_left": "남은",
-        # 🔁 관리자 충전 문구도 pack 사이즈에 맞게
         "admin_success": f"🔓 관리자 모드로 {CREDIT_PACK_SIZE}회 충전됨!",
         "admin_already": "✅ 이미 추가되었습니다",
         "admin_wrong": "❌ 관리자 비밀번호가 틀렸어요",
@@ -265,7 +264,7 @@ html, body, [class*="css"] { font-size: 18px; }
   text-shadow:0 0 10px rgba(255,255,255,0.7);
   box-shadow:0 0 25px rgba(255,255,255,0.3);
   cursor:pointer;
-  animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
+  animation:neon 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
   transition:transform 0.25s, box-shadow 0.25s;
   text-decoration:none;
 }
@@ -273,10 +272,6 @@ html, body, [class*="css"] { font-size: 18px; }
   transform:scale(1.08);
   box-shadow:0 0 40px rgba(255,255,255,0.9);
   filter:brightness(1.2);
-}
-@keyframes rainbowGlow {
-  0% {background-position:0%;}
-  100% {background-position:400%;}
 }
 @keyframes neonPulse {
   0%,100% {text-shadow:0 0 10px #fff, 0 0 20px #ff00ff;}
@@ -286,10 +281,6 @@ html, body, [class*="css"] { font-size: 18px; }
 """,
     unsafe_allow_html=True
 )
-
-# ================= Chat History =================
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
 
 # ================= Firestore Defaults / User State =================
 defaults = {
@@ -333,7 +324,6 @@ def update_user_memory(uid: str, user_input: str, reply: str, language: str):
         if prev_doc.exists:
             prev_text = (prev_doc.to_dict() or {}).get("text", "")
 
-        # ⚠️ 프롬프트는 절대 수정 안 함
         if language == "English 🇺🇸":
             system_prompt = """
 You maintain a short, evolving psychological + contextual profile of this user.
@@ -401,7 +391,6 @@ Update in 5–9 lines including:
     except Exception as e:
         print("memory update error:", e)
 
-
 # ================= Wallet / Voucher Helpers =================
 def ensure_user(uid: str):
     ref = db.collection("users").document(uid)
@@ -410,11 +399,9 @@ def ensure_user(uid: str):
         ref.set(defaults, merge=True)
     return ref
 
-
 def get_user(uid: str) -> dict:
     doc = db.collection("users").document(uid).get()
     return doc.to_dict() or {}
-
 
 def create_voucher(code: str, credits: int, note: str = "", created_by: str = "admin"):
     db.collection("vouchers").document(code).set({
@@ -427,7 +414,6 @@ def create_voucher(code: str, credits: int, note: str = "", created_by: str = "a
         "note": note,
         "created_at": firestore.SERVER_TIMESTAMP,
     })
-
 
 def redeem_voucher(code: str, uid: str):
     voucher_ref = db.collection("vouchers").document(code)
@@ -464,7 +450,6 @@ def redeem_voucher(code: str, uid: str):
     transaction = db.transaction()
     return _tx(transaction)
 
-
 def decrement_credit(uid: str, amount: int = 1):
     user_ref = db.collection("users").document(uid)
 
@@ -481,11 +466,53 @@ def decrement_credit(uid: str, amount: int = 1):
     tx = db.transaction()
     return _tx(tx)
 
+# ================= Chat History Load / Clear (Firestore) =================
+def load_chat_history(uid: str, limit: int = 50):
+    """Firestore에서 사용자의 과거 대화 불러오기 (최신 limit개)."""
+    docs = db.collection("chats").where("uid", "==", uid).stream()
+    items = []
+    for d in docs:
+        doc = d.to_dict() or {}
+        items.append(doc)
+    # created_at 기준으로 정렬
+    items.sort(key=lambda x: x.get("created_at", ""))
+    if len(items) > limit:
+        items = items[-limit:]
+
+    history = []
+    for doc in items:
+        user_text = doc.get("input", "")
+        reply_text = doc.get("reply", "")
+        if user_text:
+            history.append({"role": "user", "content": user_text})
+        if reply_text:
+            history.append({"role": "assistant", "content": reply_text})
+    return history
+
+def clear_user_history(uid: str):
+    """Firestore에서 이 유저의 전체 대화 삭제."""
+    chats_ref = db.collection("chats").where("uid", "==", uid).stream()
+    batch = db.batch()
+    count = 0
+    for doc in chats_ref:
+        batch.delete(doc.reference)
+        count += 1
+        if count >= 400:  # Firestore batch limit 대비
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count:
+        batch.commit()
+
+# ================= Chat History (session) =================
+if "chat_history" not in st.session_state:
+    # 새 세션일 때 Firestore에서 과거 대화 복원
+    st.session_state["chat_history"] = load_chat_history(USER_ID)
+
 # ================= AI Response =================
 def stream_reply(user_input: str):
     try:
         # --------- System prompt (톤 설정) ----------
-        # ⚠️ 여기부터 프롬프트 부분은 전혀 수정하지 않음
         if language == "English 🇺🇸":
             system_prompt = """
 You are an AI friend who gently soothes the user's painful feelings,
@@ -786,6 +813,7 @@ Always keep a warm, gentle, human-like tone so the user feels
 말투는 늘 따뜻하고 다정하게,
 사용자가 **“나한테 진짜로 답을 준 느낌”**을 받을 수 있도록 말해줘.
 """
+
         # --------- 유저 메모리 / 히스토리 ----------
         user_memory = _get_user_memory(USER_ID)
         context_messages = [{"role": "system", "content": system_prompt}]
@@ -805,7 +833,7 @@ Always keep a warm, gentle, human-like tone so the user feels
             model="gpt-4o",
             messages=context_messages,
             temperature=0.7,
-            max_tokens=350,   # 답변 길이 조금 짧게
+            max_tokens=350,
             stream=True,
         )
 
@@ -851,7 +879,6 @@ Always keep a warm, gentle, human-like tone so the user feels
         st.error(f"{TEXT['reply_error']}: {e}")
         return None
 
-
 # ================= Paywall =================
 def is_crisis(text: str) -> bool:
     t = (text or "").lower()
@@ -859,7 +886,6 @@ def is_crisis(text: str) -> bool:
 
 def show_paywall():
     st.warning(TEXT["paywall"])
-    # 🔁 여기 메시지도 15회 / 1달러로 자동 반영
     st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD}")
 
 def charge_if_needed(user_input: str, free_used: int, free_limit: int):
@@ -878,9 +904,7 @@ def charge_if_needed(user_input: str, free_used: int, free_limit: int):
         show_paywall()
         return False, False
 
-
 # ================= Payment & Feedback =================
-
 def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
@@ -893,7 +917,6 @@ def render_payment_and_feedback():
     is_en = (language == "English 🇺🇸")
 
     if is_en:
-        # 🔁 안내 문구: 15 uses / $1
         title_line = "#### 15 uses for **$1** — Purchase intent"
         btn_label = "💳 $1 for 15 uses — I'm interested"
         info_already = "💙 You've already registered your interest. Thank you!"
@@ -901,7 +924,6 @@ def render_payment_and_feedback():
         caption_text = f"So far, **{total_intents}** people have shown interest."
         plan_value = "15_uses_$1"
         help_text = "To continue now, redeem a voucher code in the sidebar (My Wallet)."
-        # ⬇⬇⬇ 스크린샷 안내 (영어 + 이모지 강화)
         payment_notice = (
             "📸✨ **How to receive your voucher code**\n"
             "1️⃣ Use the neon button on the right to complete your payment.\n"
@@ -914,7 +936,6 @@ def render_payment_and_feedback():
             "**your 15-use voucher code will be sent right away.** 💙\n"
         )
     else:
-        # 🔁 안내 문구: 15회 / 1달러
         title_line = "#### 15회 이용권 1달러 결제 의사 확인"
         btn_label = "💳 1달러에 15회 이용권, 결제 의사가 있으신가요?"
         info_already = "💙 이미 결제 의사를 눌러주셨어요. 정말 감사합니다."
@@ -922,7 +943,6 @@ def render_payment_and_feedback():
         caption_text = f"지금까지 {total_intents}명이 결제 의사를 눌러주셨어요."
         plan_value = "15회_1달러"
         help_text = "지금 바로 이용하려면 사이드바(내 지갑)에서 코드를 충전하세요."
-        # ⬇⬇⬇ 스크린샷 안내 (한국어 + 이모지 강화)
         payment_notice = (
             "📸✨ **바우처 코드를 받는 방법**\n"
             "1️⃣ 오른쪽 네온 버튼으로 결제를 완료해 주세요.\n"
@@ -935,9 +955,8 @@ def render_payment_and_feedback():
             "**15회 이용 가능한 코드가 바로 발송됩니다.** 💙\n"
         )
 
-    # === Purchase Intent UI Disabled (KR + EN) ===
+    # 결제 의사 버튼은 주석 처리 (기능 유지 원하면 주석 해제)
     # st.markdown(title_line)
-    #
     # if clicked:
     #     st.info(info_already)
     # else:
@@ -949,9 +968,7 @@ def render_payment_and_feedback():
     #         })
     #         st.success(success_msg)
     #         st.rerun()
-    #
     # st.caption(caption_text)
-    # ============================================
 
     st.info(help_text)
 
@@ -1020,13 +1037,8 @@ def render_payment_and_feedback():
 
     # ========== 오른쪽: Direct Payment 카드 (언어별) ==========
     with col2:
-        # 제목도 언어별로
         if is_en:
             st.markdown("### 💳 Direct Payment")
-        else:
-            st.markdown("### 💳 바로 결제하기")
-
-        if is_en:
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
@@ -1040,6 +1052,7 @@ def render_payment_and_feedback():
               <div style="margin-top:14px; text-align:center;">
             """
         else:
+            st.markdown("### 💳 바로 결제하기")
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
@@ -1055,7 +1068,7 @@ def render_payment_and_feedback():
 
         st.markdown(card_html, unsafe_allow_html=True)
 
-        # 🔁 새 페이팔 링크 & 가격/횟수 텍스트
+        # 🔗 새로운 페이팔 링크
         paypal_link = "https://www.paypal.com/ncp/payment/32BZVWVT2KSDS"
         btn_text = "💳 1달러 / 15회 이용" if not is_en else "💳 Pay $1 / 15 uses"
 
@@ -1070,7 +1083,6 @@ def render_payment_and_feedback():
 
         st.markdown("---")
         st.markdown(payment_notice)
-
 
 # ================= Display Chat History =================
 def display_chat_history():
@@ -1101,6 +1113,7 @@ def render_chat_page():
     except Exception:
         last_reset = now
 
+    # 🔁 무료 이용 횟수는 RESET_INTERVAL_HOURS마다 Firestore에서 리셋
     if (now - last_reset).total_seconds() / 3600 >= RESET_INTERVAL_HOURS:
         usage = 0
         persist_user({
@@ -1148,110 +1161,7 @@ def render_chat_page():
 # ================= Sidebar =================
 st.sidebar.header("📜 History / 대화 기록")
 
-# 🔮 Rainbow Neon Payment card (added above visitor stats)
-paypal_link = "https://www.paypal.com/ncp/payment/32BZVWVT2KSDS"
-if language == "English 🇺🇸":
-    pay_title = "☕ 15 safe talks for the price of one coffee"
-    pay_line1 = "Beta offer: $1 → 15 credits"
-    pay_line2 = "That's about $0.07 per talk."
-    pay_privacy = "Your conversations stay private — not shared with anyone, including the operator."
-    pay_button = "💳 Pay $1 for 15 talks"
-else:
-    pay_title = "☕ 카페 라테 한 잔 값으로, 15번 마음 털어놓기"
-    pay_line1 = "베타 기간 가격: 1달러 → 15 크레딧"
-    pay_line2 = "한 번 대화당 약 90원 정도예요."
-    pay_privacy = "여기에서 나눈 대화는 공개되지 않아요. 운영자를 포함한 누구와도 공유되지 않습니다."
-    pay_button = "💳 1달러로 15회 채우기"
-
-st.sidebar.markdown(
-    f"""
-<div class="sidebar-rainbow-card">
-  <div class="sidebar-rainbow-inner">
-    <div style="font-size:14px; font-weight:600; margin-bottom:4px;">{pay_title}</div>
-    <div style="font-size:12px; opacity:0.9;">{pay_line1}</div>
-    <div style="font-size:12px; opacity:0.9; margin-bottom:8px;">{pay_line2}</div>
-    <a href="{paypal_link}" target="_blank" class="sidebar-rainbow-btn">{pay_button}</a>
-    <div style="font-size:11px; opacity:0.75; margin-top:6px; line-height:1.4;">
-      {pay_privacy}
-    </div>
-  </div>
-</div>
-
-<style>
-.sidebar-rainbow-card {{
-  position: relative;
-  margin-top: 6px;
-  margin-bottom: 14px;
-  border-radius: 18px;
-  padding: 2px;
-  background: rgba(255,255,255,0.06);
-  box-shadow: 0 0 18px rgba(255,255,255,0.35);
-  overflow: hidden;
-}}
-.sidebar-rainbow-card::before {{
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from 0deg,
-    #ff00cc, #3333ff, #00ffff,
-    #33ff33, #ffff00, #ff6600, #ff0066, #ff00cc
-  );
-  animation: sidebarBorderSpin 7s linear infinite;
-  opacity: 0.95;
-}}
-.sidebar-rainbow-inner {{
-  position: relative;
-  z-index: 1;
-  border-radius: 16px;
-  padding: 10px 12px 12px 12px;
-  background: rgba(10,10,20,0.96);
-  color: #ffffff;
-}}
-.sidebar-rainbow-btn {{
-  display:block;
-  width:100%;
-  margin-top:6px;
-  padding:9px 0;
-  text-align:center;
-  border-radius: 999px;
-  font-size:13px;
-  font-weight:700;
-  text-decoration:none;
-  color:#ffffff;
-  background: linear-gradient(
-    90deg,
-    #ff00cc, #3333ff, #00ffff,
-    #33ff33, #ffff00, #ff6600, #ff0066, #ff00cc
-  );
-  background-size: 300% 300%;
-  box-shadow: 0 0 22px rgba(255,255,255,0.4);
-  animation: sidebarBtnShift 5s linear infinite,
-             sidebarBtnGlow 1.6s ease-in-out infinite;
-}}
-.sidebar-rainbow-btn:hover {{
-  filter: brightness(1.2);
-  transform: translateY(-1px);
-  box-shadow: 0 0 30px rgba(255,255,255,0.9);
-}}
-@keyframes sidebarBorderSpin {{
-  0% {{ transform: rotate(0deg); }}
-  100% {{ transform: rotate(360deg); }}
-}}
-@keyframes sidebarBtnShift {{
-  0% {{ background-position: 0% 50%; }}
-  100% {{ background-position: 300% 50%; }}
-}}
-@keyframes sidebarBtnGlow {{
-  0%,100% {{ box-shadow: 0 0 14px rgba(255,255,255,0.4); }}
-  50% {{ box-shadow: 0 0 30px rgba(255,255,255,0.9); }}
-}}
-</style>
-""",
-    unsafe_allow_html=True
-)
-
+# 🔢 방문자 카운트
 total_visits, daily_visits = get_visit_counts()
 st.sidebar.markdown(
     f"""
@@ -1271,11 +1181,14 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
+# 🗑️ 대화 기록 삭제 (세션 + Firestore 둘 다)
 if st.sidebar.button(TEXT["clear_history"]):
     st.session_state["chat_history"] = []
+    clear_user_history(USER_ID)
     st.sidebar.success(TEXT["history_cleared"])
     st.rerun()
 
+# 💳 내 지갑
 st.sidebar.markdown(f"### {TEXT['wallet']}")
 user_snapshot = get_user(USER_ID)
 st.sidebar.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
@@ -1313,5 +1226,3 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
-
