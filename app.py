@@ -1468,28 +1468,6 @@ if st.sidebar.button(TEXT["clear_history"]):
     st.sidebar.success(TEXT["history_cleared"])
     st.rerun()
 
-# 💳 내 지갑
-st.sidebar.markdown(f"### {TEXT['wallet']}")
-user_snapshot = get_user(USER_ID)
-st.sidebar.metric(label="Credits", value=int(user_snapshot.get("credits", 0)))
-st.sidebar.caption(TEXT["voucher_tip"])
-
-with st.sidebar.form("redeem_form", clear_on_submit=True):
-    code_input = st.text_input(" ", placeholder=TEXT["wallet_help"])
-    ok = st.form_submit_button(TEXT["redeem"])
-    if ok and code_input.strip():
-        try:
-            new_balance = redeem_voucher(code_input.strip(), USER_ID)
-            persist_user({"credits": int(new_balance)})
-            st.success(TEXT["voucher_ok"] + str(new_balance))
-            st.rerun()
-        except ValueError as e:
-            if str(e) == "INVALID_CODE":
-                st.error(TEXT["voucher_bad"])
-            elif str(e) == "ALREADY_USED":
-                st.error(TEXT["voucher_used"])
-            else:
-                st.error("충전에 실패했어요. 잠시 후 다시 시도해주세요.")
 
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
