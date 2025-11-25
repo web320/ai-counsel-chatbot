@@ -157,6 +157,11 @@ if language == "English 🇺🇸":
         "saved_title": "📚 Saved Chats / 저장된 대화",
         "saved_empty": "There is no saved conversation yet.",
         "saved_info": "Your current conversation is being auto-saved.",
+        "save_chat": "💾 Save this conversation",
+        "load_chat_label": "Saved conversations",
+        "load_chat_button": "📂 Load this conversation",
+        "save_success": "Conversation saved.",
+        "save_empty_warning": "There is no conversation to save yet.",
     }
 else:
     TEXT = {
@@ -194,6 +199,11 @@ else:
         "saved_title": "📚 Saved Chats / 저장된 대화",
         "saved_empty": "아직 저장된 대화가 없어요.",
         "saved_info": "현재 대화가 자동으로 저장되고 있어요.",
+        "save_chat": "💾 이 대화 저장하기",
+        "load_chat_label": "저장된 대화 목록",
+        "load_chat_button": "📂 이 대화 불러오기",
+        "save_success": "대화를 저장했어요.",
+        "save_empty_warning": "저장할 대화가 아직 없어요.",
     }
 
 st.title(TEXT["title"])
@@ -428,6 +438,34 @@ def save_chat_history(uid: str, messages):
         )
     except Exception as e:
         print("chat save error:", e)
+
+# ✅ 현재 대화를 "저장된 대화"로 따로 보관하는 함수
+def save_current_conversation(uid: str, messages):
+    if not messages:
+        return
+
+    # 첫 번째 사용자 메시지를 제목으로 사용
+    title = ""
+    for m in messages:
+        if m.get("role") == "user":
+            title = (m.get("content") or "").strip()
+            break
+
+    if not title:
+        title = "Conversation"
+
+    if len(title) > 40:
+        title = title[:40] + "..."
+
+    now_iso = datetime.utcnow().isoformat()
+
+    db.collection("users").document(uid).collection("saved_chats").add({
+        "title": title,
+        "messages": messages,
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "created_at_iso": now_iso,
+        "updated_at": firestore.SERVER_TIMESTAMP,
+    })
 
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = load_chat_history(USER_ID)
@@ -1164,13 +1202,60 @@ if "show_payment" not in st.session_state:
 
 st.sidebar.header(TEXT["saved_title"])
 
-if st.session_state["chat_history"]:
+# 💾 1) 현재 대화 저장하기 버튼
+if st.sidebar.button(TEXT["save_chat"], key="save_current_chat"):
+    if st.session_state.get("chat_history"):
+        save_current_conversation(USER_ID, st.session_state["chat_history"])
+        st.sidebar.success(TEXT["save_success"])
+    else:
+        st.sidebar.warning(TEXT["save_empty_warning"])
+
+# 현재 상태 안내 문구
+if st.session_state.get("chat_history"):
     st.sidebar.write(TEXT["saved_info"])
 else:
     st.sidebar.write(TEXT["saved_empty"])
 
-# 대화 기록 삭제는 여기서만
-if st.sidebar.button(TEXT["clear_history"]):
+# 📚 2) 저장된 대화 목록 + 불러오기
+saved_chats = list(
+    db.collection("users")
+    .document(USER_ID)
+    .collection("saved_chats")
+    .order_by("created_at", direction=firestore.Query.DESCENDING)
+    .limit(10)
+    .stream()
+)
+
+if saved_chats:
+    st.sidebar.markdown(f"**{TEXT['load_chat_label']}**")
+
+    indices = list(range(len(saved_chats)))
+
+    def _format_saved(i: int) -> str:
+        d = saved_chats[i].to_dict() or {}
+        title = d.get("title") or d.get("created_at_iso", "") or saved_chats[i].id
+        if len(title) > 40:
+            title = title[:40] + "..."
+        return f"{i+1}. {title}"
+
+    selected_idx = st.sidebar.selectbox(
+        " ",
+        indices,
+        format_func=_format_saved,
+        key="saved_chat_select",
+    )
+
+    if st.sidebar.button(TEXT["load_chat_button"], key="load_chat_btn"):
+        chosen = saved_chats[selected_idx].to_dict() or {}
+        msgs = chosen.get("messages", [])
+        if msgs:
+            st.session_state["chat_history"] = msgs
+            save_chat_history(USER_ID, msgs)  # current로도 덮어쓰기
+            st.sidebar.success(TEXT["load_chat_button"])
+            st.rerun()
+
+# 🗑️ 3) 대화 기록 삭제 (current만)
+if st.sidebar.button(TEXT["clear_history"], key="clear_history_btn"):
     st.session_state["chat_history"] = []
     try:
         db.collection("users").document(USER_ID).collection("chats").document("current").delete()
@@ -1203,11 +1288,11 @@ st.sidebar.markdown("---")
 
 # Payment & Feedback 토글 버튼
 if st.session_state.get("show_payment"):
-    if st.sidebar.button(TEXT["chat_return"]):
+    if st.sidebar.button(TEXT["chat_return"], key="back_to_chat_btn"):
         st.session_state["show_payment"] = False
         st.rerun()
 else:
-    if st.sidebar.button(TEXT["chat_button"]):
+    if st.sidebar.button(TEXT["chat_button"], key="open_payment_btn"):
         st.session_state["show_payment"] = True
         st.rerun()
 
@@ -1216,3 +1301,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
