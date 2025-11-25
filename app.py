@@ -56,17 +56,17 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ================= Unique Visitor ID (브라우저 고유값, 새로고침에도 유지) =================
-# URL의 ?uid=... 쿼리파라미터를 사용해서 같은 브라우저에서는
-# 새로고침해도 항상 같은 USER_ID가 유지되도록 합니다.
+# URL의 ?uid=... 쿼리 파라미터를 사용해서
+# 같은 브라우저 + 같은 URL에서는 항상 같은 USER_ID를 쓰도록 만듭니다.
 if "unique_visitor_id" not in st.session_state:
+    # 1) 이미 URL에 uid가 있으면 그 값을 그대로 사용
     if "uid" in st.query_params:
-        # 이미 URL에 저장된 uid가 있으면 그대로 사용
         st.session_state["unique_visitor_id"] = st.query_params["uid"]
     else:
-        # 처음 방문이면 새 uid를 만들고 URL에 저장
+        # 2) 처음 접속이면 새 uid를 만들고 URL에 ?uid=... 를 붙여줌
         new_uid = str(uuid.uuid4())
         st.session_state["unique_visitor_id"] = new_uid
-        st.query_params["uid"] = new_uid
+        st.query_params["uid"] = new_uid  # URL 쿼리파라미터에 저장
 
 USER_ID = st.session_state["unique_visitor_id"]
 
@@ -1026,8 +1026,6 @@ def render_payment_and_feedback():
     col1, col2 = st.columns([3, 2])
 
     # ========== 왼쪽: 피드백 + 관리자 + 월렛 ==========
-
-
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
