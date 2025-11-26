@@ -165,16 +165,16 @@ if language == "English 🇺🇸":
     }
 else:
     TEXT = {
-        "title": "❤️ 마음을 기댈 수 있는 따뜻한 상담소",
-        "free": "🌱 무료 체험중",
-        "paid": "💎 유료 이용중",
-        "input": "지금 어떤 기분이예요?",
+        "title": "❤️ 외로운데 들어줄 이 없을 때 방문하는 곳",
+        "free": "🌱 완전 무료 체험중",
+        "paid": "💎 프리미엄 이용중",
+        "input": "지금 어떤 기분인가요?",
         "warn": "내용을 입력해주세요 💬",
         "usedup": f"🌙 무료 상담 {DAILY_FREE_LIMIT}회를 모두 사용했어요",
         "reset": f"⏰ 무료 상담이 복구되었어요 ({RESET_INTERVAL_HOURS}시간마다)",
         "reply_error": "AI 응답 오류",
-        "feedback_placeholder": "예: 상담이 정말 따뜻했어요 🌷",
-        "feedback_sent": "💖 피드백이 저장되었습니다!",
+        "feedback_placeholder": "예: 이렇게 답변해주면 좋겠어요",
+        "feedback_sent": "💖 피드백이 저장되었습니다! 감사합니다다",
         "feedback_empty": "내용을 입력해주세요 💬",
         "payment_title": "💳 결제 안내",
         "feedback_title": "💌 서비스 피드백",
