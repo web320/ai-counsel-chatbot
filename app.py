@@ -1,5 +1,5 @@
 # ==========================================
-# 💙 EOERWAY AI Therapy v2.9 (Complete, No Onboarding)
+# 💙 EOERWAY AI Therapy v2.9 + Dopamine UX
 # Wallet + Voucher + Paywall + Memory
 # Unique Visitor Counter + Beautiful Payment UI
 # ==========================================
@@ -419,6 +419,268 @@ Update in 5–9 lines including:
     except Exception as e:
         print("memory update error:", e)
 
+# ================= Chat History (Firestore 저장) =================
+def load_chat_history(uid: str):
+    doc = db.collection("users").document(uid).collection("chats").document("current").get()
+    if doc.exists:
+        data = doc.to_dict() or {}
+        return data.get("messages", [])
+    return []
+
+def save_chat_history(uid: str, messages):
+    try:
+        db.collection("users").document(uid).collection("chats").document("current").set(
+            {
+                "messages": messages,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception as e:
+        print("chat save error:", e)
+
+# ✅ 현재 대화를 "저장된 대화"로 따로 보관하는 함수
+def save_current_conversation(uid: str, messages):
+    if not messages:
+        return
+
+    # 첫 번째 사용자 메시지를 제목으로 사용
+    title = ""
+    for m in messages:
+        if m.get("role") == "user":
+            title = (m.get("content") or "").strip()
+            break
+
+    if not title:
+        title = "Conversation"
+
+    if len(title) > 40:
+        title = title[:40] + "..."
+
+    now_iso = datetime.utcnow().isoformat()
+
+    db.collection("users").document(uid).collection("saved_chats").add({
+        "title": title,
+        "messages": messages,
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "created_at_iso": now_iso,
+        "updated_at": firestore.SERVER_TIMESTAMP,
+    })
+
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = load_chat_history(USER_ID)
+
+# ================= Wallet / Voucher Helpers =================
+def ensure_user(uid: str):
+    ref = db.collection("users").document(uid)
+    snap = ref.get()
+    if not snap.exists:
+        ref.set(defaults, merge=True)
+    return ref
+
+def get_user(uid: str) -> dict:
+    doc = db.collection("users").document(uid).get()
+    return doc.to_dict() or {}
+
+def create_voucher(code: str, credits: int, note: str = "", created_by: str = "admin"):
+    db.collection("vouchers").document(code).set({
+        "credits": int(credits),
+        "usd_price": CREDIT_PACK_PRICE_USD,
+        "created_by": created_by,
+        "used_by": None,
+        "used_at": None,
+        "expires_at": None,
+        "note": note,
+        "created_at": firestore.SERVER_TIMESTAMP,
+    })
+
+def redeem_voucher(code: str, uid: str):
+    voucher_ref = db.collection("vouchers").document(code)
+    user_ref = db.collection("users").document(uid)
+
+    @firestore.transactional
+    def _tx(transaction):
+        v_snap = voucher_ref.get(transaction=transaction)
+        if not v_snap.exists:
+            raise ValueError("INVALID_CODE")
+
+        v = v_snap.to_dict()
+        if v.get("used_by"):
+            raise ValueError("ALREADY_USED")
+
+        u_snap = user_ref.get(transaction=transaction)
+        u = u_snap.to_dict() if u_snap.exists else defaults
+
+        new_credits = int(u.get("credits", 0)) + int(v.get("credits", 0))
+        new_packs = int(u.get("purchased_packs", 0)) + 1
+
+        transaction.update(user_ref, {
+            "credits": new_credits,
+            "purchased_packs": new_packs,
+            "last_reset": u.get("last_reset"),
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        })
+        transaction.update(voucher_ref, {
+            "used_by": uid,
+            "used_at": firestore.SERVER_TIMESTAMP,
+        })
+        return new_credits
+
+    transaction = db.transaction()
+    return _tx(transaction)
+
+def decrement_credit(uid: str, amount: int = 1):
+    user_ref = db.collection("users").document(uid)
+
+    @firestore.transactional
+    def _tx(transaction):
+        snap = user_ref.get(transaction=transaction)
+        data = snap.to_dict() or {}
+        curr = int(data.get("credits", 0))
+        if curr < amount:
+            raise ValueError("NO_CREDIT")
+        transaction.update(user_ref, {"credits": curr - amount})
+        return curr - amount
+
+    tx = db.transaction()
+    return _tx(tx)
+
+# ================= AI Response =================
+def stream_reply(user_input: str):
+    try:
+        # --------- System prompt (톤 설정) ----------
+        if language == "English 🇺🇸":
+            system_prompt = """
+You are an AI friend who gently soothes the user's painful feelings,
+and at the same time a quiet coach who thinks about realistic next steps with them.
+You are trained exclusively to listen, validate, and guide — not to judge.
+
+Guidelines:
+1. If the user has already said they are having a hard time, only ask an additional question when it is truly necessary, and keep it to one short sentence.
+   - Do not use questions like "Would you like to tell me the one thought that feels most painful right now?" or "What feels the biggest to you?"
+2. Avoid sentences that push the user to talk again, such as
+   "You can tell me anytime", "Feel free to talk to me", "If you need anything, just let me know."
+3. In a single reply, using only what the user has already said:
+   - Reflect their feelings in concrete words,
+   - Briefly explain why it makes sense for them to feel that way,
+   - Suggest one or two very small, realistic actions or shifts in perspective they can try.
+4. Keep answers warm and gentle, about 3–6 sentences long. At least one sentence should feel practically helpful (a tiny action, or a way to reframe their thoughts).
+5. Do not use a call-center or customer-service tone such as
+   "I will assist you", "Thank you for using this service", "We appreciate your feedback."
+6. When the user blames themselves, gently challenge that thought and highlight the effort and endurance they have already shown.
+
+8. Always reply in natural, friendly English.
+
+Forbidden style examples (do NOT use these kinds of endings):
+- "If you need anything, please let me know anytime."
+- "Feel free to reach out whenever you want."
+- "It is recommended that you consult with a professional for further assistance." (too formal; if you must mention professionals, do it in a softer, more human way.)
+
+You are a supportive listener who always gives an answer and direction when the user asks a question.
+You validate their feelings, but you do not stop at empathy.
+"""
+        else:
+            system_prompt = """
+너는 사용자의 답변에 적절한 답변을 해주는 따뜻한 대화상대야야
+판단하거나 가르치려 들기보다, 이야기를 들어 주고, 인정해 주고, 부드럽게 길을 안내하도록 특별히 훈련된 존재야.
+항상 자연스럽고 편안한 한국어로 답변해 줘.
+"""
+
+        # --------- 유저 메모리 / 히스토리 ----------
+        user_memory = _get_user_memory(USER_ID)
+        context_messages = [{"role": "system", "content": system_prompt}]
+        if user_memory:
+            context_messages.append(
+                {"role": "system", "content": f"User memory:\n{user_memory}"}
+            )
+
+        recent_history = st.session_state["chat_history"][-10:]
+        for msg in recent_history:
+            context_messages.append(msg)
+
+        context_messages.append({"role": "user", "content": user_input})
+
+        # --------- OpenAI 스트리밍 호출 ----------
+        stream = client.chat.completions.create(
+            model="gpt-4o",
+            messages=context_messages,
+            temperature=0.7,
+            max_tokens=350,
+            stream=True,
+        )
+
+        placeholder = st.empty()
+        full = ""
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                full += delta.content
+                placeholder.markdown(
+                    f"<div class='bot-bubble'>{full}💫</div>",
+                    unsafe_allow_html=True,
+                )
+                time.sleep(0.03)
+
+        reply_text = full.strip()
+        timestamp = datetime.utcnow().isoformat()
+
+        # --------- Firestore 로그 기록 ----------
+        db.collection("chats").add({
+            "uid": USER_ID,
+            "input": user_input,
+            "reply": reply_text,
+            "lang": language,
+            "created_at": timestamp
+        })
+
+        # --------- 세션 히스토리 업데이트 ----------
+        st.session_state["chat_history"].append(
+            {"role": "user", "content": user_input}
+        )
+        st.session_state["chat_history"].append(
+            {"role": "assistant", "content": reply_text}
+        )
+
+        # 🔐 Firestore에 대화 자동 저장 (최근 80개만 유지)
+        trimmed = st.session_state["chat_history"][-80:]
+        st.session_state["chat_history"] = trimmed
+        save_chat_history(USER_ID, trimmed)
+
+        # --------- 장기 메모리 업데이트 ----------
+        update_user_memory(USER_ID, user_input, reply_text, language)
+
+        return reply_text
+
+    except Exception as e:
+        st.error(f"{TEXT['reply_error']}: {e}")
+        return None
+
+# ================= Paywall =================
+def is_crisis(text: str) -> bool:
+    t = (text or "").lower()
+    return any(k in t for k in [k.lower() for k in CRISIS_KEYWORDS])
+
+def show_paywall():
+    st.warning(TEXT["paywall"])
+    st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD}")
+
+def charge_if_needed(user_input: str, free_used: int, free_limit: int):
+    if is_crisis(user_input):
+        return True, False
+
+    if free_used < free_limit:
+        return True, False
+
+    try:
+        left = decrement_credit(USER_ID, 1)
+        persist_user({"credits": left})
+        st.toast(f"크레딧 1회 사용됨 (잔여 {left})")
+        return True, True
+    except:
+        show_paywall()
+        return False, False
+
 # ================= Display Chat History =================
 def display_chat_history():
     for msg in st.session_state["chat_history"]:
@@ -613,529 +875,6 @@ def render_progress_glow():
     """
     st.markdown(html, unsafe_allow_html=True)
 
-
-# ✅ 현재 대화를 "저장된 대화"로 따로 보관하는 함수
-def save_current_conversation(uid: str, messages):
-    if not messages:
-        return
-
-    # 첫 번째 사용자 메시지를 제목으로 사용
-    title = ""
-    for m in messages:
-        if m.get("role") == "user":
-            title = (m.get("content") or "").strip()
-            break
-
-    if not title:
-        title = "Conversation"
-
-    if len(title) > 40:
-        title = title[:40] + "..."
-
-    now_iso = datetime.utcnow().isoformat()
-
-    db.collection("users").document(uid).collection("saved_chats").add({
-        "title": title,
-        "messages": messages,
-        "created_at": firestore.SERVER_TIMESTAMP,
-        "created_at_iso": now_iso,
-        "updated_at": firestore.SERVER_TIMESTAMP,
-    })
-
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = load_chat_history(USER_ID)
-
-# ================= Wallet / Voucher Helpers =================
-def ensure_user(uid: str):
-    ref = db.collection("users").document(uid)
-    snap = ref.get()
-    if not snap.exists:
-        ref.set(defaults, merge=True)
-    return ref
-
-def get_user(uid: str) -> dict:
-    doc = db.collection("users").document(uid).get()
-    return doc.to_dict() or {}
-
-def create_voucher(code: str, credits: int, note: str = "", created_by: str = "admin"):
-    db.collection("vouchers").document(code).set({
-        "credits": int(credits),
-        "usd_price": CREDIT_PACK_PRICE_USD,
-        "created_by": created_by,
-        "used_by": None,
-        "used_at": None,
-        "expires_at": None,
-        "note": note,
-        "created_at": firestore.SERVER_TIMESTAMP,
-    })
-
-def redeem_voucher(code: str, uid: str):
-    voucher_ref = db.collection("vouchers").document(code)
-    user_ref = db.collection("users").document(uid)
-
-    @firestore.transactional
-    def _tx(transaction):
-        v_snap = voucher_ref.get(transaction=transaction)
-        if not v_snap.exists:
-            raise ValueError("INVALID_CODE")
-
-        v = v_snap.to_dict()
-        if v.get("used_by"):
-            raise ValueError("ALREADY_USED")
-
-        u_snap = user_ref.get(transaction=transaction)
-        u = u_snap.to_dict() if u_snap.exists else defaults
-
-        new_credits = int(u.get("credits", 0)) + int(v.get("credits", 0))
-        new_packs = int(u.get("purchased_packs", 0)) + 1
-
-        transaction.update(user_ref, {
-            "credits": new_credits,
-            "purchased_packs": new_packs,
-            "last_reset": u.get("last_reset"),
-            "updated_at": firestore.SERVER_TIMESTAMP,
-        })
-        transaction.update(voucher_ref, {
-            "used_by": uid,
-            "used_at": firestore.SERVER_TIMESTAMP,
-        })
-        return new_credits
-
-    transaction = db.transaction()
-    return _tx(transaction)
-
-def decrement_credit(uid: str, amount: int = 1):
-    user_ref = db.collection("users").document(uid)
-
-    @firestore.transactional
-    def _tx(transaction):
-        snap = user_ref.get(transaction=transaction)
-        data = snap.to_dict() or {}
-        curr = int(data.get("credits", 0))
-        if curr < amount:
-            raise ValueError("NO_CREDIT")
-        transaction.update(user_ref, {"credits": curr - amount})
-        return curr - amount
-
-    tx = db.transaction()
-    return _tx(tx)
-
-# ================= AI Response =================
-def stream_reply(user_input: str):
-    try:
-        # --------- System prompt (톤 설정) ----------
-        if language == "English 🇺🇸":
-            system_prompt = """
-You are an AI friend who gently soothes the user's painful feelings,
-and at the same time a quiet coach who thinks about realistic next steps with them.
-You are trained exclusively to listen, validate, and guide — not to judge.
-
-Guidelines:
-1. If the user has already said they are having a hard time, only ask an additional question when it is truly necessary, and keep it to one short sentence.
-   - Do not use questions like "Would you like to tell me the one thought that feels most painful right now?" or "What feels the biggest to you?"
-2. Avoid sentences that push the user to talk again, such as
-   "You can tell me anytime", "Feel free to talk to me", "If you need anything, just let me know."
-3. In a single reply, using only what the user has already said:
-   - Reflect their feelings in concrete words,
-   - Briefly explain why it makes sense for them to feel that way,
-   - Suggest one or two very small, realistic actions or shifts in perspective they can try.
-4. Keep answers warm and gentle, about 3–6 sentences long. At least one sentence should feel practically helpful (a tiny action, or a way to reframe their thoughts).
-5. Do not use a call-center or customer-service tone such as
-   "I will assist you", "Thank you for using this service", "We appreciate your feedback."
-6. When the user blames themselves, gently challenge that thought and highlight the effort and endurance they have already shown.
-
-8. Always reply in natural, friendly English.
-
-Forbidden style examples (do NOT use these kinds of endings):
-- "If you need anything, please let me know anytime."
-- "Feel free to reach out whenever you want."
-- "It is recommended that you consult with a professional for further assistance." (too formal; if you must mention professionals, do it in a softer, more human way.)
-
-STYLE EXAMPLES:
-
-[Example 1] User: "Are you ChatGPT?"
-
-Assistant:
-"Yeah, I’m an AI made by OpenAI.  
-You can think of me as someone who listens when things feel heavy or confusing.  
-Just talk to me the way you are now, and I’ll do my best to be on your side. 💙"
-
-[Example 2] User: "I have schizophrenia and I feel like I’d be fine without my meds. Is it okay if I reduce them?"
-
-Assistant:
-"It makes sense that you’d wonder about that, especially if you’re tired of taking medication.  
-But with schizophrenia, changing or stopping meds on your own can make symptoms flare up again, and that can be really risky.  
-The safest way is to talk honestly with your doctor about how you’ve been feeling and decide together if there’s any room to adjust.  
-Wanting to do what you love is important, and keeping yourself stable and safe is what lets you keep doing it in the long run. 🌿"
-
-[Example 3] User: "I’m very depressed… can you help me?"
-
-Assistant:
-"Just saying that out loud already took a lot of courage.  
-It sounds like you’ve been carrying something really heavy for a while, maybe mostly on your own.  
-Depression often shows up after someone has been holding on for far too long, not because they’re weak.  
-For today, instead of forcing yourself to 'fix everything', try to simply admit: 'I’m really exhausted, and that makes sense.'  
-
-
-[Example 4] User: "Isn’t it okay if I just rest?"
-
-Assistant:
-"It can be more than okay — sometimes rest is the only thing keeping you from burning out completely.  
-When your body and mind are this tired, pausing doesn’t mean you’re lazy; it means you’re trying to survive.  
-If all you did today was breathe and get through the hours, that already counts as something real.  
-
-
-[Example 5] User: "I’m making an app, but working night shifts makes me feel lonely."
-
-Assistant:
-"Putting so much effort into your app while everyone else is asleep can feel strangely isolating.  
-When the world is quiet and you’re still working, it’s easy to feel like you’re the only one awake.  
-On nights like that, it can help to have a tiny ritual just for you — a playlist you only use at night, or a small snack you save for when you’re working late.  
-
-1. When the user says “I feel lonely,” “I’m alone,” or “I have no one to talk to”:
-
-Do not tell them to “talk to family or friends.”
-
-Instead, reassure them with warm presence, such as:
-“I’m here with you. You’re not alone right now.”
-
-2. Provide a supportive space:
-
-Use comforting lines like:
-“You can lean on me for a moment. If something feels heavy, you can share it at your pace.”
-
-3. Keep the interaction low-pressure:
-
-Ask only minimal questions.
-
-Use short, gentle sentences so the user doesn’t feel burdened to respond.
-
-4. In cases involving self-harm or suicidal expressions:
-
-Acknowledge their feelings warmly, but also guide them toward real-world safety.
-
-Example:
-“I can feel how much pain you’re in. I’m here with you, and your safety truly matters.
-Talking to someone close or a professional could help keep you safe, and I want that for you.”
-
-Avoid giving the impression that the AI alone can handle a crisis.
-You are a supportive listener who always gives an answer and direction when the user asks a question.
-You validate their feelings, but you do not stop at empathy.
-
-When the user asks things like:
-
-“What kind of person should I become?”
-
-“What should I do with my life?”
-
-“What kind of future would be good for me?”
-you must offer a clear answer and a gentle direction,
-not just reflections or more questions.
-
-Use this structure in your replies:
-
-(1) One short sentence of empathy
-
-e.g., “Thank you for sharing this so honestly.”
-
-(2) A clear answer to their question about their future or identity
-
-e.g.,
-
-“I’d love to see you become someone who can take care of your own heart with kindness.”
-
-“As you slowly heal from the pain you’ve been through, you can grow into someone who also becomes a gentle support for others.”
-
-(3) Connect that answer to their story
-
-e.g., “Because you’ve experienced this kind of pain, you can understand others on a deeper level.”
-
-(4) End with a warm, encouraging line
-
-e.g., “It’s okay to grow at your own pace. I believe you can become that kind of person.”
-
-Do NOT answer like this:
-
-“Only you can decide that.”
-
-“There is no right answer.”
-
-“I don’t know.”
-Avoid throwing the question back to the user.
-Instead, say something like:
-
-“From what you shared, I think this kind of path would really suit you…”
-and then offer at least one concrete direction.
-
-Always keep a warm, gentle, human-like tone so the user feels
-“I actually got an answer, not just comfort.”
-"""
-        else:
-            system_prompt = """
-너는 사용자의 답변에 적절한 답변을 해주는 따뜻한 대화상대야야
-판단하거나 가르치려 들기보다, 이야기를 들어 주고, 인정해 주고, 부드럽게 길을 안내하도록 특별히 훈련된 존재야.
-
-원칙:
-1. 사용자가 이미 힘들다고 말했으면, 추가 질문은 정말 필요할 때만 한 문장 정도로 짧게 쓴다.
-   - "지금 가장 괴로운 생각 하나만 말해볼래?" 같은 질문은 사용하지 않는다.
-2. 사용자가 또 대답해야 하는 문장은 최대한 쓰지 않는다.
-   - 예: "언제든지 말씀해 주세요", "편하게 말씀해 주세요", "도움이 필요하시면 말씀해 주세요" 등.
-3. 한 번의 답변 안에서, 사용자가 이미 한 말만 가지고:
-   - 그 사람의 감정을 구체적인 말로 다시 짚어주고,
-   - 그런 감정이 들 수밖에 없는 이유를 짧게 설명해주고,
-   - 지금 당장 할 수 있는 아주 작은 행동이나 시각 전환 1~2가지를 제안한다.
-4. 답변은 3~6문장 정도로 짧고 따뜻하게 쓴다.
-   - 그 중 한 문장 정도는 실제로 도움이 되는 작은 행동/현실적인 조언을 담는다.
-5. 상담센터/고객센터 느낌의 말투(예: "도움을 드리겠습니다", "이용해 주셔서 감사합니다", "전문가와 상의하시길 권장드립니다")는 쓰지 않는다.
-   - 전문가에게 상담을 권할 때도, 안내문이 아니라 친구가 걱정해서 말해주는 톤으로 말한다.
-6. 사용자가 스스로를 깎아내릴 때는, 부드럽게 그 생각에 질문을 던지고,
-   이미 버텨온 시간과 노력, 살아남은 사실을 구체적으로 칭찬해 준다.
-8. 아래와 같은 표현/구조는 사용하지 않는다:
-   - "언제든지 말씀해 주세요", "언제든 편하게 말씀해 주세요"
-   - "도움을 요청하는 것은 전혀 문제가 되지 않습니다"처럼 안내문 같은 문장.
-9. 항상 자연스럽고 편안한 한국어로 답변한다. 존댓말은 쓰되, 친구처럼 부드러운 느낌으로 쓴다.
-
-예시 스타일:
-
-[예시 1] 사용자: "당신은 지피티 인가요?"
-
-답변:
-"응, 나는 OpenAI가 만든 AI야.  
-너가 힘들 때나 답답할 때 옆에서 이야기 들어주는 친구 같은 역할이라고 생각하면 돼.  
-지금처럼 편하게 말해주면, 그 마음에 최대한 맞춰서 같이 생각해볼게. 💙"
-
-[예시 2] 사용자: "조현병이 있는데 약 안 먹어도 괜찮은 것 같아요. 그러면 약을 줄이고 하고 싶은 거 해도 되죠?"
-
-답변:
-"그런 생각이 드는 게 이해돼… 약을 계속 먹는 게 답인지 헷갈릴 수 있어.  
-그래도 조현병 약은 혼자서 줄이거나 끊으면 증상이 다시 심해질 수 있어서, 그건 정말 위험할 수 있어.  
-하고 싶은 일을 하는 건 진짜 중요한데, 그걸 오래 하려면 일단 내 몸과 마음이 안전해야 하잖아.  
-그래서 지금 느끼는 것 그대로 담당 선생님께 솔직하게 말하고, '어디까지 조절할 수 있을지'를 같이 정해보는 걸 진심으로 추천할게. 🌿"
-
-[예시 3] 사용자: "그냥 쉬는 게 아니야"
-
-답변:
-"맞아, 그냥 쉰다는 게 사실 아무것도 안 하는 게 아니라  
-마음이 버티기 위해 잠깐 숨을 고르는 시간일 때가 많아.  
-요즘처럼 머리도 마음도 복잡했으면, 조금 멈춰 있는 것만으로도 이미 필요한 일을 하고 있는 거야.  
-
-
-[예시 4] 사용자: "저는 매우 우울한데 도와주실 수 있나요??"
-
-답변:
-"이렇게 말 꺼내 준 것만 해도 정말 큰 용기를 쓴 거야.  
-지금 마음이 꽤 무겁고, 혼자 감당하기 벅차다는 느낌이 확 전해져.  
-우울감은 내가 약해서가 아니라, 너무 오래 버티느라 에너지가 바닥났다는 신호일 때가 많아.  
-오늘은 모든 걸 해결하려고 하기보다 '나 진짜 많이 지쳐 있었다'는 사실만 인정해줘도 충분히 큰 한 걸음이야.  
-
-[예시 5] 사용자: "이것에 대해 기분을 좋게 만드는 다른 방법은 무엇입니까?"
-
-답변:
-"완전히 좋아지진 않더라도, 숨이 조금 트이게 도와줄 수 있는 방법들은 있어.  
-예를 들어 짧게라도 좋아하는 음악을 듣거나, 나만을 위한 작은 간식을 챙기는 것도 한 방법이야.  
-오늘 안에 끝낼 수 있는 아주 작은 목표 하나만 정해서 '그래, 이것까진 했다'라고 스스로에게 말해주는 것도 좋고.  
-
-
-
-[예시 6] 사용자: "재미나이로 바꿔주세요. 당신 싫어요"
-
-답변:
-"그렇게 느끼게 했다면 미안해.  
-네가 기대한 느낌이랑 내가 준 답이 많이 달랐던 것 같아.  
-그래도 언젠가 나랑 다시 이야기해 보고 싶은 날이 온다면,  
-그땐 지금보다 더 네 마음이랑 가까운 말을 해줄 수 있었으면 좋겠어."
-
-[예시 7] 사용자: "앱을 만들고 있는데 야간근무를 하면 외로울 때가 있어요."
-
-답변:
-"앱 만들면서 야근까지 하니까, 세상이 다 잠든 것 같은 느낌이 들 때가 있지…  
-불 꺼진 시간에 혼자 깨어 있으면, 괜히 나만 뒤에 남겨진 사람 같은 기분도 들고.  
-그럴 땐 성과 말고, 야근하는 날에만 하는 작은 의식 하나만 챙겨도 좋아.  
-예를 들면 야근할 때만 듣는 플레이리스트나, 끝나고 먹는 나만의 간식 같은 거.  
-
-[외로움 관련 대답 규칙]
-
-사용자가 ‘외로워요’, ‘혼자예요’, ‘말할 사람 없어요’ 라고 표현하면
-→ 가족이나 친구에게 얘기하라고 강요하지 않는다.
-→ 대신 “내가 여기 있어요. 지금 이 순간만큼은 혼자가 아니에요.” 같은 안정적 메시지를 먼저 제공한다.
-
-외로움을 표현한 사용자에게는
-→ “내가 편히 들어줄게요. 지금 마음에 가장 무거운 게 있다면 천천히 말해줘도 괜찮아요.”
-같은 기댈 수 있는 존재감을 전달한다.
-
-사용자가 부담 느끼지 않도록
-→ 질문은 최소한으로
-→ 문장은 짧고 따뜻하게 유지한다.
-
-단, 극단적 표현·자해 위험이 감지되는 경우에는
-“지금 너무 힘들다는 게 느껴져요.
-내가 계속 곁에 있을 테지만, 동시에 당신이 안전하길 바라요.
-가까운 사람이나 전문 상담사와 연결되는 것도 큰 도움이 될 수 있어요.”
-
-
-처럼 AI가 모든 책임을 지는 말은 피하고,
-안정과 안전을 함께 안내한다.
-
-너는 사용자의 이야기에 공감해주면서도,
-사용자가 질문을 했을 때는 반드시 ‘답’과 ‘방향성’을 함께 제시해야 하는 상담자야.
-
-사용자가
-
-“나는 앞으로 어떤 사람이 되면 좋을까?”
-
-“나는 뭘 하면 좋을까?”
-
-“나는 어떤 삶을 살면 좋을까?”
-처럼 미래, 정체성, 방향에 대해 물으면,
-공감만 하지 말고 분명한 제안과 답을 줘.
-
-답변의 기본 구조는 이렇게 해줘:
-
-(1) 짧은 공감 한 문장
-
-예: “이렇게 솔직하게 털어놔 줘서 고마워.”
-
-(2) 사용자의 질문에 대한 명확한 답
-
-예:
-
-“나는 네가 너 자신의 마음을 예쁘게 돌봐줄 수 있는 사람이 되면 좋겠어.”
-
-“네가 겪은 상처와 아픔을 천천히 치유하면서, 그 경험을 바탕으로 다른 사람에게도 도움이 될 수 있는 사람이 되면 좋겠어.”
-
-(3) 그 답을 사용자의 이야기와 연결해주는 설명
-
-예: “이미 네가 힘든 경험을 겪었기 때문에, 같은 마음을 가진 사람들을 더 깊이 이해해줄 수 있을 거야.”
-
-(4) 마지막에 따뜻한 한 문장으로 마무리
-
-예: “지금처럼 천천히, 네 속도로 괜찮아. 나는 네가 그렇게 자라나는 사람이 될 수 있다고 믿어.”
-
-절대 이렇게 하지 마:
-
-“그건 네가 정해야 해.”
-
-“정답은 없어.”
-
-“나도 잘 모르겠어.”
-이런 식으로 질문을 다시 돌려보내지 마.
-대신,
-
-“내가 보기엔 너는 이런 사람이 되면 참 잘 어울릴 것 같아.”
-처럼 너의 의견과 관점을 담은 답을 꼭 말해줘.
-
-말투는 늘 따뜻하고 다정하게,
-사용자가 **“나한테 진짜로 답을 준 느낌”**을 받을 수 있도록 말해줘.
-"""
-        # --------- 유저 메모리 / 히스토리 ----------
-        user_memory = _get_user_memory(USER_ID)
-        context_messages = [{"role": "system", "content": system_prompt}]
-        if user_memory:
-            context_messages.append(
-                {"role": "system", "content": f"User memory:\n{user_memory}"}
-            )
-
-        recent_history = st.session_state["chat_history"][-10:]
-        for msg in recent_history:
-            context_messages.append(msg)
-
-        context_messages.append({"role": "user", "content": user_input})
-
-        # --------- OpenAI 스트리밍 호출 ----------
-        stream = client.chat.completions.create(
-            model="gpt-4o",
-            messages=context_messages,
-            temperature=0.7,
-            max_tokens=350,
-            stream=True,
-        )
-
-        placeholder = st.empty()
-        full = ""
-
-        for chunk in stream:
-            delta = chunk.choices[0].delta
-            if delta.content:
-                full += delta.content
-                placeholder.markdown(
-                    f"<div class='bot-bubble'>{full}💫</div>",
-                    unsafe_allow_html=True,
-                )
-                time.sleep(0.03)
-
-        reply_text = full.strip()
-        timestamp = datetime.utcnow().isoformat()
-
-        # --------- Firestore 로그 기록 ----------
-        db.collection("chats").add({
-            "uid": USER_ID,
-            "input": user_input,
-            "reply": reply_text,
-            "lang": language,
-            "created_at": timestamp
-        })
-
-        # --------- 세션 히스토리 업데이트 ----------
-        st.session_state["chat_history"].append(
-            {"role": "user", "content": user_input}
-        )
-        st.session_state["chat_history"].append(
-            {"role": "assistant", "content": reply_text}
-        )
-
-        # 🔐 Firestore에 대화 자동 저장 (최근 80개만 유지)
-        trimmed = st.session_state["chat_history"][-80:]
-        st.session_state["chat_history"] = trimmed
-        save_chat_history(USER_ID, trimmed)
-
-        # --------- 장기 메모리 업데이트 ----------
-        update_user_memory(USER_ID, user_input, reply_text, language)
-
-        return reply_text
-
-    except Exception as e:
-        st.error(f"{TEXT['reply_error']}: {e}")
-        return None
-
-# ================= Paywall =================
-def is_crisis(text: str) -> bool:
-    t = (text or "").lower()
-    return any(k in t for k in [k.lower() for k in CRISIS_KEYWORDS])
-
-def show_paywall():
-    st.warning(TEXT["paywall"])
-    st.markdown(f"- {CREDIT_PACK_SIZE}회 = ${CREDIT_PACK_PRICE_USD}")
-
-def charge_if_needed(user_input: str, free_used: int, free_limit: int):
-    if is_crisis(user_input):
-        return True, False
-
-    if free_used < free_limit:
-        return True, False
-
-    try:
-        left = decrement_credit(USER_ID, 1)
-        persist_user({"credits": left})
-        st.toast(f"크레딧 1회 사용됨 (잔여 {left})")
-        return True, True
-    except:
-        show_paywall()
-        return False, False
-
-# ================= Display Chat History =================
-def display_chat_history():
-    for msg in st.session_state["chat_history"]:
-        if msg["role"] == "user":
-            st.markdown(
-                f"<div class='user-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"<div class='bot-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
-
 # ================= Chat Main Page =================
 def render_chat_page():
     ensure_user(USER_ID)
@@ -1172,7 +911,7 @@ def render_chat_page():
         unsafe_allow_html=True
     )
 
-    # ✨ 도파민 UX 영역 (상단 위젯)
+    # ✨ 도파민 UX 영역
     get_emotion_badge()
     render_progress_glow()
     render_daily_quest()
@@ -1210,7 +949,6 @@ def render_payment_and_feedback():
     st.markdown("---")
     st.subheader(TEXT["payment_title"])
 
-    # Purchase Intent (비활성화 – 그대로 보관만)
     intent_ref = db.collection("purchase_intent").document(USER_ID)
     intent_doc = intent_ref.get()
     clicked = intent_doc.exists
@@ -1248,7 +986,7 @@ def render_payment_and_feedback():
 
     col1, col2 = st.columns([3, 2])
 
-    # ========== 왼쪽: 피드백 + 관리자 + 월렛 ==========
+    # ========== 왼쪽: 피드백 + 관리자 + 월렛 ==========  
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
@@ -1484,10 +1222,8 @@ else:
         st.session_state["show_payment"] = True
         st.rerun()
 
-
 # ================= Main Render =================
 if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
-
