@@ -277,44 +277,79 @@ html, body, [class*="css"] { font-size: 18px; }
   backdrop-filter: blur(14px);
 }
 
-/* ✅ Dark button + White text (no glow, no link-blue) */
+/* ✅ Black button + White text + Animated blue border only */
 .rainbow-btn,
 .rainbow-btn:visited,
 .rainbow-btn:hover,
-.rainbow-btn:active {
+.rainbow-btn:active{
+  position: relative;
   display:inline-block;
   padding:14px 28px;
   font-size:18px;
   font-weight:600;
   text-transform:none;
 
-  background:#0B0F19;              /* ✅ 검은 배경 */
-  color:#FFFFFF !important;         /* ✅ 흰 글자 (링크 파랑 방지) */
+  background:#0B0F19;              /* ✅ 버튼 안쪽: 블랙 */
+  color:#FFFFFF !important;         /* ✅ 글자: 화이트 */
 
-  border:1px solid rgba(255,255,255,0.14);
+  border:none;                      /* 테두리는 ::before로 만들 거라서 제거 */
   border-radius:50px;
 
-  text-decoration:none !important;  /* ✅ 밑줄 제거 */
+  text-decoration:none !important;  /* ✅ 링크 밑줄 제거 */
   text-shadow:none;
-  box-shadow:none;                  /* ✅ 빛/글로우 제거 */
+  box-shadow:none;                  /* ✅ 빛 제거 */
   filter:none;
-
   cursor:pointer;
-  animation:none;                   /* ✅ 무지개/네온 애니메이션 제거 */
-  transition:background 0.15s ease, border-color 0.15s ease;
+  animation:none;
+  transition: background 0.15s ease;
 }
 
-/* 버튼 안에 혹시 span/strong 등이 있어도 흰색 유지 */
-.rainbow-btn * {
-  color: inherit !important;
-  text-decoration: none !important;
+/* 버튼 내부 텍스트/아이콘도 흰색 유지 */
+.rainbow-btn *{
+  color:inherit !important;
+  text-decoration:none !important;
 }
 
-.rainbow-btn:hover {
-  background:#111827;               /* 살짝만 밝아지는 호버 */
-  border-color: rgba(255,255,255,0.22);
+/* ✅ 움직이는 푸른 테두리 */
+.rainbow-btn::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:50px;
+  padding:2px;  /* ✅ 테두리 두께 (원하면 1px~3px로 조절) */
+
+  background: linear-gradient(
+    90deg,
+    #0EA5E9,  /* sky */
+    #3B82F6,  /* blue */
+    #1D4ED8,  /* deep blue */
+    #22D3EE,  /* cyan */
+    #3B82F6,
+    #0EA5E9
+  );
+  background-size: 300% 300%;
+  animation: blueBorderFlow 3.5s linear infinite;
+
+  /* ✅ 가운데(안쪽)는 투명하게 뚫어서 '테두리만' 보이게 */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  pointer-events:none;
 }
 
+/* 호버 시 안쪽만 아주 살짝 밝게 */
+.rainbow-btn:hover{
+  background:#0F172A;
+}
+
+/* 푸른 테두리 흐르는 애니메이션 */
+@keyframes blueBorderFlow{
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
 
 
 @keyframes rainbowGlow {
