@@ -277,34 +277,35 @@ html, body, [class*="css"] { font-size: 18px; }
   backdrop-filter: blur(14px);
 }
 
-/* Rainbow button */
+/* ✅ Clean White Button (no rainbow, no glow) */
 .rainbow-btn {
   display:inline-block;
   padding:14px 28px;
   font-size:18px;
-  font-weight:bold;
-  text-transform:uppercase;
-  color:white;
- @keyframes neonPulse {
-  0%,100% {text-shadow:0 0 8px rgba(255,255,255,0.45), 0 0 18px rgba(201,162,77,0.35);}
-  50% {text-shadow:0 0 12px rgba(255,255,255,0.55), 0 0 26px rgba(201,162,77,0.45);}
-}
-
-  background-size:400%;
-  border:none;
+  font-weight:600;              /* bold → 조금 단정하게 */
+  text-transform:none;          /* 대문자 강제 제거 */
+  color:#111827;                /* 글자색: 차콜 */
+  background:#FFFFFF;           /* ✅ 완전 화이트 */
+  border:1px solid rgba(17,24,39,0.18);  /* 얇은 테두리 */
   border-radius:50px;
-  text-shadow:0 0 10px rgba(255,255,255,0.7);
-  box-shadow:0 0 25px rgba(255,255,255,0.3);
+  text-shadow:none;             /* ✅ 빛 제거 */
+  box-shadow:none;              /* ✅ 빛 제거 */
   cursor:pointer;
-  animation:rainbowGlow 6s linear infinite, neonPulse 1.5s ease-in-out infinite;
-  transition:transform 0.25s, box-shadow 0.25s;
+  animation:none;               /* ✅ 무지개/네온 애니메이션 제거 */
+  transition:transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   text-decoration:none;
 }
+
 .rainbow-btn:hover {
-  transform:scale(1.08);
-  box-shadow:0 0 40px rgba(255,255,255,0.9);
-  filter:brightness(1.2);
+  transform:none;               /* ✅ 커지는 효과 제거 */
+  background:#F9FAFB;           /* 아주 살짝만 변화 */
+  border-color: rgba(17,24,39,0.28);
+  box-shadow:none;              /* ✅ 빛 제거 */
+  filter:none;
 }
+
+
+
 @keyframes rainbowGlow {
   0% {background-position:0%;}
   100% {background-position:400%;}
