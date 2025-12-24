@@ -277,31 +277,42 @@ html, body, [class*="css"] { font-size: 18px; }
   backdrop-filter: blur(14px);
 }
 
-/* ✅ Clean White Button (no rainbow, no glow) */
-.rainbow-btn {
+/* ✅ Dark button + White text (no glow, no link-blue) */
+.rainbow-btn,
+.rainbow-btn:visited,
+.rainbow-btn:hover,
+.rainbow-btn:active {
   display:inline-block;
   padding:14px 28px;
   font-size:18px;
-  font-weight:600;              /* bold → 조금 단정하게 */
-  text-transform:none;          /* 대문자 강제 제거 */
-  color:#111827;                /* 글자색: 차콜 */
-  background:#FFFFFF;           /* ✅ 완전 화이트 */
-  border:1px solid rgba(17,24,39,0.18);  /* 얇은 테두리 */
+  font-weight:600;
+  text-transform:none;
+
+  background:#0B0F19;              /* ✅ 검은 배경 */
+  color:#FFFFFF !important;         /* ✅ 흰 글자 (링크 파랑 방지) */
+
+  border:1px solid rgba(255,255,255,0.14);
   border-radius:50px;
-  text-shadow:none;             /* ✅ 빛 제거 */
-  box-shadow:none;              /* ✅ 빛 제거 */
+
+  text-decoration:none !important;  /* ✅ 밑줄 제거 */
+  text-shadow:none;
+  box-shadow:none;                  /* ✅ 빛/글로우 제거 */
+  filter:none;
+
   cursor:pointer;
-  animation:none;               /* ✅ 무지개/네온 애니메이션 제거 */
-  transition:transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  text-decoration:none;
+  animation:none;                   /* ✅ 무지개/네온 애니메이션 제거 */
+  transition:background 0.15s ease, border-color 0.15s ease;
+}
+
+/* 버튼 안에 혹시 span/strong 등이 있어도 흰색 유지 */
+.rainbow-btn * {
+  color: inherit !important;
+  text-decoration: none !important;
 }
 
 .rainbow-btn:hover {
-  transform:none;               /* ✅ 커지는 효과 제거 */
-  background:#F9FAFB;           /* 아주 살짝만 변화 */
-  border-color: rgba(17,24,39,0.28);
-  box-shadow:none;              /* ✅ 빛 제거 */
-  filter:none;
+  background:#111827;               /* 살짝만 밝아지는 호버 */
+  border-color: rgba(255,255,255,0.22);
 }
 
 
