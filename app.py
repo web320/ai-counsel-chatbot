@@ -281,7 +281,11 @@ html, body, [class*="css"] { font-size: 18px; }
   font-weight:bold;
   text-transform:uppercase;
   color:white;
-  background:linear-gradient(90deg,#ff00cc,#3333ff,#00ffff,#33ff33,#ffff00,#ff6600,#ff0066);
+ @keyframes neonPulse {
+  0%,100% {text-shadow:0 0 8px rgba(255,255,255,0.45), 0 0 18px rgba(201,162,77,0.35);}
+  50% {text-shadow:0 0 12px rgba(255,255,255,0.55), 0 0 26px rgba(201,162,77,0.45);}
+}
+
   background-size:400%;
   border:none;
   border-radius:50px;
