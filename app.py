@@ -265,7 +265,11 @@ html, body, [class*="css"] { font-size: 18px; }
 
 /* Payment card 스타일 */
 .pay-card {
-  background: radial-gradient(circle at top left, rgba(255,255,255,0.12), rgba(0,0,0,0.6));
+ @keyframes neonPulse {
+  0%,100% {text-shadow:0 0 8px rgba(255,255,255,0.45), 0 0 18px rgba(220,235,255,0.35);}
+  50% {text-shadow:0 0 12px rgba(255,255,255,0.55), 0 0 26px rgba(231,221,255,0.45);}
+}
+
   border-radius:20px;
   padding:18px 20px;
   border:1px solid rgba(255,255,255,0.18);
