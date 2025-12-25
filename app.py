@@ -13,7 +13,8 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ================= Streamlit Page Config =================
-st.set_page_config(page_title="💙 AI Therapy", layout="wide")
+# ✅ 사이드바 기본 숨김(접힌 상태)
+st.set_page_config(page_title="💙 AI Therapy", layout="wide", initial_sidebar_state="collapsed")
 
 # ================= Constants / Config =================
 APP_VERSION = "v2.9"
@@ -121,9 +122,10 @@ st.session_state["lang"] = lang_choice
 language = st.session_state["lang"]
 
 # ================= Text by Language =================
+# ✅ 문구 수정 완료
 if language == "English 🇺🇸":
     TEXT = {
-        "title": "❤️ A friend who stays with you 24/7 when life feels lonely.",
+        "title": "❤️ A friend who listens 24/7 when life feels lonely.",
         "free": "🌱 Free Trial",
         "paid": "💎 Premium User",
         "input": "How are you feeling right now?",
@@ -165,7 +167,7 @@ if language == "English 🇺🇸":
     }
 else:
     TEXT = {
-        "title": "❤️ 인생이 외로울 때 365일 함께해주는 친구",
+        "title": "❤️ 인생이 외로울땐 24시간 들어주는 친구",
         "free": "🌱 완전 무료 체험중",
         "paid": "💎 프리미엄 이용중",
         "input": "지금 어떤 기분인가요?",
@@ -750,6 +752,7 @@ def display_chat_history():
             )
 
 # ================= Chat Main Page =================
+# ✅ Micro-Quest / Today 기능은 완전히 제거됨 (호출 자체 없음)
 def render_chat_page():
     ensure_user(USER_ID)
 
@@ -1096,3 +1099,4 @@ if st.session_state.get("show_payment"):
     render_payment_and_feedback()
 else:
     render_chat_page()
+
