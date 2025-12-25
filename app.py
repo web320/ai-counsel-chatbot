@@ -22,9 +22,9 @@ RESET_INTERVAL_HOURS = 4
 BASIC_LIMIT = 50
 ADMIN_KEYS = ["2356"]
 
-# 👉 최종 확정: 1달러 = 15회
-CREDIT_PACK_SIZE = 15
-CREDIT_PACK_PRICE_USD = 1
+# 👉 최종 확정: 5달러 = 45회 + 보너스 5회 (총 50회)
+CREDIT_PACK_SIZE = 50
+CREDIT_PACK_PRICE_USD = 5
 
 CRISIS_KEYWORDS = [
     "죽고싶", "자살", "해치고", "극단적", "고통스러워", "살기 싫", "포기하고 싶",
@@ -151,7 +151,7 @@ if language == "English 🇺🇸":
         "voucher_bad": "Invalid code.",
         "voucher_used": "This code was already used.",
         "paywall": "You've used all free limits. Redeem a code to continue.",
-        "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses / ${CREDIT_PACK_PRICE_USD}",
+        "voucher_tip": f"One code = {CREDIT_PACK_SIZE} uses (45 + 5 bonus) / ${CREDIT_PACK_PRICE_USD}",
         "admin_gen": "🔑 Admin — Generate Voucher Codes",
         "admin_make": "Generate",
         "saved_title": "📚 Saved Chats / 저장된 대화",
@@ -193,7 +193,7 @@ else:
         "voucher_bad": "코드가 올바르지 않아요",
         "voucher_used": "이미 사용된 코드예요",
         "paywall": "무료 한도를 모두 사용했어요. 코드를 충전해 주세요",
-        "voucher_tip": f"코드 1개 = {CREDIT_PACK_SIZE}회 / ${CREDIT_PACK_PRICE_USD}",
+        "voucher_tip": f"코드 1개 = 총 {CREDIT_PACK_SIZE}회(45회+보너스5회) / 5,000원",
         "admin_gen": "🔑 관리자 — 바우처 코드 생성",
         "admin_make": "코드 생성",
         "saved_title": "📚 Saved Chats / 저장된 대화",
@@ -1021,7 +1021,7 @@ def render_payment_and_feedback():
             "   - ✉️ Email: **newnewtry6@gmail.com**\n"
             "   - 📸 Instagram: **@youtuberhawaiijelly**\n"
             "   - 💬 KakaoTalk ID: **jeuspo** (Korea only)\n\n"
-            "✅ After checking, a voucher code for **15 sessions** will be sent to you. 💙\n"
+            "✅ After checking, a voucher code for **50 sessions (45 + 5 bonus)** will be sent to you. 💙\n"
         )
     else:
         help_text = "지금 바로 이용하려면 아래 '내 지갑'에서 코드를 충전해 주세요."
@@ -1033,7 +1033,7 @@ def render_payment_and_feedback():
             "   - ✉️ 이메일: **newnewtry6@gmail.com**\n"
             "   - 📸 인스타그램: **@youtuberhawaiijelly** (유튜버 하와이 젤리)\n"
             "   - 💬 카카오톡 아이디: **jeuspo**\n\n"
-            "✅ 개발자가 확인 후 **15회 이용 가능한 코드**를 보내드립니다. 💙\n"
+            "✅ 개발자가 확인 후 **총 50회(45회+보너스5회) 이용 가능한 코드**를 보내드립니다. 💙\n"
         )
 
     st.info(help_text)
@@ -1041,7 +1041,7 @@ def render_payment_and_feedback():
 
     col1, col2 = st.columns([3, 2])
 
-    # ========== 왼쪽: 피드백 + 관리자 + 월렛 ==========  
+    # ========== 왼쪽: 피드백 + 관리자 + 월렛 ==========
     with col1:
         st.subheader(TEXT["feedback_title"])
         fb = st.text_area(" ", placeholder=TEXT["feedback_placeholder"])
@@ -1132,7 +1132,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                You can top up <b>15 therapy sessions</b> at once for <b>$1</b>.
+                You can top up <b>50 therapy sessions</b> at once for <b>$5</b>.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>Use it whenever you need emotional support</li>
@@ -1146,7 +1146,7 @@ def render_payment_and_feedback():
             card_html = """
             <div class="pay-card">
               <p style="font-size:15px; opacity:0.9; margin-bottom:6px;">
-                <b>1달러</b>로 <b>15회 상담 이용권</b>을 한 번에 충전할 수 있어요.
+                <b>5,000원</b>으로 <b>45회 + 보너스 5회(총 50회)</b> 상담 이용권을 한 번에 충전할 수 있어요.
               </p>
               <ul style="font-size:14px; opacity:0.9; margin-top:0;">
                 <li>도움이 필요할 때마다 편하게 사용</li>
@@ -1158,9 +1158,9 @@ def render_payment_and_feedback():
 
         st.markdown(card_html, unsafe_allow_html=True)
 
-        # 👉 새 PayPal 링크 (1달러/15회)
-        paypal_link = "https://www.paypal.com/ncp/payment/XATLMXETSMRFS"
-        btn_text = "💳 Pay $1 / 15 uses" if is_en else "💳 1달러 / 15회 이용"
+        # 👉 새 PayPal 링크 (5달러/총 50회)
+        paypal_link = "https://www.paypal.com/ncp/payment/43TG288GLYVL8"
+        btn_text = "💳 Pay $5 / 50 uses" if is_en else "💳 5,000원 / 50회 이용"
 
         st.markdown(
             f"""
