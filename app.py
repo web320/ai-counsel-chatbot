@@ -351,7 +351,6 @@ html, body, [class*="css"] { font-size: 18px; }
   100% { background-position: 300% 50%; }
 }
 
-
 @keyframes rainbowGlow {
   0% {background-position:0%;}
   100% {background-position:400%;}
@@ -750,186 +749,6 @@ def display_chat_history():
                 unsafe_allow_html=True
             )
 
-# ================= Dopamine UX Helpers =================
-def get_emotion_badge():
-    """최근 사용자 메시지 기반 오늘의 감정 뱃지 표시"""
-    messages = st.session_state.get("chat_history", [])
-    if not messages:
-        return
-
-    # 마지막 사용자 메시지 찾기
-    last_user_msg = ""
-    for msg in reversed(messages):
-        if msg.get("role") == "user":
-            last_user_msg = (msg.get("content") or "").strip()
-            break
-
-    if not last_user_msg:
-        return
-
-    # 같은 날 + 같은 마지막 메시지면 캐시 사용
-    today_key = datetime.utcnow().strftime("%Y-%m-%d")
-    cache_key = "emotion_badge_cache"
-    cache = st.session_state.get(cache_key, {})
-    if cache.get("date") == today_key and cache.get("last_msg") == last_user_msg:
-        emo_text = cache.get("emo_text", "")
-    else:
-        try:
-            if language == "English 🇺🇸":
-                sys = (
-                    "You are an emotion classifier. "
-                    "Given the user's message, reply with ONE short English emotion word "
-                    "(e.g., anxious, sad, calm, hopeful, angry, lonely, tired, relieved) "
-                    "that best describes their overall feeling. Reply with just the word."
-                )
-            else:
-                sys = (
-                    "너는 사용자의 문장을 보고 감정을 한 단어로 정리해 주는 분류기야. "
-                    "예: 불안, 슬픔, 분노, 지침, 외로움, 편안함, 희망, 기쁨 등. "
-                    "한 단어만 답해."
-                )
-            emo = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": sys},
-                    {"role": "user", "content": last_user_msg},
-                ],
-                max_tokens=8,
-                temperature=0.2,
-            ).choices[0].message.content.strip()
-        except Exception as e:
-            print("emotion badge error:", e)
-            return
-
-        emo_text = emo
-        st.session_state[cache_key] = {
-            "date": today_key,
-            "last_msg": last_user_msg,
-            "emo_text": emo_text,
-        }
-
-    if language == "English 🇺🇸":
-        title = "Today’s emotion"
-        label = f"💙 <b>{title}:</b> {emo_text}"
-    else:
-        title = "오늘의 감정"
-        label = f"💙 <b>{title}:</b> {emo_text}"
-
-    html = f"""
-    <div style="
-        padding: 10px 14px;
-        border-radius: 12px;
-        background: radial-gradient(circle at top left, rgba(255,255,255,0.16), rgba(0,0,0,0.7));
-        border: 1px solid rgba(255,255,255,0.22);
-        display: inline-block;
-        margin: 6px 0 10px 0;
-        font-size: 17px;
-    ">
-        {label}
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
-
-
-def render_daily_quest():
-    """하루에 하나만 나오는 작은 감정 회복 미션"""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    key = f"daily_quest_{today}"
-
-    if key not in st.session_state:
-        try:
-            if language == "English 🇺🇸":
-                sys = (
-                    "You create one tiny, low-pressure self-care quest for today. "
-                    "It must be doable in under 5 minutes. Reply with one short sentence."
-                )
-                usr = "Give me one gentle micro-quest for emotional healing today."
-            else:
-                sys = (
-                    "너는 오늘을 위한 아주 작고 부담 없는 감정 회복 미션을 하나 만드는 AI야. "
-                    "5분 안에 할 수 있는 행동으로, 한 문장으로만 알려줘."
-                )
-                usr = "오늘을 위한 작은 감정 회복 미션 하나만 만들어줘."
-
-            quest_text = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": sys},
-                    {"role": "user", "content": usr},
-                ],
-                max_tokens=60,
-                temperature=0.5,
-            ).choices[0].message.content.strip()
-        except Exception as e:
-            print("quest error:", e)
-            quest_text = ""
-
-        st.session_state[key] = {"text": quest_text, "done": False}
-
-    quest = st.session_state.get(key, {})
-    text = (quest.get("text") or "").strip()
-    done = quest.get("done", False)
-
-    if not text:
-        return
-
-    if language == "English 🇺🇸":
-        title = "🎯 Today’s Micro-Quest"
-        done_text = "✨ You did it. Even a tiny action counts."
-        btn_label = "✔ Mark as done"
-    else:
-        title = "🎯 오늘의 마이크로 미션"
-        done_text = "✨ 잘했어요. 이런 작은 행동이 쌓여요."
-        btn_label = "✔ 미션 완료"
-
-    st.markdown(f"### {title}")
-    st.info(text)
-
-    if done:
-        st.success(done_text)
-    else:
-        if st.button(btn_label, key=f"quest_done_{today}"):
-            quest["done"] = True
-            st.session_state[key] = quest
-            st.success(done_text)
-
-
-def render_progress_glow():
-    """대화 횟수 기반 감정 회복 진행률 바"""
-    msgs = st.session_state.get("chat_history", [])
-    if not msgs:
-        return
-
-    turns = sum(1 for m in msgs if m.get("role") == "assistant")
-    ratio = min(turns / 30.0, 1.0)  # 30턴이면 100%
-    pct = int(ratio * 100)
-
-    if language == "English 🇺🇸":
-        label = f"Emotional journey progress: {pct}%"
-    else:
-        label = f"감정 회복 여정 진행률: {pct}%"
-
-    html = f"""
-    <div style="
-        margin: 8px 0 2px 0;
-        padding: 4px;
-        width: 100%;
-        border-radius: 14px;
-        background: rgba(255,255,255,0.04);
-    ">
-        <div style="
-            width: {pct}%;
-            height: 12px;
-            border-radius: 10px;
-            background: linear-gradient(90deg, #ff9900, #ffcc33);
-            box-shadow: 0 0 14px rgba(255,204,51,0.8);
-            transition: width 0.6s ease;
-        "></div>
-    </div>
-    <div style="font-size: 13px; opacity: 0.8; margin-bottom: 12px;">{label}</div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
-
 # ================= Chat Main Page =================
 def render_chat_page():
     ensure_user(USER_ID)
@@ -965,11 +784,6 @@ def render_chat_page():
         f"<div class='status'>{plan_label} — {TEXT['status_left']} {max(left_display,0)}회</div>",
         unsafe_allow_html=True
     )
-
-    # ✨ 도파민 UX 영역
-    get_emotion_badge()
-    render_progress_glow()
-    render_daily_quest()
 
     # 기존 채팅 버블 출력
     display_chat_history()
