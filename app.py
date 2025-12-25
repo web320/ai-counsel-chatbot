@@ -976,7 +976,7 @@ def render_payment_and_feedback():
         st.markdown(card_html, unsafe_allow_html=True)
 
         # 👉 새 PayPal 링크 (5달러/총 50회)
-        paypal_link = "https://www.paypal.com/ncp/payment/43TG288GLYVL8"
+        paypal_link = "https://www.paypal.com/ncp/payment/R4ZM5ABGFP4PC"
         btn_text = "💳 Pay $5 / 50 uses" if is_en else "💳 5,000원 / 50회 이용"
 
         st.markdown(
